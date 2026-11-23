@@ -62,7 +62,7 @@ const glf = (x) => Number(x).toFixed(4);
 /** Ombre du toupet sur le front (part de lumière en moins sous lui). */
 export const FORE_SHADE = 0.34;
 /** Ombre du toupet en plus (part de FORE_SHADE) quand des crins clairs sont sur une robe claire. */
-export const FORE_SHADE_LIGHT = 0.6;
+export const FORE_SHADE_LIGHT = 0.75;
 /**
  * Mèches du toupet (géométrie : horseReal.js, forelockCards ; ombre sur le front : ici, le même dessin). En demi-largeurs
  * du toupet en haut (entre les oreilles) et en part f de sa longueur : les mèches partent côte à côte et se chevauchent
@@ -74,6 +74,11 @@ export const FORE_SHADE_LIGHT = 0.6;
 export const FORE_MASS_W = 0.8;
 export const FORE_PINCH = 0.45;
 export const FORE_FAN = 0.08;
+/**
+ * Bout d'une mèche du toupet : sa largeur à la pointe (part de sa largeur). Les crins de longueurs inégales de la texture
+ * finissent la mèche ; à 0,18, chaque mèche finissait en épine, et le toupet se lisait en pinceau peint sur le front.
+ */
+export const FORE_TIP = 0.4;
 /**
  * Ombre de contact du toupet sur le front : pleine sous chaque mèche, un liseré de FORE_SHADE_EDGE (demi-largeurs du
  * toupet) au-delà de ses bords — dans le jour entre deux mèches, une rainure grise —, finie avant la pointe de chaque mèche
@@ -89,7 +94,7 @@ const smoothJS = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b -
 export function foreLock(f, len, l, nl) {
   const rc = ((l + 0.5) / nl) * 2 - 1;
   const sp = (1 + 0.1 * smoothJS(0, 0.12, f) * (1 - smoothJS(0.12, 0.3, f))) * (1 - FORE_PINCH * smoothJS(0.05, 0.7, f)) + FORE_FAN * smoothJS(0.4, 1, f / len);
-  const hw = (1.12 / nl) * FORE_MASS_W * (1 - 0.3 * smoothJS(0.05, 0.6, f)) * (1 - 0.82 * smoothJS(0.3 * len, len, f));
+  const hw = (1.12 / nl) * FORE_MASS_W * (1 - 0.3 * smoothJS(0.05, 0.6, f)) * (1 - (1 - FORE_TIP) * smoothJS(0.3 * len, len, f));
   return [rc * FORE_MASS_W * sp, hw];
 }
 /**
@@ -111,7 +116,7 @@ const FORE_GLSL = /* glsl */ `
 // Mèche du toupet (voir foreLock) : centre et demi-largeur, en demi-largeurs du toupet.
 vec2 hForeLock(float f, float len, float rc, float nl) {
   float sp = (1.0 + 0.1 * smoothstep(0.0, 0.12, f) * (1.0 - smoothstep(0.12, 0.3, f))) * (1.0 - ${glf(FORE_PINCH)} * smoothstep(0.05, 0.7, f)) + ${glf(FORE_FAN)} * smoothstep(0.4, 1.0, f / len);
-  float hw = (1.12 / nl) * ${glf(FORE_MASS_W)} * (1.0 - 0.3 * smoothstep(0.05, 0.6, f)) * (1.0 - 0.82 * smoothstep(0.3 * len, len, f));
+  float hw = (1.12 / nl) * ${glf(FORE_MASS_W)} * (1.0 - 0.3 * smoothstep(0.05, 0.6, f)) * (1.0 - ${glf(1 - FORE_TIP)} * smoothstep(0.3 * len, len, f));
   return vec2(rc * ${glf(FORE_MASS_W)} * sp, hw);
 }
 // Ombre de contact d'une mèche du toupet (voir foreShadeAt).
@@ -245,7 +250,7 @@ hEarIn = 0.0;
   float belly = under * bodyL;
   float lift = 0.03 * clamp(dot(hCoat, vec3(0.2126, 0.7152, 0.0722)) * 8.0 + 0.3, 0.0, 1.0);
   c = mix(c, c * 1.38 + lift, clamp(under + inner * 0.55, 0.0, 1.0) * 0.62);
-  c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * bodyS;
+  c *= 1.0 - smoothstep(0.55, 1.0, up) * 0.06 * bodyL;
   // Pangaré (Fjord, poneys) : ventre, tour des yeux et bout du nez plus clairs.
   float muzzleZone = isHead * smoothstep(0.82, 0.95, hl.z);
   c = mix(c, mix(c, vec3(0.94, 0.86, 0.72), 0.55), hMealy * clamp(belly * 1.4 + muzzleZone, 0.0, 1.0));
@@ -264,7 +269,9 @@ hEarIn = 0.0;
     vec3 q = P * vec3(1.7, 1.4, 1.7) + hSeed * 3.1;
     vec3 w = vec3(hNoise(P * 4.0 + 1.7), hNoise(P * 4.0 + 9.2), hNoise(P * 4.0 + 4.4)) - 0.5;
     float pn = hFbm(q + w * ${glf(PIN.warp)}) + (hNoise(P * 9.0) - 0.5) * 0.06;
-    float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)};
+    // (sur la tête, une dentelure trois fois plus fine : au téléphone, de près, des dents de scie et des gouttes blanches
+    // détachées autour de la liste)
+    float jag = (hNoise(P * 20.0 + hSeed) - 0.5) * ${glf(PIN.jag)} * (1.0 - 0.67 * isHead);
     float back = bodyS * smoothstep(0.35, 0.9, up) * smoothstep(-0.6, -0.2, -abs(P.z + 0.1));
     float t = pn + jag + isLeg * (1.0 - smoothstep(0.1, 0.7, h)) * 0.45 - headW * 0.5 + back * 0.12;
     float wdt = max(fwidth(t) * 0.75, 0.002);
@@ -352,12 +359,14 @@ hEarIn = 0.0;
   // fine (avant : un ruban adhésif aux bords parallèles).
   float face = 0.0;
   if (hFace > 0.5 && isHead > 0.5) {
-    float fn = (hNoise(P * 40.0) - 0.5) * 0.06;
+    // (dentelure du bord divisée par 2,5 : à ± 3 cm sur une liste de 5 cm de demi-largeur, elle faisait des dents de
+    // scie et des gouttes blanches détachées ; le bord reste irrégulier par wob, mais net)
+    float fn = (hNoise(P * 40.0) - 0.5) * 0.024;
     float wob = (hNoise(vec3(hl.z * 9.0, hSeed, 1.7)) - 0.5) * 0.024 + (hNoise(vec3(hl.z * 31.0, hl.x * 18.0, hSeed)) - 0.5) * 0.01
       + (hNoise(vec3(hl.z * 6.0 + sign(hl.x) * 3.1, hSeed, 4.2)) - 0.5) * 0.014;
     float ax = abs(hl.x) + wob;
     float front = smoothstep(-0.02, 0.06, hl.y + 0.1 * smoothstep(0.75, 1.0, hl.z));
-    float star = 1.0 - smoothstep(0.8, 1.0, length(vec2(hl.x / 0.045, (hl.z - 0.31) / 0.05)) + fn * 6.0 + (hNoise(P * 90.0) - 0.5) * 0.35);
+    float star = 1.0 - smoothstep(0.8, 1.0, length(vec2(hl.x / 0.045, (hl.z - 0.31) / 0.05)) + fn * 6.0 + (hNoise(P * 90.0) - 0.5) * 0.14);
     float stripe = (1.0 - smoothstep(0.016, 0.027, ax + fn * 0.4)) * smoothstep(0.3, 0.34, hl.z) * (1.0 - smoothstep(0.9, 0.95, hl.z));
     float blaze = (1.0 - smoothstep(0.042, 0.054, ax - hl.z * 0.035 + fn)) * smoothstep(0.24, 0.28, hl.z);
     float snip = 1.0 - smoothstep(0.85, 1.05, length(vec2(hl.x / 0.05, (hl.z - 0.93) / 0.05)) + fn * 4.0);
@@ -471,9 +480,16 @@ hEarIn = 0.0;
   // et des taches sur le corps, brun terre ; le pansage l'enlève.
   if (hDirt > 0.001) {
     // (bords des taches cassés par un bruit fin ; brun terre foncé, en couleur linéaire)
-    float dn = hFbm(P * 6.0 + hSeed) + (hNoise(P * 28.0 + hSeed) - 0.5) * 0.2;
-    float legMud = isLeg * (0.7 + 0.3 * hNoise(P * 30.0));
-    float bodyMud = bodyS * smoothstep(0.52, 0.66, dn); // (bodyS : poids du corps continu, comme les marques)
+    // (bruit tourné et déformé : sur la grille droite du bruit, les taches sortaient en carrés et en marches)
+    vec3 Pm = mat3(0.8, 0.36, -0.48, -0.6, 0.48, -0.64, 0.0, 0.8, 0.6) * P;
+    Pm += (vec3(hNoise(Pm * 2.2 + 3.1), hNoise(Pm * 2.2 + 8.7), hNoise(Pm * 2.2 + 5.3)) - 0.5) * 0.35;
+    float dn = hFbm(Pm * 6.0 + hSeed) + (hNoise(Pm * 22.0 + hSeed) - 0.5) * 0.12;
+    // (terre des membres : du sabot vers le genou, puis fondue avant le coude et le grasset ; elle couvrait tout le
+    // membre, jusqu'en haut de la cuisse, et son bord suivait les triangles en escalier)
+    float legMud = isLeg * (0.7 + 0.3 * hNoise(P * 30.0)) * (1.0 - smoothstep(0.45, 0.8, h + (dn - 0.5) * 0.3));
+    // (bodyL, continu au coude et au grasset : avec bodyS, constant par triangle, le bord des taches suivait les
+    // triangles en escalier sur la cuisse)
+    float bodyMud = bodyL * smoothstep(0.5, 0.68, dn);
     float mud = clamp(hDirt * (0.85 * legMud + 0.75 * bodyMud), 0.0, 0.75) * (1.0 - isHoof) * (1.0 - isSkin);
     c = mix(c, vec3(0.13, 0.085, 0.045), mud);
   }
@@ -488,7 +504,9 @@ hEarIn = 0.0;
   }
   // Sueur (hSweat, après le galop) : le poil mouillé est plus foncé, par plaques, sur le corps.
   if (hSweat > 0.001) {
-    float wet = hSweat * bodyS * (0.25 + 0.75 * smoothstep(0.32, 0.52, hFbm(P * 3.5 + hSeed + 5.0)));
+    // (bodyL et non bodyS : bodyS change d'un triangle à l'autre à la jonction de la cuisse et du coude, et la sueur
+    // y dessinait une tache sombre en escalier, très visible au concours et au travail)
+    float wet = hSweat * bodyL * (0.25 + 0.75 * smoothstep(0.32, 0.52, hFbm(P * 3.5 + hSeed + 5.0)));
     c *= mix(1.0, 0.5, clamp(wet, 0.0, 1.0));
   }
   diffuseColor.rgb = c;

@@ -52,8 +52,8 @@ describe('quand ouvrir la scène 3D', () => {
       expect(Object.keys(care3d.CARE3D_GAMES[sp]).sort()).toEqual([...acts].sort());
       for (const act of acts) expect(which.care3dWanted({ species: sp }, act)).toBe(true);
     }
-    // (la longe reste dessinée ; le vermifuge est en 3D depuis le chantier « chevalplus » ; le cochon reste dessiné)
-    expect(which.care3dWanted({ species: 'horse' }, 'lunge')).toBe(false);
+    // (la longe et la liberté sont en 3D depuis le chantier « manege3d » ; le vermifuge depuis « chevalplus » ; le cochon reste dessiné)
+    expect(which.care3dWanted({ species: 'horse' }, 'lunge')).toBe(true);
     expect(which.care3dWanted({ species: 'horse' }, 'deworm')).toBe(true);
     expect(which.care3dWanted({ species: 'pig' }, 'feed')).toBe(false);
   });
@@ -61,7 +61,7 @@ describe('quand ouvrir la scène 3D', () => {
   it('les soins du cheval refaits en 3D : nourrir, abreuver, friandise, caresser, pansage, laver, seller, brider, vermifuge, ferrer, curer', () => {
     const h = { species: 'horse' };
     for (const act of ['feed', 'water', 'treat', 'pet', 'brush', 'wash', 'saddle', 'bridle', 'deworm', 'shoe', 'clean']) expect(typeof care3d.care3dGameFor(h, act), act).toBe('function');
-    expect(care3d.care3dGameFor(h, 'lunge')).toBe(null);
+    expect(typeof care3d.care3dGameFor(h, 'lunge')).toBe('function'); // (le rond de longe : lunge3d.js)
     expect(care3d.care3dGameFor({ species: 'pig' }, 'feed')).toBe(null);
     expect(care3d.care3dGameFor(null, 'feed')).toBe(null);
   });

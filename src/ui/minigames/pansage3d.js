@@ -24,11 +24,14 @@ import { groomTool, mudTexture, sockTexture } from '../../game/care/props.js';
 import { hoofSole } from '../../game/care/hoof.js';
 import { nicker, snort } from './feed3d.js';
 import { rng as seeded } from '../../game/care/textures.js';
+import { headShape, headFollow } from './headFrame.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 /** Pied du jeu → membre du modèle (model.legs : FL, FR, HL, HR). */
 const LEG_OF = { fl: 0, fr: 1, hl: 2, hr: 3 };
 const BODY = new Set(['body', 'shoulder', 'hip']);
+/** Cadrage (tests) : marge autour du cheval entier et de toute sa tête. */
+export const PANSAGE3D = { pad: 1.15 };
 
 export function pansage3dGame(ctx) {
   const { a, t, fx } = ctx;
@@ -242,19 +245,25 @@ export function pansage3dGame(ctx) {
   };
 
   // ---------------------------------------------------------------- caméra selon l'étape
+  // (toute la tête, pose du moment : bout du nez tendu, bouts des oreilles ; elle se tourne vers nous, le cadrage la
+  // suit en douceur — avant, le nez touchait le bord droit)
+  const shape = headShape(sc);
+  const follow = headFollow(sc, shape, () => [], { pad: PANSAGE3D.pad, half: 0.5, reach: 0.12 });
+  follow.on = false;
   function frameStage() {
     const st = stage();
     // (les fesses, derrière la queue : en paysage, la croupe touchait le bord)
     const rump = L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0));
     const body = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, rump, L.neck.clone().lerp(L.poll, 0.3)];
     // (de trois quarts avant : le flanc où sont les taches, et sa tête, qui réagit)
-    const head = [L.poll, L.muzzle, ...L.ears];
-    if (st === 'curry') sc.frame([...body, ...head, L.belly.clone().add(v3(0, -0.15 * S, 0))], { dir: [0.42, 0.2, 1], pad: 1.08 });
+    follow.on = st === 'curry' || st === 'brush';
+    if (st === 'curry') follow.set({ dir: [0.42, 0.2, 1] }, () => [...body, L.belly.clone().add(v3(0, -0.15 * S, 0))]);
     else if (st === 'brush') {
       const low = legs.length ? L.hooves : [L.belly.clone().add(v3(0, -0.2 * S, 0))];
-      sc.frame([...body, ...head, ...low], { dir: [0.42, 0.18, 1], pad: 1.07 });
+      follow.set({ dir: [0.42, 0.18, 1] }, () => [...body, ...low]);
     } else if (st === 'hoof') frameHoof();
     else frameComb();
+    if (follow.on) follow.frame(false);
   }
   /**
    * Le pied levé, vu de près. Appelé à chaque image de l'étape : la caméra suit la sole (le membre se plie, le cheval
@@ -370,7 +379,9 @@ export function pansage3dGame(ctx) {
     m.nod = 1;
     nicker(sc);
     snort(sc);
-    sc.frame([L.muzzle, L.poll, ...L.ears, L.tail, L.croup, ...L.hooves], { dir: [0.4, 0.18, 1], pad: 1.08, half: 0.7 });
+    follow.set({ dir: [0.4, 0.18, 1], half: 0.7 }, () => [L.tail, L.croup, ...L.hooves]);
+    follow.on = true;
+    follow.frame(false);
   }
 
   // ---------------------------------------------------------------- les gestes (comme pansage.js)
@@ -596,6 +607,7 @@ export function pansage3dGame(ctx) {
     } else overdo(seg, p, !!touch && (touch.region === 'neck' || touch.region === 'tail' || touch.region === 'mane'), 0.0004);
   }
 
+  let started = false;
   startStage(0);
 
   // ---------------------------------------------------------------- l'outil en 3D
@@ -708,6 +720,9 @@ export function pansage3dGame(ctx) {
       // (en paysage, la tête passait sous le cadran et la croupe touchait le bord). La carte de fin, elle, a sa zone.
       // (le cadran, en haut à droite, descend jusqu'à 88 unités du haut)
       if (!ctx.done) sc.setFocus(88 * ctx.view.scale, sc.size.h - 54 * ctx.view.scale);
+      if (!started && follow.on) follow.frame(true);
+      started = true;
+      follow.update(dt);
       showTool(dt);
     },
     draw(g) {

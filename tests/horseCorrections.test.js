@@ -124,7 +124,7 @@ describe('crinière : mèches de gauche', () => {
     const m = xs.reduce((a, b) => a + b, 0) / xs.length;
     return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / xs.length) / m;
   };
-  it('en grappes qui se chevauchent, séparées par des vides inégaux, longueurs et largeurs dispersées, tons propres (pas une rangée régulière de pétales)', () => {
+  it('une frange continue de mèches qui se recouvrent, longueurs et largeurs dispersées, tons propres (ni grappes séparées de vides ni rangée régulière de pétales)', () => {
     // (même suite que horseReal.js, mulberry(4127))
     const mulberry = (seed) => {
       let a = seed >>> 0;
@@ -136,38 +136,30 @@ describe('crinière : mèches de gauche', () => {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       };
     };
-    for (const n of [8, 10]) {
-      const crest = 0.75;
+    for (const n of [15, 18]) {
+      const crest = 0.8;
       const L = leftLocks(n, mulberry(4127), crest, 0.34);
       expect(L.length).toBe(n);
       const t = L.map((m) => m.t);
       for (let k = 1; k < n; k++) expect(t[k]).toBeGreaterThan(t[k - 1]);
       expect(Math.min(...t)).toBeGreaterThan(0.08);
       expect(Math.max(...t)).toBeLessThan(0.92);
-      // écarts entre voisines (en mètres) : des chevauchements (moins que la somme des demi-largeurs) et des vides
+      // (voisines qui se recouvrent toutes : plus de vides entre des grappes — vue de gauche, des glaçons séparés)
+      for (let k = 1; k < n; k++) expect((t[k] - t[k - 1]) * crest).toBeLessThan((L[k].w + L[k - 1].w) * crest);
+      // (écarts un peu inégaux : pas une rangée régulière)
       const gaps = [];
-      let overlaps = 0;
-      for (let k = 1; k < n; k++) {
-        const d = (t[k] - t[k - 1]) * crest;
-        gaps.push(d);
-        if (d < (L[k].w + L[k - 1].w) * crest) overlaps++;
-      }
-      expect(overlaps).toBeGreaterThanOrEqual(n - 4);
-      expect(Math.max(...gaps) / Math.min(...gaps)).toBeGreaterThan(3);
-      // (grappes : au moins deux vides de plus du double de l'écart médian ; l'ancienne répartition, une mèche par
-      // huitième de la crête, n'en avait aucun)
-      const med = [...gaps].sort((x, y) => x - y)[Math.floor(gaps.length / 2)];
-      expect(gaps.filter((d) => d > 2 * med).length).toBeGreaterThanOrEqual(2);
-      // longueurs : une longue par grappe, des courtes ; largeurs inégales ; tons différents
+      for (let k = 1; k < n; k++) gaps.push((t[k] - t[k - 1]) * crest);
+      expect(Math.max(...gaps) / Math.min(...gaps)).toBeGreaterThan(1.3);
+      // longueurs dispersées ; largeurs inégales ; tons différents
       const lens = L.map((m) => m.L);
-      expect(Math.max(...lens) / Math.min(...lens)).toBeGreaterThan(2);
-      expect(spread(lens)).toBeGreaterThan(0.27); // (avant : 0,22)
-      expect(Math.max(...L.map((m) => m.w)) / Math.min(...L.map((m) => m.w))).toBeGreaterThan(1.3);
+      expect(Math.max(...lens) / Math.min(...lens)).toBeGreaterThan(1.5);
+      expect(spread(lens)).toBeGreaterThan(0.15);
+      expect(Math.max(...L.map((m) => m.w)) / Math.min(...L.map((m) => m.w))).toBeGreaterThan(1.2);
       expect(Math.max(...L.map((m) => m.tone)) - Math.min(...L.map((m) => m.tone))).toBeGreaterThan(0.1);
-      // (demi-largeur 2,1 à 4,2 cm)
+      // (demi-largeur 2 à 4,5 cm)
       for (const m of L) {
-        expect(m.w * crest).toBeGreaterThanOrEqual(0.021);
-        expect(m.w * crest).toBeLessThanOrEqual(0.042);
+        expect(m.w * crest).toBeGreaterThanOrEqual(0.02 - 1e-9);
+        expect(m.w * crest).toBeLessThanOrEqual(0.045 + 1e-9);
       }
     }
     expect(leftLocks(0, mulberry(4127), 0.75, 0.34)).toEqual([]);

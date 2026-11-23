@@ -7,6 +7,7 @@ import { t, ta, illText } from '../i18n.js';
 import { SPECIES } from '../sim/species.js';
 import { isSandbox } from '../sim/profile.js';
 import { animalCard } from './panels.js';
+import { listPic } from './animalPic.js'; // vignette du vrai animal dans les cartes
 import { speciesName } from './names.js';
 import { clientState, clientAnimals, canAccept, daysLeft, dailyCareScore, maxClients } from '../sim/clients.js';
 import { CAREERS, startedCareers, reputationOf, RANKS, rankOf } from '../sim/careers.js';
@@ -22,7 +23,7 @@ function trainingDogs(ui) {
   return [
     h('h3', {}, `🐕 ${t('dt_clients')} (${dogs.length})`),
     h('div', { class: 'cards' }, dogs.map((a) => h('button', { class: 'card cl-card training', onClick: () => ui.openAnimal(a) },
-      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      listPic(g, a),
       h('span', { class: 'card-main' },
         h('b', {}, a.name),
         h('small', {}, `${t('cl_owner', { owner: a.client.ownerName })} · ${t('dt_sessionsDone', { n: a.client.sessionsDone, total: a.client.sessionsNeeded })}`),
@@ -171,7 +172,7 @@ export function clientsTab(ui) {
     const left = daysLeft(a, g.day);
     const score = dailyCareScore(a);
     return h('button', { class: `card cl-card ${c.kind}`, onClick: () => ui.openAnimal(a) },
-      h('span', { class: 'card-emoji' }, SPECIES[a.species].emoji),
+      listPic(g, a),
       h('span', { class: 'card-main' },
         h('b', {}, `${a.name} · ${KIND_EMOJI[c.kind]} ${t(`cl_kind_${c.kind}`)}`),
         h('small', {}, `${speciesName(a)} · ${t('cl_owner', { owner: c.ownerName })}`),

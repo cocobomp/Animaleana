@@ -8,6 +8,7 @@
 import { drawAnimal, animalShape, fitAnimal, inBody, rrect, ellipse, circle, emoji, label, fillView, sky, tiles, clamp, lerp, dist, distToSegment, shade, css, mix } from './draw.js';
 import { isBig } from './food.js';
 import { justRight } from './score.js';
+import { drawHorseVet } from '../vetHorse.js'; // (le cheval dessiné du vétérinaire : sa race, sa robe, ses marques)
 
 /** Décor de toilette : sol de la cour (grands animaux) ou pièce claire. */
 export function groomBackground(g, ctx, floorY = 300) {
@@ -536,7 +537,8 @@ export function washGame(ctx) {
         rrect(g, 42, floorY - 30, 316, 30, 14);
         g.fill();
       }
-      drawAnimal(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, shake, happy: ctx.done, blink: !!sprayAt, earsBack: !!sprayAt });
+      // (le cheval : le dessin du vétérinaire, même géométrie : la boue et la mousse restent sur lui)
+      (a.species === 'horse' ? drawHorseVet : drawAnimal)(g, a, { x: fit.x, y: floorY, s: fit.s, f: 1, time: ctx.time, shake, happy: ctx.done, blink: !!sprayAt, earsBack: !!sprayAt });
       // Boue (elle part dès qu'il y a eu assez de mousse ; sinon elle reste : encore sale)
       for (const c of cells) {
         if (c.mud && c.peak < 0.7) {

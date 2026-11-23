@@ -11,8 +11,12 @@ import { quirksOf, knows, QUIRK_SPOTS } from '../../sim/horseQuirks.js';
 import { keepsMemories } from '../../sim/memories.js';
 import { rrect, circle, clamp, lerp } from './draw.js';
 import { nicker, snort } from './feed3d.js';
+import { headShape, headFollow } from './headFrame.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+
+/** Réglages (tests) : cadrage, regard quand il en a assez. */
+export const PET3D = { dir: [0.55, 0.1, 1], pad: 1.22, fedUpLook: 0.35 };
 
 /** Où sont ses coins (repère monde, pose du moment) : garrot, encolure, poitrail, front. */
 export function petSpots(sc) {
@@ -64,9 +68,21 @@ export function pet3dGame(ctx) {
 
   const L = sc.marks;
   const spotsNow = () => petSpots(sc);
-  sc.frame([L.muzzle, L.poll, ...L.ears, L.withers, L.chest, L.chest.clone().add(v3(0, -0.2, 0)), L.withers.clone().add(v3(-0.3, 0, 0))], { dir: [0.55, 0.1, 1], pad: 1.04, now: true });
+  // Cadrage : l'encolure, le poitrail, le garrot, et toute la tête dans la pose du moment (bout du nez tendu, bouts
+  // des oreilles) ; recadré en douceur quand il tend le nez vers nous ou détourne la tête (avant : un seul cadrage
+  // serré sur la pose photo, le nez sortait à droite).
+  const shape = headShape(sc);
+  // (et la place où va son nez : tendu vers nous quand on le gratte à son coin, détourné quand il en a assez)
+  const Sc = sc.double.scale;
+  const body = [L.withers, L.chest, L.chest.clone().add(v3(0, -0.2, 0)), L.withers.clone().add(v3(-0.3, 0, 0)), L.muzzle.clone().add(v3(0.18, 0, -0.12).multiplyScalar(Sc)), L.muzzle.clone().add(v3(0.1, -0.06, 0.18).multiplyScalar(Sc))];
+  const follow = headFollow(sc, shape, () => body, { dir: PET3D.dir, pad: PET3D.pad, half: 0.5, reach: 0.2 });
+  follow.frame(true);
+  let started = false;
   const m = sc.mood;
   m.ears = 'forward';
+  // (il en a assez : il détourne la tête vers le fond du box, à peine, et doucement : le point qu'il regarde glisse)
+  const fedUpAt = sc.marks.muzzle.clone().add(v3(0.15, -0.08, -0.35));
+  const lookAt = sc.camera.position.clone();
 
 
   hint(t(shy ? 'mg_pet_hint_shy' : 'mg_pet_hint', { name: a.name }));
@@ -198,6 +214,9 @@ export function pet3dGame(ctx) {
     update(dt) {
       // (la tortue et le lièvre, le grand cœur en haut : la scène se cadre dessous)
       if (!ctx.done) sc.setFocus(78 * ctx.view.scale, sc.size.h);
+      if (!started) follow.frame(true);
+      started = true;
+      follow.update(dt);
       flinch = Math.max(0, flinch - dt);
       cool = Math.max(0, cool - dt);
       purr = Math.max(0, purr - dt);
@@ -210,9 +229,10 @@ export function pet3dGame(ctx) {
       const happy = (ctx.pointer.down && flinch <= 0 && speed > 20 && !fedUp) || (ctx.done && prog <= hi);
       m.ears = fedUp ? 'back' : 'forward';
       if (fedUp) m.annoyed = Math.max(m.annoyed, 0.3);
-      // (il en a assez : il détourne un peu la tête, sans sortir de l'image)
-      m.look = fedUp ? sc.marks.muzzle.clone().add(v3(0.3, 0.1, -0.7)) : sc.camera.position;
-      m.lookAmt = fedUp ? 0.6 : happy ? 0.55 : 0.4;
+      // (il en a assez : il détourne un peu la tête, à peine, vers le fond du box : elle reste dans l'image)
+      lookAt.lerp(fedUp ? fedUpAt : sc.camera.position, Math.min(1, dt * 1.2));
+      m.look = lookAt;
+      m.lookAmt = fedUp ? PET3D.fedUpLook : happy ? 0.55 : 0.4;
       m.nuzzle = lerp(m.nuzzle, (purr > 0 ? 0.9 : happy ? 0.4 : 0) + (lip > 0 ? 0.5 : 0), Math.min(1, dt * 3));
       m.chew = lip > 0 ? 0.8 : Math.max(0, m.chew - dt);
       snortIn -= dt;

@@ -34,7 +34,8 @@ export const STEPS = {
   brush: { emoji: '🪮', game: 'brush', care: 'brush', rank: 0, carnet: 'brush' },
   knots: { emoji: '🧶', game: 'gknots', rank: 0, carnet: 'brush' },
   nails: { emoji: '💅', game: 'nails', care: 'nails', rank: 0, species: ['dog', 'cat', 'rabbit'], carnet: 'nails' },
-  ears: { emoji: '👂', game: 'gears', rank: 0, species: ['dog', 'cat', 'rabbit', 'horse'] },
+  // (pas le cheval : on ne nettoie pas l'intérieur de l'oreille d'un cheval, elle se protège seule avec ses poils)
+  ears: { emoji: '👂', game: 'gears', rank: 0, species: ['dog', 'cat', 'rabbit'] },
   teeth: { emoji: '🦷', game: 'gteeth', rank: 0, species: ['dog', 'cat'] },
   cut: { emoji: '✂️', game: 'gcut', rank: 0, carnet: 'cut' },
   finish: { emoji: '🎀', game: 'gfinish', rank: 0, carnet: 'finish' },
@@ -181,6 +182,12 @@ export const styleAllowed = (p, id, species) => {
 };
 export const stylesFor = (p, species) => Object.keys(STYLES).filter((id) => styleAllowed(p, id, species));
 export const accessoryAllowed = (p, id) => (ACCESSORIES[id]?.rank ?? 0) <= rankOf(p);
+/**
+ * Les accessoires des finitions pour cette espèce. Le cheval : seulement ce que le vrai cheval montre aux finitions
+ * en 3D (les rubans dans ses tresses, le nœud de la queue) ; pas de chapeau, de clochette ni de bandana.
+ */
+export const HORSE_FINISH = ['ribbon', 'tailBow'];
+export const finishAccessories = (p, species) => Object.keys(ACCESSORIES).filter((k) => accessoryAllowed(p, k) && (species !== 'horse' || HORSE_FINISH.includes(k)));
 
 /** Demandes possibles à ce rang. */
 export const requestsFor = (p) => Object.entries(REQUESTS).filter(([, r]) => r.rank <= rankOf(p)).map(([id]) => id);

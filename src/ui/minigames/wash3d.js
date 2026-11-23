@@ -14,6 +14,7 @@ import { clamp, distToSegment } from './draw.js';
 import { groomTool, mudTexture, handModel, avatarHand, aimHand } from '../../game/care/props.js';
 import { paint } from '../../game/care/textures.js';
 import { nicker, snort } from './feed3d.js';
+import { headShape, headFollow } from './headFrame.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const BODY = new Set(['body', 'shoulder', 'hip', 'neck']);
@@ -21,6 +22,8 @@ const SOAP_MAX = 1.5;
 const MAX = 1.5;
 const LO = 0.85;
 const OVER_RATE = 0.00025;
+/** Cadrage (tests) : marge autour du cheval entier et de toute sa tête. */
+export const WASH3D = { pad: 1.15 };
 
 export function wash3dGame(ctx) {
   const { a, t, fx } = ctx;
@@ -137,7 +140,11 @@ export function wash3dGame(ctx) {
   ctx.hint(t('mg_wash_hint'));
   // (tout le flanc : du bout du nez aux fesses, derrière la queue)
   const rump = L.croup.clone().lerp(L.tail, 0.8).add(v3(-0.16 * S, -0.12 * S, 0));
-  sc.frame([L.withers, L.croup, L.back, L.belly, L.chest, L.tail, rump, L.poll, L.muzzle, ...L.ears, L.belly.clone().add(v3(0, -0.12 * S, 0))], { dir: [0.42, 0.2, 1], pad: 1.1 });
+  // (et toute la tête, pose du moment : il la tourne vers nous, la secoue sous la douche ; le cadrage la suit en douceur)
+  const bodyPts = [L.withers, L.croup, L.back, L.belly, L.chest, L.tail, rump, L.belly.clone().add(v3(0, -0.12 * S, 0))];
+  const follow = headFollow(sc, headShape(sc), () => bodyPts, { dir: [0.42, 0.2, 1], pad: WASH3D.pad, half: 0.5, reach: 0.12 });
+  follow.frame(false);
+  let started = false;
 
   function scrub(p) {
     if (!last) {
@@ -229,6 +236,9 @@ export function wash3dGame(ctx) {
     },
     update(dt) {
       if (!ctx.done) sc.setFocus(88 * ctx.view.scale, sc.size.h - 20 * ctx.view.scale);
+      if (!started) follow.frame(true);
+      started = true;
+      follow.update(dt);
       const pp = ctx.pointer;
       // l'éponge sous le doigt (savonnage)
       sponge.visible = phase === 'soap' && !ctx.done && (pp.down || pp.over);

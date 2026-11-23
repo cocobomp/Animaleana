@@ -16,8 +16,8 @@ import { REAL_RABBIT_KEYS, realRabbitBase } from './models/rabbitReal.js'; // la
 import { Weather3D } from './Weather3D.js';
 import { HorseBreath } from './HorseBreath.js'; // 🌬️ son souffle dans le froid
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
-import { Player, CameraRig } from './Player.js';
-import { AnimalEntity } from './AnimalEntity.js';
+import { Player, CameraRig, placeRidePhotoCamera, restorePhotoCamera } from './Player.js';
+import { AnimalEntity, setRealHorsePending } from './AnimalEntity.js';
 import { Input, MENU_CODES } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { DogTrainer } from './DogTrainer.js'; // métier éducateur canin : clients, séances, livraison
@@ -103,8 +103,11 @@ import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients e
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
 const MENU_KEYS = new Set(MENU_CODES); // (J, P, H, Échap : Game.onKey)
 // Attente du cheval réaliste au plus (ms après l'ouverture de la page) avant d'ouvrir une partie : un fichier en
-// cache arrive avant ; sur un réseau lent, on joue avec le cheval sculpté en attendant (voir onRealHorse).
-const HORSE_GRACE_MS = 1500;
+// cache arrive tout de suite, et pendant qu'on crée son profil et son avatar il a le temps d'arriver. Sur un réseau
+// très lent, la partie s'ouvre quand même, les chevaux cachés jusqu'à son arrivée (AnimalEntity.setRealHorsePending) ;
+// l'ancien cheval sculpté (horseModel.js : yeux-boutons, oreilles en cornes) ne sert que si le chargement échoue.
+// (1,5 s avant : sur un réseau moyen, on voyait l'ancien cheval, et on le gardait tant qu'on était monté dessus.)
+export const HORSE_GRACE_MS = 8000;
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -123,6 +126,8 @@ export const JOBS = [
 ];
 
 export const VET_COST = { clinic: 30, home: 50 };
+
+const _occScale = new THREE.Vector3();
 
 export class Game {
   constructor(container, ui) {
@@ -230,6 +235,7 @@ export class Game {
     this.goatSwap = [];
     this.cowSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
+    setRealHorsePending(true);
     const dogKeys = Object.values(REAL_DOG_KEYS);
     const catKeys = Object.values(REAL_CAT_KEYS);
     const rabbitKeys = Object.values(REAL_RABBIT_KEYS);
@@ -277,6 +283,7 @@ export class Game {
       .then(([n]) => { this.modelsLoaded = true; return n; });
     this.realHorseReady = horse.then((gltf) => {
       if (gltf) this.onRealHorse(gltf);
+      else this.showFallbackHorses(); // (chargement impossible : l'ancien cheval, plutôt que pas de cheval)
       return !!gltf;
     });
   }
@@ -294,11 +301,24 @@ export class Game {
         realHorseBase(gltf);
       } catch (err) {
         console.warn('Cheval réaliste : préparation impossible', err);
+        this.showFallbackHorses();
         return;
       }
+      setRealHorsePending(false);
       for (const e of this.allEntities()) if (e.data.species === 'horse' && !e.model?.real) this.horseSwap.push(e);
       this.thumbs?.modelsChanged?.();
     }, 30);
+  }
+
+  /** Le cheval réaliste ne viendra pas (réseau coupé, fichier abîmé) : les chevaux cachés en l'attendant reprennent l'ancien modèle. */
+  showFallbackHorses() {
+    setRealHorsePending(false);
+    for (const e of this.allEntities()) {
+      if (!e.waitingReal) continue;
+      e.waitingReal = false;
+      if (e.model?.root) e.model.root.visible = true;
+      if (e.scaleGroup) e.scaleGroup.visible = true;
+    }
   }
 
   /**
@@ -574,9 +594,17 @@ export class Game {
         list.splice(i--, 1);
         continue;
       }
-      if (e.ridden || e.scripted || e.herdCtrl || e.posing || this.player?.mount === e) continue;
+      // (le cheval monté : dès qu'il s'arrête, en balade libre — avant, on gardait l'ancien tant qu'on était dessus)
+      const pl = this.player;
+      const mounted = pl?.mount === e;
+      if (mounted && (pl.speed > 0.05 || this.activities?.active || e.scripted)) continue;
+      if (!mounted && (e.ridden || e.scripted || e.herdCtrl || e.posing)) continue;
       list.splice(i, 1);
       e.rebuildModel();
+      if (mounted) {
+        pl.rideRest = undefined;
+        pl.seat?.(); // (la cavalière se remet en selle sur le nouveau modèle : hauteur, étriers, rênes)
+      }
       return;
     }
   }
@@ -1064,6 +1092,8 @@ export class Game {
       if (!e) return;
       // Comme les photos de balade (src/game/Activities.js takePhoto) : en 16:10, le centre de l'écran ; pas monté,
       // autour de lui (sur un téléphone en hauteur, la bande gardée est étroite : il n'était pas dans la photo).
+      // Monté : une prise à part, de trois quarts avant (placeRidePhotoCamera) — la caméra du jeu, derrière, ne
+      // montrait que le dos de la cavalière — puis la caméra est remise.
       const src = this.renderer.domElement;
       const ratio = PHOTO.w / PHOTO.h;
       let sw = src.width;
@@ -1074,7 +1104,8 @@ export class Game {
       }
       let sx = (src.width - sw) / 2;
       let sy = (src.height - sh) / 2;
-      if (e !== this.player.mount) {
+      const mounted = e === this.player.mount;
+      if (!mounted) {
         const v = (this.photoAt ??= new THREE.Vector3()).copy(e.position);
         v.y += 1;
         if (v.distanceTo(this.camera.position) > 25) return;
@@ -1083,12 +1114,26 @@ export class Game {
         sx = THREE.MathUtils.clamp(((1 + v.x) / 2) * src.width - sw / 2, 0, src.width - sw);
         sy = THREE.MathUtils.clamp(((1 - v.y) / 2) * src.height - sh / 2, 0, src.height - sh);
       }
-      renderForPhoto(this);
       const c = document.createElement('canvas');
       c.width = PHOTO.w;
       c.height = PHOTO.h;
       const ctx = c.getContext('2d');
-      ctx.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      let saved = null;
+      const avatar = this.player.avatar?.root;
+      const hidden = mounted && avatar && !avatar.visible;
+      try {
+        if (mounted) {
+          const sun = this.world?.sun;
+          const dir = sun ? (this.photoSun ??= new THREE.Vector3()).subVectors(sun.position, sun.target.position) : null;
+          saved = placeRidePhotoCamera(this.camera, this.player, this.world, { band: sh / src.height, sun: dir, occluders: this.photoOccluders?.() });
+          if (hidden) avatar.visible = true; // (vue de la selle : la cavalière est cachée)
+        }
+        renderForPhoto(this);
+        ctx.drawImage(src, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      } finally {
+        restorePhotoCamera(this.camera, saved);
+        if (hidden) avatar.visible = false;
+      }
       if (!attachPhoto(prof, a, id, c.toDataURL('image/jpeg', PHOTO.q))) return;
       e.emit('📸', 2);
       this.save();
@@ -1359,19 +1404,30 @@ export class Game {
     this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);
     else if (!this.tripFlow.viewCamera(dt, ctrl)) { // (vue dans le véhicule : TripFlow place la caméra)
-      // (chien en laisse : la caméra cadre la joueuse et le chien ensemble — le teckel sortait de l'écran en courant)
+      // (chien en laisse : la caméra cadre la joueuse et le chien ensemble — le teckel sortait de l'écran en courant ;
+      // cheval qui suit ou mené en main : de côté, eux deux entiers — il marchait entre elle et la caméra)
       if (!this.rig.focus) {
         for (const e of entities) {
-          if (e.data.following && e.data.leashed && canLeash(e.data) && !e.inside) {
+          if (!e.data.following || e.inside) continue;
+          if (e.data.species === 'horse') {
+            if (this.player.mount || e.ridden) continue;
+            this.rig.focus = { pair: e.position, side: true, scale: e.scale ?? 1 };
+            break;
+          }
+          if (e.data.leashed && canLeash(e.data)) {
             this.rig.focus = { pair: e.position };
             break;
           }
         }
       }
+      // (séance à cheval vers des repères — saut, leçon, dressage, balade : la caméra montre ce qui arrive devant)
+      const ses = this.activities.session;
+      this.rig.course = !!(ses?.mount && this.player.mount === ses.mount);
       this.rig.update(dt, ctrl, this.player, this.world);
       this.fadeOccluders();
     }
-    this.ui.updateLabels(entities, this.camera, this.player.position);
+    // (pas d'étiquette pour un cheval caché en attendant son vrai modèle : son nom flottait au-dessus de rien)
+    this.ui.updateLabels(entities.some((e) => e.waitingReal) ? entities.filter((e) => !e.waitingReal) : entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
     this.horseBreath.update(wdt, entities, this); // 🌬️ (buée des naseaux quand il fait froid, vapeur s'il a transpiré)
@@ -1489,6 +1545,30 @@ export class Game {
     this.trailGuide.update(dt); // 🧭 visiteurs qui demandent une balade
     // Examen ou école vétérinaire en plein écran (téléphone, src/ui/vetExam.js) : la 3D est cachée, on ne la dessine pas.
     if (!this.ui.vxCover) this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * 📸 Les objets de la scène qui peuvent cacher le cheval sur une photo souvenir (placeRidePhotoCamera) : bâtiments,
+   * barrières, lices de la carrière, arbres, décor d'un concours… Recherchés à chaque photo (elles sont rares) dans
+   * toute la scène, pas seulement dans le groupe du lieu : une lice blanche, pas dans cette liste, traversait le petit
+   * poney sur la photo ; et un bâtiment construit ensuite est compté. Sans les animaux, la joueuse, les panneaux plats,
+   * les sprites et les petites pièces (moins de 30 cm).
+   */
+  photoOccluders() {
+    const skip = new Set([this.player?.avatar?.root, this.player?.root]);
+    for (const e of this.entities?.values?.() ?? []) skip.add(e.root);
+    const out = [];
+    const walk = (o) => {
+      if (skip.has(o) || o.visible === false || o.userData?.noOccluder) return;
+      if ((o.isMesh || o.isInstancedMesh) && !o.isSkinnedMesh && o.geometry && o.geometry.type !== 'PlaneGeometry') {
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        const sc = o.getWorldScale(_occScale);
+        if (o.geometry.boundingSphere.radius * Math.max(sc.x, sc.y, sc.z) > 0.3) out.push(o);
+      }
+      for (const c of o.children) walk(c);
+    };
+    if (this.scene) walk(this.scene);
+    return out;
   }
 
   /** Les murs et toits qui cachent le personnage deviennent transparents. */
@@ -2367,6 +2447,11 @@ export class Game {
   }
 
   ride(a, bareback = false) {
+    // (cheval caché en attendant son vrai modèle : on ne monte pas sur rien)
+    if (this.entities.get(a.id)?.waitingReal) {
+      this.ui.toast(t('r_horseLoading', { name: a.name }), 3000);
+      return null;
+    }
     const r = canRide(a);
     if (!r.ok) return this.ui.toast(ta(`r_${r.reason}`, a));
     let gear = rideGear(a, bareback);

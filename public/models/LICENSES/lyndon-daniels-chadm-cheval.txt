@@ -2,7 +2,9 @@ Cheval réaliste — modèle et textures de Lyndon Daniels, squelette de ChadM (
 Fichier du jeu : horse_real.glb
                  (squelette complété : os de paturon, de respiration et de crinière ; robe changée en carte
                  de modelé grise recolorée par le jeu ; allures générées pour le jeu ; compression meshopt et
-                 textures WebP — voir tools/cheval/LISEZMOI.md)
+                 textures WebP ; bord des îlots de la carte de relief refait le long des coutures de la
+                 tête, de l'oreille à la ganache : tools/cheval/bords.mjs --coutures-tete — voir
+                 tools/cheval/LISEZMOI.md)
 
 Sources :
   Modèle et textures 2k : Lyndon Daniels, « Realtime Ranchers 3D model pack »

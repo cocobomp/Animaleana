@@ -13,7 +13,7 @@
 import { rrect, ellipse, label, clamp } from './draw.js';
 import { justOutcome } from './score.js';
 import { nbsp } from './frame.js';
-import { drawHorseHead } from './deworm.js';
+import { drawHorseVetHead } from '../vetHorse.js'; // (le cheval dessiné du vétérinaire, en gros plan : sa robe, ses marques, son œil)
 
 /** Le filet : bien plein. Les granulés : une petite mesure (part du seau) ; au-delà de colicAt, trop. */
 export const RATION = { hayLo: 0.75, hayHi: 1, hayRate: 0.32, grainLo: 0.15, grainHi: 0.3, restLo: 0.03, restHi: 0.14, grainRate: 0.22, colicAt: 0.55 };
@@ -32,7 +32,6 @@ const BUCKET = { x: 108, y: 300, w: 92, h: 70 };
 export function rationGame(ctx) {
   const { a, t, fx } = ctx;
   const name = a?.name ?? ctx.name;
-  const col = ctx.col ?? { coat: '#8a5a2b', mane: '#2b1d14' };
   let stage = 'hay';
   let hay = 0;
   let grain = 0;
@@ -143,7 +142,10 @@ export function rationGame(ctx) {
       g.fillRect(v.x0, v.y0, v.w, v.h);
       g.fillStyle = '#cdb68a';
       g.fillRect(v.x0, 300, v.w, v.y1 - 300);
-      drawHorseHead(g, col, 0, eat > 0 ? Math.sin(ctx.time * 8) * 0.3 + 0.3 : 0, ctx.time);
+      // Le cheval, la tête au filet (gros plan du cheval du vétérinaire : sa race, sa robe, ses marques blanches).
+      const chew = eat > 0 ? Math.max(0, Math.sin(ctx.time * 8)) : 0;
+      // (la ration est celle du cheval : un animal sans espèce, dans un essai, est dessiné en cheval)
+      if (a) drawHorseVetHead(g, a.species === 'horse' ? a : { ...a, species: 'horse' }, { hx: 262, hy: 132, s: 2.5, f: -1, time: ctx.time, chew, happy: ctx.done && eat > 0 });
       drawNet(g, hay, stage === 'hay');
       drawBucket(g, grain, bits, stage === 'grain', grainLo, grainHi);
       // le sac (granulés) au-dessus du seau quand on verse

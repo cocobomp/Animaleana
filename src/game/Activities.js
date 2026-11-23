@@ -1835,7 +1835,7 @@ export function smileTurn(e, key, b, a) {
  * téléphone en hauteur (champ de 30° de large) comme en largeur (dist × sa taille), regard presque à l'horizontale.
  * Visé à 0,45 m et à 3 m, on ne voyait que ses pattes et son ventre. at : vecteur réutilisé.
  */
-export const SHOW_SHOT = { y: 1.0, ahead: 0.35, tall: { dist: 5.2, yaw: 0.5 }, wide: { dist: 4.2, yaw: 0.6 }, pitch: 0.12 };
+export const SHOW_SHOT = { y: 1.0, ahead: 0.35, tall: { dist: 4.5, yaw: 0.5 }, wide: { dist: 4.2, yaw: 0.6 }, pitch: 0.12 };
 export function showShot(e, aspect, at, head = null) {
   const sc = e.scale ?? 1;
   const o = aspect < 0.8 ? SHOW_SHOT.tall : SHOW_SHOT.wide;

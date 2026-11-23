@@ -14,7 +14,7 @@ import { GROOMER_GAMES, GROOMER_ICONS, setFinishOptions, setCutStyle, drawAccess
 import { drawAnimal, fitAnimal, animalShape, circle, emoji as drawEmoji, shade } from './minigames/draw.js';
 import {
   STEPS, STEP_IDS, STYLES, REQUESTS, ACCESSORIES, ACC_COLORS, ACC_SLOTS, RANKS, GROOMER_LEVEL, CUT_DAYS,
-  ensureGroomer, rankOf, rankProgress, careerXp, canGroom, waitingClients, stepAllowed, stylesFor, accessoryAllowed,
+  ensureGroomer, rankOf, rankProgress, careerXp, canGroom, waitingClients, stepAllowed, stylesFor, accessoryAllowed, finishAccessories,
   recordStep, completeService, applyCut, wearAccessory, removeAccessory, recordOwnGrooming, speciesAllowed,
   salonAt, cutFresh, stepsDone, reputation, GROOMER_CAREER, maxWaiting, stepFor,
 } from '../sim/groomer.js';
@@ -265,8 +265,9 @@ export async function runStep(ui, s, id) {
     setCutStyle(s.style);
   }
   if (id === 'finish') {
-    const current = ACC_SLOTS.map((sl) => a.accessories?.[sl]).find(Boolean) ?? null;
-    setFinishOptions({ accessories: Object.keys(ACCESSORIES).filter((k) => accessoryAllowed(p, k)), current, allowNone: true });
+    const accessories = finishAccessories(p, a.species);
+    const current = ACC_SLOTS.map((sl) => a.accessories?.[sl]).find((w) => w && accessories.includes(w.id)) ?? null;
+    setFinishOptions({ accessories, current, allowNone: true });
   }
   const promise = runMinigame(ui, a, def.game);
   const mg = ui.minigame; // (défini tout de suite : on lit stress / choix à la fin)

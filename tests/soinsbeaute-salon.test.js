@@ -255,6 +255,47 @@ describe('finitions en 3D', () => {
   }, 30000);
 });
 
+describe('finitions en 3D : ce qu\'on choisit, c\'est ce qu\'on voit', () => {
+  it('le cheval ne se voit proposer que les rubans et le nœud de queue (pas de chapeau, clochette, bandana…)', () => {
+    const p = { level: 30, groomer: { served: 9999, history: [] }, careers: { xp: { groomer: 99999 } } };
+    const all = sim.finishAccessories(p, 'dog');
+    const horse = sim.finishAccessories(p, 'horse');
+    expect(horse.every((k) => sim.HORSE_FINISH.includes(k))).toBe(true);
+    expect(horse).toContain('ribbon');
+    for (const k of ['hat', 'bell', 'bandana', 'flower', 'bow']) expect(horse).not.toContain(k);
+    expect(all.length).toBeGreaterThan(horse.length);
+  });
+
+  it('nœud de queue : le nœud sur la queue, les tresses sans ruban ; le pschitt fait des nuages ronds (texture), pas des carrés', () => {
+    groomer.setFinishOptions({ accessories: ['ribbon', 'tailBow'], current: null, allowNone: true });
+    const { a, sc } = makeStage({ breed: 'selle_francais' });
+    const ctx = salonCtx(a, sc);
+    const game = groom3d.gfinish3dGame(ctx);
+    run(ctx, game, sc, 0.3);
+    const [acc] = ctx.buttons.filter((b) => !b.opts.cls?.includes('stop'));
+    acc.opts.onTap();
+    acc.opts.onTap();
+    expect(ctx.choice.id).toBe('tailBow');
+    const body = sc.project(sc.marks.body);
+    game.down(body);
+    const puffs = sc.scene.children.filter((o) => o.isSprite);
+    expect(puffs.length).toBeGreaterThan(0);
+    for (const sp of puffs) expect(sp.material.map).toBeTruthy();
+    run(ctx, game, sc, 0.5);
+    for (let i = 0; i < 2; i++) {
+      game.down(body);
+      run(ctx, game, sc, 0.5);
+    }
+    expect(ctx.done).toBe(true);
+    const st = game.peek();
+    expect(st.knobs).toBe(sc.model.braidSpots.crest.length);
+    expect(st.tailBow).toBe(true);
+    expect(st.ribbon).toBe(false);
+    game.destroy();
+    sc.dispose();
+  }, 30000);
+});
+
 describe('tonte en 3D', () => {
   it('la tondeuse en bandes sur la robe : le poil d\'hiver s\'en va, toutes les zones sont tondues, même note que le jeu dessiné', () => {
     groomer.setCutStyle('tonte');

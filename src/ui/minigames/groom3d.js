@@ -539,7 +539,7 @@ export function gknots3dGame(ctx) {
 
 export function gfinish3dGame(ctx) {
   const { a, t } = ctx;
-  const { sc, keep, own, S, L } = setup(ctx);
+  const { sc, keep, own, S, L, follow: wholeFollow } = setup(ctx);
   const m = sc.mood;
   m.ears = 'forward';
   // (la consigne du jeu dessiné parle d'accessoire et d'animal : ici, le ruban et les tresses)
@@ -561,6 +561,7 @@ export function gfinish3dGame(ctx) {
   let started = false;
   let color = null;
   let doneT = 0;
+  let wholeOn = false;
   // (la crinière rentre dans les boutons à mesure qu'on tresse, comme au jeu des tresses)
   const maneU = sc.model.hairMesh?.material?.userData?.hairBraid ?? null;
   let tuck = 0;
@@ -587,19 +588,27 @@ export function gfinish3dGame(ctx) {
       if (!ctx.done) sc.setFocus(10 * ctx.view.scale, sc.size.h);
       if (!started) follow.frame(true);
       started = true;
-      follow.update(dt);
+      // (à la fin, avec le nœud de la queue : on recule pour voir tout le cheval, de la tête au nœud)
+      const tailEnd = ctx.done && play.peek().choice?.id === 'tailBow';
+      if (tailEnd && !wholeOn) {
+        wholeOn = true;
+        wholeFollow.frame(false);
+      }
+      (wholeOn ? wholeFollow : follow).update(dt);
       const s = play.peek();
       const ch = s.choice ?? {};
       if (ch.color !== color) {
         color = ch.color;
         B.ribbonMat.color.setHex(ACC_COLORS[color] ?? ACC_COLORS.pink);
       }
-      // à chaque pschitt, un tiers des tresses ; le ruban de la couleur choisie (sans accessoire : pas de ruban)
+      // à chaque pschitt, un tiers des tresses ; ce qu'on voit, c'est ce qu'on a choisi : 🎀 ruban, un ruban de la
+      // couleur choisie sur chaque tresse ; 🪢 nœud de queue, le nœud sur la queue (les tresses restent nues) ;
+      // rien, des tresses nues
       for (const k of B.knobs) {
         B.grow(k, k.sec < s.puffs, dt);
-        k.band.visible = k.pom.visible = !!ch.id && k.g.visible;
+        k.band.visible = k.pom.visible = ch.id === 'ribbon' && k.g.visible;
       }
-      if (B.tailBow) B.tailBow.visible = ch.id === 'tailBow' && s.puffs >= s.need;
+      if (B.tailBow) B.tailBow.visible = ch.id === 'tailBow' && s.puffs >= 1;
       tuck += (Math.min(1, s.puffs / Math.max(1, s.need)) - tuck) * Math.min(1, dt * 3);
       if (maneU) maneU.value = tuck;
       m.look = sc.camera.position;

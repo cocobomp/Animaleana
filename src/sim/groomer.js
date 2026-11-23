@@ -182,6 +182,12 @@ export const styleAllowed = (p, id, species) => {
 };
 export const stylesFor = (p, species) => Object.keys(STYLES).filter((id) => styleAllowed(p, id, species));
 export const accessoryAllowed = (p, id) => (ACCESSORIES[id]?.rank ?? 0) <= rankOf(p);
+/**
+ * Les accessoires des finitions pour cette espèce. Le cheval : seulement ce que le vrai cheval montre aux finitions
+ * en 3D (les rubans dans ses tresses, le nœud de la queue) ; pas de chapeau, de clochette ni de bandana.
+ */
+export const HORSE_FINISH = ['ribbon', 'tailBow'];
+export const finishAccessories = (p, species) => Object.keys(ACCESSORIES).filter((k) => accessoryAllowed(p, k) && (species !== 'horse' || HORSE_FINISH.includes(k)));
 
 /** Demandes possibles à ce rang. */
 export const requestsFor = (p) => Object.entries(REQUESTS).filter(([, r]) => r.rank <= rankOf(p)).map(([id]) => id);

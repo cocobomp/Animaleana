@@ -7,7 +7,7 @@ import { tackEffects } from '../sim/gear.js'; // effets de la selle en balade
 import {
   SHOWGROUND, JUMP_COURSE, AGILITY_COURSE, AGILITY_LENGTH, TRAIL, toWorld, approach, alignment, takeoffQuality, TAKEOFF,
   jumpChance, horseJumpStats, refuses, jumpingResult, parTime, trailCollectibles, trailResult, trailEnduranceGain,
-  courseForStage, stageFor, stageForLevel, refusalChance, LESSON_STEPS, LESSON_JUMPS, lessonStart, lessonGain, lessonResult, JUMP_STAGES,
+  courseForStage, scaledCourse, stageFor, stageForLevel, refusalChance, LESSON_STEPS, LESSON_JUMPS, lessonStart, lessonGain, lessonResult, JUMP_STAGES,
   HOP_COURSE, hopChance, hopPar, hopResult, HUTCH_TOYS, hutchPlay, hutchPlayBlock,
   agilityChance, agilitySpeed, agilityResult, agilityPar, commandQuality, AGILITY_TYPES, trickWindow, trickPoints, showResult,
   showAudience, ranking, placementAward, practiceAward, addAward, recordBest, activityData, activitySkillGain, eligibility,
@@ -634,8 +634,9 @@ class JumpingSession extends Session {
     this.lesson = type === 'lesson';
     // Le parcours : des barres au sol pour débuter, plus haut quand le cheval a appris.
     this.stage = this.comp ? stageForLevel(this.level) : (opts.stage ?? stageFor(a.skills.jump));
-    // opts.course : parcours de concours (src/sim/competitions.js), sinon le parcours du niveau.
-    const course = opts.course ?? courseForStage(this.stage);
+    // opts.course : parcours de concours (src/sim/competitions.js), sinon le parcours du niveau ; barres baissées pour un
+    // très petit poney (scaledCourse).
+    const course = scaledCourse(opts.course ?? courseForStage(this.stage), e.scale ?? 1);
     this.start = this.lesson ? LESSON_START : course.start;
     if (this.lesson) {
       // Leçon : un seul obstacle au milieu, la barre monte à chaque réussite.
@@ -917,7 +918,9 @@ class JumpingSession extends Session {
     this.jump = {
       o, counts, clean, t: 0, dur: 0.62 + o.height * 0.22,
       from: pl.root.position.clone(), heading, h0: pl.heading,
-      dist: Math.max(3.6, speed * (0.62 + o.height * 0.22)), height: o.height * 1.1 + 0.3, speed, timing,
+      // (hauteur de l'envol : la barre plus une marge à la taille du cheval — 0,3 m pour tous, un Falabella s'envolait
+      // plus haut que lui)
+      dist: Math.max(3.6, speed * (0.62 + o.height * 0.22)), height: jumpArc(o.height, this.mount?.scale ?? 1), speed, timing,
     };
     if (counts && timing > 0.85) this.hud.big(t('actv_perfect'), 700, 'good');
   }
@@ -1830,6 +1833,15 @@ export function showShot(e, aspect, at, head = null) {
     at.set((at.x + m[12]) / 2, (at.y + m[13]) / 2, (at.z + m[14]) / 2);
   }
   return { at, heading: e.heading, dist: o.dist * sc, yaw: o.yaw, pitch: SHOW_SHOT.pitch };
+}
+
+/**
+ * Hauteur (m) dont le cheval s'élève au-dessus d'une barre de h m : la barre (× 1,1) plus une marge de 0,3 m à sa
+ * taille sc. Avec des barres baissées à sa taille (scaledCourse), c'est l'envol d'un grand cheval multiplié par sa
+ * taille ; sans les sabots qui passeraient à travers la barre.
+ */
+export function jumpArc(h, sc = 1) {
+  return h * 1.1 + 0.3 * Math.min(1.2, Math.max(0.3, sc));
 }
 
 /** Hauteur (m) d'où partent l'étoile ou les applaudissements d'un tour : au-dessus de la tête d'un cheval (≈ 2,6 m × sa

@@ -151,6 +151,21 @@ export const stageFor = (skill) => Math.max(...unlockedStages(skill));
 /** Niveau de parcours d'un concours : club → petites croix, régional → club, Grand Prix → grand. */
 export const stageForLevel = (level) => Math.min(3, level);
 
+/**
+ * Très petits poneys (Falabella, Shetland) : les barres baissées à leur taille (sc : taille du cheval, 1 pour un
+ * cheval moyen) — un Falabella sautait une barre presque aussi haute que lui. ×1 dès 0,9, jusqu'à ×0,5.
+ */
+export function jumpBarScale(sc = 1) {
+  return clamp((sc / 0.9) ** 1.2, 0.5, 1);
+}
+
+/** Un parcours (obstacles) aux barres baissées pour un cheval de taille sc (jumpBarScale) ; le même s'il est grand. */
+export function scaledCourse(course, sc = 1) {
+  const k = jumpBarScale(sc);
+  if (k >= 1) return course;
+  return { ...course, obstacles: course.obstacles.map((o) => ({ ...o, height: Math.max(0.1, Math.round(o.height * k * 100) / 100) })) };
+}
+
 /** Le parcours d'un niveau : mêmes emplacements, obstacles et hauteurs adaptés. */
 export function courseForStage(stage) {
   const st = JUMP_STAGES[stage] ?? JUMP_STAGES[2];

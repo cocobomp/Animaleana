@@ -145,6 +145,16 @@ function nameTexture(text) {
   return tex;
 }
 
+/**
+ * Le cheval réaliste (horse_real.glb) est encore attendu (Game : setRealHorsePending) : un cheval construit avec
+ * l'ancien modèle sculpté (horseModel.js : yeux-boutons, oreilles en cornes) reste caché jusqu'à son arrivée
+ * (Game.swapRealHorses). Si le chargement échoue (réseau coupé), on montre l'ancien modèle (showFallbackHorses).
+ */
+let realHorsePending = false;
+export function setRealHorsePending(on) {
+  realHorsePending = !!on;
+}
+
 export class AnimalEntity {
   constructor(data, world, scene) {
     this.data = data;
@@ -190,6 +200,9 @@ export class AnimalEntity {
     const sp = this.data.species;
     const look = sp === 'sheep' ? sheepLookOf(this.data) : sp === 'goat' ? goatLookOf(this.data) : sp === 'cow' ? cowLookOf(this.data) : stageLook(this.data);
     this.model = buildGltfAnimal(this.data.species, look) ?? buildAnimalModel(this.data.species, look, this.data.breed);
+    // (cheval en attente du modèle réaliste : l'ancien reste caché, voir setRealHorsePending)
+    this.waitingReal = sp === 'horse' && !this.model.real && realHorsePending;
+    if (this.waitingReal) this.model.root.visible = false;
     this.root = new THREE.Group();
     this.root.userData.entity = this;
     this.scaleGroup = new THREE.Group();

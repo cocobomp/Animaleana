@@ -17,7 +17,7 @@ import { Weather3D } from './Weather3D.js';
 import { HorseBreath } from './HorseBreath.js'; // 🌬️ son souffle dans le froid
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 import { Player, CameraRig, placeRidePhotoCamera, restorePhotoCamera } from './Player.js';
-import { AnimalEntity } from './AnimalEntity.js';
+import { AnimalEntity, setRealHorsePending } from './AnimalEntity.js';
 import { Input, MENU_CODES } from './Input.js';
 import { HelperEntity } from './HelperEntity.js';
 import { DogTrainer } from './DogTrainer.js'; // métier éducateur canin : clients, séances, livraison
@@ -103,8 +103,11 @@ import { Groomer } from './Groomer.js'; // métier Toiletteur : salon, clients e
 const PET_HOUSED = ['dog', 'cat', 'rabbit'];
 const MENU_KEYS = new Set(MENU_CODES); // (J, P, H, Échap : Game.onKey)
 // Attente du cheval réaliste au plus (ms après l'ouverture de la page) avant d'ouvrir une partie : un fichier en
-// cache arrive avant ; sur un réseau lent, on joue avec le cheval sculpté en attendant (voir onRealHorse).
-const HORSE_GRACE_MS = 1500;
+// cache arrive tout de suite, et pendant qu'on crée son profil et son avatar il a le temps d'arriver. Sur un réseau
+// très lent, la partie s'ouvre quand même, les chevaux cachés jusqu'à son arrivée (AnimalEntity.setRealHorsePending) ;
+// l'ancien cheval sculpté (horseModel.js : yeux-boutons, oreilles en cornes) ne sert que si le chargement échoue.
+// (1,5 s avant : sur un réseau moyen, on voyait l'ancien cheval, et on le gardait tant qu'on était monté dessus.)
+export const HORSE_GRACE_MS = 8000;
 
 const CARE_EMOJI = {
   feed: '🍖', water: '💧', brush: '✨', wash: '🫧', clean: '🧹', nails: '✂️', shoe: '🔨',
@@ -230,6 +233,7 @@ export class Game {
     this.goatSwap = [];
     this.cowSwap = [];
     const grace = new Promise((r) => setTimeout(r, HORSE_GRACE_MS));
+    setRealHorsePending(true);
     const dogKeys = Object.values(REAL_DOG_KEYS);
     const catKeys = Object.values(REAL_CAT_KEYS);
     const rabbitKeys = Object.values(REAL_RABBIT_KEYS);
@@ -277,6 +281,7 @@ export class Game {
       .then(([n]) => { this.modelsLoaded = true; return n; });
     this.realHorseReady = horse.then((gltf) => {
       if (gltf) this.onRealHorse(gltf);
+      else this.showFallbackHorses(); // (chargement impossible : l'ancien cheval, plutôt que pas de cheval)
       return !!gltf;
     });
   }
@@ -294,11 +299,23 @@ export class Game {
         realHorseBase(gltf);
       } catch (err) {
         console.warn('Cheval réaliste : préparation impossible', err);
+        this.showFallbackHorses();
         return;
       }
+      setRealHorsePending(false);
       for (const e of this.allEntities()) if (e.data.species === 'horse' && !e.model?.real) this.horseSwap.push(e);
       this.thumbs?.modelsChanged?.();
     }, 30);
+  }
+
+  /** Le cheval réaliste ne viendra pas (réseau coupé, fichier abîmé) : les chevaux cachés en l'attendant reprennent l'ancien modèle. */
+  showFallbackHorses() {
+    setRealHorsePending(false);
+    for (const e of this.allEntities()) {
+      if (!e.waitingReal) continue;
+      e.waitingReal = false;
+      if (e.model?.root) e.model.root.visible = true;
+    }
   }
 
   /**
@@ -574,9 +591,17 @@ export class Game {
         list.splice(i--, 1);
         continue;
       }
-      if (e.ridden || e.scripted || e.herdCtrl || e.posing || this.player?.mount === e) continue;
+      // (le cheval monté : dès qu'il s'arrête, en balade libre — avant, on gardait l'ancien tant qu'on était dessus)
+      const pl = this.player;
+      const mounted = pl?.mount === e;
+      if (mounted && (pl.speed > 0.05 || this.activities?.active || e.scripted)) continue;
+      if (!mounted && (e.ridden || e.scripted || e.herdCtrl || e.posing)) continue;
       list.splice(i, 1);
       e.rebuildModel();
+      if (mounted) {
+        pl.rideRest = undefined;
+        pl.seat(); // (la cavalière se remet en selle sur le nouveau modèle : hauteur, étriers, rênes)
+      }
       return;
     }
   }

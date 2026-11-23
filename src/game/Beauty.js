@@ -509,7 +509,25 @@ export class Beauty {
 // ---------------------------------------------------------------- présentation dans la carrière
 
 // Emplacements (coordonnées locales de la carrière) : départ côté entrée, cercle du juge côté cabane du jury.
-const RING = {
+/**
+ * Plan de trois quarts avant d'un cheval au concours de beauté (rig.focus.shot) : 'judge' (devant le juge : arrêt,
+ * immobile, demi-tour — l'enfant à sa gauche, devant son épaule) ou 'podium' (la photo de l'album). Visé à y × sa
+ * taille, ahead × sa taille devant son centre (sa tête, plus près de la caméra, sortait de l'image), à dist × sa taille
+ * (tall : sur un écran en hauteur, ≈ 30° de large), de yaw rad depuis son devant : sa tête, son corps et l'enfant.
+ */
+export const BEAUTY_SHOT = {
+  judge: { y: 1.1, ahead: 0.35, dist: 5, tall: 6.6, yaw: 0.7, pitch: 0.12 },
+  podium: { y: 1.1, ahead: 0.2, dist: 5, tall: 5, yaw: 0.6, pitch: 0.12 },
+};
+export function beautyShot(e, kind, at, aspect = 1) {
+  const sc = e.scale ?? 1;
+  const o = BEAUTY_SHOT[kind] ?? BEAUTY_SHOT.judge;
+  const f = o.ahead * sc;
+  at.set(e.position.x + Math.sin(e.heading) * f, e.position.y + o.y * sc, e.position.z + Math.cos(e.heading) * f);
+  return { at, heading: e.heading, dist: (aspect < 0.8 ? o.tall : o.dist) * sc, yaw: o.yaw, pitch: o.pitch };
+}
+
+export const RING = {
   start: { x: 14, z: 0, heading: -Math.PI / 2 },
   judge: { x: -12.5, z: -5 },
   table: { x: -14.6, z: -5 },
@@ -518,6 +536,8 @@ const RING = {
   podium: { x: 10, z: 3.6 },
 };
 const STAND_SECONDS = 3;
+/** Largeur (m) des drapeaux du retour (en travers du chemin). */
+export const FLAG_WIDTH = 6.5;
 const RUN_SPEED = 4.0; // au-dessus, on court
 
 class BeautySession extends Session {
@@ -566,8 +586,10 @@ class BeautySession extends Session {
     this.ringA.position.y += 0.08;
     this.ringB.position.y += 0.08;
     this.ringB.visible = false;
-    const flags = flagPair(4, t('actv_finish'));
-    this.flags = this.put(flags, this.back.x, this.back.z, 0);
+    // (en travers du chemin, 6,5 m de large : posés dans son sens et larges de 4 m, leurs poteaux étaient sur le
+    // chemin de l'aller, et le cheval, mené à 1,1 m à droite de l'enfant, passait à travers)
+    const flags = flagPair(FLAG_WIDTH, t('actv_finish'));
+    this.flags = this.put(flags, this.back.x, this.back.z, Math.PI / 2);
     const tbl = new THREE.Group();
     const top = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.0), mat(0xf6f4ee, 0.8));
     top.position.y = this.tableTop;
@@ -922,11 +944,13 @@ class BeautySession extends Session {
       case 'halt-done':
       case 'pose-done':
         this.holdPlayer(this.hold.x, this.hold.z, this.hold.heading);
+        if (this.phase === 'halt-done' || this.phase === 'turn') this.judgeShot();
         if (this.phase.endsWith('-done') && this.phaseT > 0.9) this.nextStep();
         break;
       case 'stand': {
         if (pl.speed > 0.05) this.touched = true; // le joystick a bougé (avant qu'on remette le joueur en place)
         this.holdPlayer(this.hold.x, this.hold.z, this.hold.heading);
+        this.judgeShot();
         if (this.touched && !this.touchedShown) {
           this.touchedShown = true;
           this.standQ = Math.min(this.standQ, 0.35);
@@ -1040,15 +1064,26 @@ class BeautySession extends Session {
     if (this.rank && this.rank <= 3) addStat(g.profile, 'beautyPodium');
   }
 
+  /** Devant le juge (arrêt, immobile, demi-tour) : un cheval de trois quarts avant (beautyShot) — on voyait sa croupe. */
+  judgeShot() {
+    const e = this.e;
+    if (!e || e.data.species !== 'horse' || this.carried || this.onTable) return;
+    this.game.rig.focus = { shot: beautyShot(e, 'judge', (this.shotAt ??= new THREE.Vector3()), this.game.camera.aspect) };
+  }
+
   updatePodium(dt) {
     const pl = this.game.player;
     this.holdPlayer(this.hold.x, this.hold.z, 0);
     // (photo : la caméra cadre l'animal sur sa marche, de face, à 2,5 m environ — il restait petit et loin, derrière la
     // joueuse)
+    // Un cheval : de trois quarts (beautyShot, 'podium'), la tête, le corps et l'enfant dans l'image (visé à 0,4 m et
+    // à 2,5 m, la photo de l'album ne montrait que ses pattes).
     const e = this.e;
     if (e && this.phaseT < 3.2) {
       const sc = e.scale ?? 1;
-      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 } };
+      const at = (this.shotAt ??= new THREE.Vector3());
+      this.game.rig.focus = { shot: e.data.species === 'horse' ? beautyShot(e, 'podium', at, this.game.camera.aspect)
+        : { at: at.set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 } };
     }
     pl.heading = 0;
     this.game.rig.yaw += wrap(0 - this.game.rig.yaw) * Math.min(1, dt * 4);
@@ -1107,8 +1142,9 @@ class BeautySession extends Session {
   /** Petite photo de l'écran gardée dans l'album (comme les photos de balade). */
   takePhoto() {
     const g = this.game;
+    const cam = g.camera;
+    const fov = cam.fov;
     try {
-      renderForPhoto(g);
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;
@@ -1121,6 +1157,14 @@ class BeautySession extends Session {
         sh = src.height;
         sw = sh * ratio;
       }
+      // (la bande gardée, au milieu de l'écran, est étroite sur un téléphone en hauteur : le champ est élargi le temps
+      // de la photo pour qu'elle voie ce que montre l'écran, ≈ 40° de haut ; sinon on n'y voyait que des pattes)
+      const band = sh / src.height;
+      if (band < 0.9) {
+        cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
+        cam.updateProjectionMatrix();
+      }
+      renderForPhoto(g);
       ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
       const d = activityData(g.profile);
       d.photos.push({ sight: 'podium', day: g.day, place: g.profile.place, data: c.toDataURL('image/jpeg', 0.7) });
@@ -1129,6 +1173,11 @@ class BeautySession extends Session {
       g.ui.toast(t('actv_photoTaken', { what: t('beauty_sight_podium') }), 3000);
     } catch {
       /* pas de photo possible : tant pis */
+    } finally {
+      if (cam.fov !== fov) {
+        cam.fov = fov;
+        cam.updateProjectionMatrix();
+      }
     }
   }
 

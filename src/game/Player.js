@@ -1083,6 +1083,20 @@ const _lv = new THREE.Vector3();
 const _rv = new THREE.Vector3();
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+/**
+ * Place de la caméra d'un plan (rig.focus.shot : { at, heading, dist, yaw, pitch }) : autour de at, à dist m, à yaw rad
+ * du devant (heading), pitch rad au-dessus ; jamais sous le sol + 0,3 m. Utilisé aussi pour une photo prise avant que
+ * la caméra y soit arrivée (CompetitionVenue.takePhoto).
+ */
+export function shotPose(s, out, heightAt = () => 0) {
+  const a = s.heading + (s.yaw ?? 0.7);
+  const pt = s.pitch ?? 0.22;
+  out.set(s.at.x + Math.sin(a) * Math.cos(pt) * s.dist, s.at.y + Math.sin(pt) * s.dist, s.at.z + Math.cos(a) * Math.cos(pt) * s.dist);
+  const g2 = heightAt(out.x, out.z) + 0.3;
+  if (out.y < g2) out.y = g2;
+  return out;
+}
+
 /** Hauteur de la selle (m au-dessus des sabots) du cheval monté. */
 function seatOf(player) {
   const eye = player.eyeHeight;
@@ -1398,11 +1412,7 @@ export class CameraRig {
     if (this.shotK > 0.001 && this.shot) {
       const s = this.shot;
       // (de face : yaw 0 ; trois quarts : ± 0,7 rad depuis le devant de l'animal)
-      const a = s.heading + (s.yaw ?? 0.7);
-      const pt = s.pitch ?? 0.22;
-      const shotPos = _sv.set(s.at.x + Math.sin(a) * Math.cos(pt) * s.dist, s.at.y + Math.sin(pt) * s.dist, s.at.z + Math.cos(a) * Math.cos(pt) * s.dist);
-      const g2 = world.heightAt(shotPos.x, shotPos.z) + 0.3;
-      if (shotPos.y < g2) shotPos.y = g2;
+      const shotPos = shotPose(s, _sv, (x, z) => world.heightAt(x, z));
       want.lerp(shotPos, this.shotK);
       aim = _lv.copy(target).lerp(s.at, this.shotK);
     }

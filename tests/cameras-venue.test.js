@@ -19,6 +19,7 @@ beforeAll(async () => {
   globalThis.matchMedia = globalThis.matchMedia ?? (() => ({ matches: true }));
   C = await import('../src/game/CompetitionVenue.js');
   ({ CameraRig } = await import('../src/game/Player.js'));
+  C = { ...C, shotPose: (await import('../src/game/Player.js')).shotPose };
 }, 60000);
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -94,7 +95,8 @@ describe('📸 la caméra de la cérémonie', () => {
       cam.updateProjectionMatrix();
       cam.updateMatrixWorld(true);
       const f = V(Math.sin(e.heading), 0, Math.cos(e.heading));
-      const pts = [V(0, 0, 0).addScaledVector(f, 0.75), V(0, 0, 0).addScaledVector(f, -0.6), V(0, 2.05, 0).addScaledVector(f, 1.3), V(0, 0.5, 0).addScaledVector(f, -1.35), V(0, 2.56, 0)];
+      // (sabots, oreilles, bout du nez de la tête tendue, queue, casque de la cavalière)
+      const pts = [V(0, 0, 0).addScaledVector(f, 0.75), V(0, 0, 0).addScaledVector(f, -0.6), V(0, 2.05, 0).addScaledVector(f, 1.3), V(0, 1.4, 0).addScaledVector(f, 1.75), V(0, 0.5, 0).addScaledVector(f, -1.35), V(0, 2.56, 0)];
       for (const q of pts) {
         const p = q.add(e.position).project(cam);
         expect(Math.abs(p.y)).toBeLessThan(band * 0.98);
@@ -170,5 +172,24 @@ describe('🏠 podium pris dans un bâtiment (à la maison, l\'écurie occupe sa
     }
     expect(cam.position.x).toBeLessThan(SHOWGROUND.x + SHOWGROUND.hw - 1);
     expect(Math.abs(cam.position.z - SHOWGROUND.z)).toBeLessThan(SHOWGROUND.hd - 1);
+  });
+});
+
+describe('📸 photo du podium', () => {
+  it('shotPose : la caméra de la photo à la place exacte du plan, celle où la caméra du jeu finit par arriver', () => {
+    const s = C.ceremonySpot(POD, 1, { mounted: true, scale: 1 });
+    const e = { position: V(s.horse.x, 0, s.horse.z), heading: s.horse.heading, scale: 1 };
+    const rider = { position: e.position, eyeHeight: 2.65, heading: e.heading, speed: 0, auto: false, mount: e, avatar: { root: { visible: true } } };
+    const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
+    const rig = new CameraRig(cam);
+    rig.yaw = e.heading;
+    const at = new THREE.Vector3();
+    for (let i = 0; i < 400; i++) {
+      rig.focus = { shot: C.ceremonyShot(e, rider, at, 390 / 844) };
+      rig.update(1 / 30, { look: { dx: 0, dy: 0 }, zoom: 0 }, rider, { insideBuilding: () => false, heightAt: () => 0 });
+    }
+    const P = new THREE.Vector3();
+    C.shotPose(C.ceremonyShot(e, rider, at, 390 / 844), P);
+    expect(P.distanceTo(cam.position)).toBeLessThan(0.05);
   });
 });

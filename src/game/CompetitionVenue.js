@@ -18,6 +18,7 @@ import { spectators } from './models/course.js';
 import { mulberry32 } from '../sim/rng.js';
 import { addStat, earn, isSandbox } from '../sim/profile.js';
 import { emojiTexture } from './textures.js';
+import { shotPose } from './Player.js';
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 import { t, ta, L } from '../i18n.js';
 import { openVenuePanel, showCompetitionResults } from '../ui/competitions.js';
@@ -94,7 +95,8 @@ export function ceremonyShot(e, rider, at, aspect = 1) {
   }
   const top = rider ? Math.max(1.4, rider.eyeHeight - 0.1) : 2.1 * sc;
   at.set(e.position.x, e.position.y + top * 0.5, e.position.z);
-  return { at, heading: e.heading, dist: 1.2 + top * 1.75, yaw: 1.0, pitch: 0.12 };
+  // (sur un téléphone en hauteur, un peu plus loin : la tête tendue du cheval sortait de l'écran)
+  return { at, heading: e.heading, dist: (1.2 + top * 1.75) * (aspect < 1 ? 1.2 : 1), yaw: 1.0, pitch: 0.12 };
 }
 
 export class CompetitionVenue {
@@ -462,9 +464,14 @@ export class CompetitionVenue {
     this.cheer = rank <= 3 ? 1 : 0.5;
     e?.emit(rank === 1 ? '🏆' : rank <= 3 ? '🏅' : '🎀', 3);
     const n = rank <= 3 ? 24 : 10;
+    const fx = Math.sin(pl.heading);
+    const fz = Math.cos(pl.heading);
     for (let i = 0; i < n; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(['🎊', '🎉', '✨'][i % 3]), transparent: true, depthWrite: false }));
-      s.position.set(x + (Math.random() - 0.5) * 5, y + 1 + Math.random() * 2, z + (Math.random() - 0.5) * 5);
+      // (derrière eux et au-dessus, pas entre eux et la caméra, qui les voit de devant : avant, ils couvraient la photo)
+      const back = 1.2 + Math.random() * 2.5;
+      const side = (Math.random() - 0.5) * 6;
+      s.position.set(x - fx * back + fz * side, y + 1.8 + Math.random() * 2, z - fz * back - fx * side);
       s.scale.setScalar(0.5 + Math.random() * 0.4);
       s.userData = { life: 2 + Math.random() * 2, vy: 0.6 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.6 };
       g.scene.add(s);
@@ -477,6 +484,7 @@ export class CompetitionVenue {
     const g = this.game;
     const cam = g.camera;
     const fov = cam.fov;
+    let saved = null;
     try {
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
@@ -496,6 +504,15 @@ export class CompetitionVenue {
         cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
         cam.updateProjectionMatrix();
       }
+      // (la caméra à la place exacte du plan de la cérémonie, même si elle n'y est pas encore arrivée : sur un
+      // téléphone lent, la photo montrait la croupe du cheval, vue de derrière)
+      const shot = this.ceremonyE && this.shotAt ? ceremonyShot(this.ceremonyE, g.player.mount === this.ceremonyE || this.ceremonyFoot ? g.player : null, this.shotAt, cam.aspect) : null;
+      if (shot) {
+        saved = { p: cam.position.clone(), q: cam.quaternion.clone() };
+        shotPose(shot, cam.position, (x, z) => g.world.heightAt(x, z));
+        cam.lookAt(shot.at);
+        cam.updateMatrixWorld(true);
+      }
       renderForPhoto(g);
       ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
       const data = c.toDataURL('image/jpeg', 0.7);
@@ -510,6 +527,11 @@ export class CompetitionVenue {
       if (cam.fov !== fov) {
         cam.fov = fov;
         cam.updateProjectionMatrix();
+      }
+      if (saved) {
+        cam.position.copy(saved.p);
+        cam.quaternion.copy(saved.q);
+        cam.updateMatrixWorld(true);
       }
     }
   }

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 
 let B;
 let CameraRig;
+let PlayerMod;
 beforeAll(async () => {
   const mem = new Map();
   globalThis.localStorage = globalThis.localStorage ?? {
@@ -18,7 +19,8 @@ beforeAll(async () => {
   };
   globalThis.matchMedia = globalThis.matchMedia ?? (() => ({ matches: true }));
   B = await import('../src/game/Beauty.js');
-  ({ CameraRig } = await import('../src/game/Player.js'));
+  PlayerMod = await import('../src/game/Player.js');
+  ({ CameraRig } = PlayerMod);
 }, 60000);
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -75,25 +77,70 @@ describe('🎀 devant le juge : le cheval de trois quarts avant, avec l\'enfant'
   }
 });
 
-describe('📸 la photo du podium (beautyShot « podium » et la bande gardée)', () => {
-  it('sa tête, son corps et ses sabots dans la bande 16:10 du milieu, champ élargi le temps de la photo', () => {
-    const e = { position: V(9.2, 0.45, 3.6), heading: Math.PI, scale: 1, data: { species: 'horse' } };
-    const { cam } = shotCamera(e, 'podium', PORTRAIT);
-    // (Beauty.takePhoto : bande de 16:10 sur toute la largeur ; champ vertical de 40° dans cette bande)
-    const band = (390 / 1.6) / 844;
-    cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
-    cam.updateProjectionMatrix();
-    cam.updateMatrixWorld(true);
-    for (const q of HORSE) {
-      const s = toWorld(e, q).project(cam);
-      expect(Math.abs(s.y), `${q}`).toBeLessThan(band);
-      expect(Math.abs(s.x), `${q}`).toBeLessThan(0.98);
+describe('🏆 le podium avec un cheval (beautyPodiumSpot, beautyPodiumShot)', () => {
+  // le podium de Beauty.js tourné de 180° : marches de 1 m, au milieu 0,7 m, puis 0,5 m (+1,1 m en x) et 0,35 m (−1,1 m)
+  const POD_X = 10;
+  const POD_Z = 3.6;
+  const STEPS = [{ x: POD_X, z: POD_Z, h: 0.7 }, { x: POD_X + 1.1, z: POD_Z, h: 0.5 }, { x: POD_X - 1.1, z: POD_Z, h: 0.35 }];
+  const onAStep = (e) => {
+    const f = V(Math.sin(e.heading), 0, Math.cos(e.heading));
+    const l = V(Math.cos(e.heading), 0, -Math.sin(e.heading));
+    for (let i = -10; i <= 10; i++) {
+      for (const j of [-1, 0, 1]) {
+        const q = e.position.clone().addScaledVector(f, (i / 10) * 1.1 * e.scale).addScaledVector(l, j * 0.33 * e.scale);
+        if (STEPS.some((s) => Math.abs(q.x - s.x) < 0.5 && Math.abs(q.z - s.z) < 0.5)) return true;
+      }
     }
-    // de trois quarts (pas de face) : la caméra n'est pas dans l'axe du cheval
-    const fwd = V(Math.sin(e.heading), 0, Math.cos(e.heading));
-    const to = cam.position.clone().sub(e.position).setY(0).normalize();
-    expect(Math.acos(to.dot(fwd))).toBeGreaterThan(0.4);
-  });
+    return false;
+  };
+  for (const sc of [1.06, 0.58]) {
+    for (const [label, aspect] of [['en hauteur', PORTRAIT], ['en largeur', LANDSCAPE]]) {
+      it(`taille ${sc}, ${label} : le cheval au sol, l'enfant sur sa marche, tous les deux entiers sur l'écran et la photo`, () => {
+        for (const step of STEPS) {
+          const spot = B.beautyPodiumSpot(step, POD_X, sc);
+          const e = { position: V(spot.horse.x, 0, spot.horse.z), heading: spot.horse.heading, scale: sc, data: { species: 'horse' } };
+          expect(onAStep(e)).toBe(false);
+          // le bout du nez près de l'enfant (à moins de 0,9 m de sa marche)
+          const nose = toWorld(e, [0, 1.55, 1.65]);
+          expect(Math.abs(nose.x - step.x)).toBeLessThan(0.5 + 0.9);
+          const child = { position: V(step.x, step.h, step.z), eyeHeight: 1.5, heading: Math.PI, speed: 0, auto: false, mount: null, avatar: { root: { visible: true } } };
+          const cam = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
+          const rig = new CameraRig(cam);
+          rig.yaw = Math.PI;
+          const at = new THREE.Vector3();
+          for (let i = 0; i < 300; i++) {
+            rig.focus = { shot: B.beautyPodiumShot(e, child, at, aspect) };
+            rig.update(1 / 30, still(), child, world);
+          }
+          cam.updateMatrixWorld(true);
+          // la photo (Beauty.takePhoto) : la caméra à la place exacte du plan, bande 16:10, 40° de haut dans la bande
+          const photo = cam.clone();
+          const { shotPose } = PlayerMod;
+          const shot = B.beautyPodiumShot(e, child, new THREE.Vector3(), aspect);
+          shotPose(shot, photo.position);
+          photo.lookAt(shot.at);
+          const band = Math.min(1, (aspect / 1.6));
+          if (band < 0.9) photo.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / band));
+          photo.updateProjectionMatrix();
+          photo.updateMatrixWorld(true);
+          expect(photo.position.distanceTo(cam.position)).toBeLessThan(0.1);
+          const pts = [...HORSE.map((q) => toWorld(e, q)), V(step.x, step.h, step.z), V(step.x, step.h + 1.55, step.z)];
+          for (const [c, lim] of [[cam, 0.92], [photo, band < 0.9 ? band * 0.95 : 0.92]]) {
+            for (const w of pts) {
+              const s = w.clone().project(c);
+              expect(Math.abs(s.x), `${w.toArray()}`).toBeLessThan(0.95);
+              expect(Math.abs(s.y), `${w.toArray()}`).toBeLessThan(lim);
+            }
+          }
+          // pas cachée par le cheval : de la caméra, sa tête (1,3 m au-dessus de la marche) passe au-dessus de son dos
+          const head = V(step.x, step.h + 1.3, step.z);
+          const ray = new THREE.Ray(photo.position, head.clone().sub(photo.position).normalize());
+          const back = new THREE.Box3().setFromPoints([toWorld(e, [0.3, 0, -0.9]), toWorld(e, [-0.3, 1.45, 0.6])]);
+          expect(ray.intersectsBox(back)).toBe(false);
+        }
+      });
+    }
+  }
 });
 
 describe('🏁 les drapeaux du retour', () => {

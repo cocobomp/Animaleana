@@ -23,6 +23,7 @@ import { disposeModel } from './models/animalModel.js';
 import { judgeLines } from '../ui/beauty.js';
 import { t, ta } from '../i18n.js';
 import { MENU_CODES } from './Input.js'; // (les touches des menus ne font pas bouger l'animal)
+import { shotPose } from './Player.js';
 import { renderForPhoto } from './wishBubble.js'; // (photo : sans les bulles « il te demande »)
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -511,13 +512,12 @@ export class Beauty {
 // Emplacements (coordonnées locales de la carrière) : départ côté entrée, cercle du juge côté cabane du jury.
 /**
  * Plan de trois quarts avant d'un cheval au concours de beauté (rig.focus.shot) : 'judge' (devant le juge : arrêt,
- * immobile, demi-tour — l'enfant à sa gauche, devant son épaule) ou 'podium' (la photo de l'album). Visé à y × sa
+ * immobile, demi-tour — l'enfant à sa gauche, devant son épaule ; le podium : beautyPodiumShot). Visé à y × sa
  * taille, ahead × sa taille devant son centre (sa tête, plus près de la caméra, sortait de l'image), à dist × sa taille
  * (tall : sur un écran en hauteur, ≈ 30° de large), de yaw rad depuis son devant : sa tête, son corps et l'enfant.
  */
 export const BEAUTY_SHOT = {
   judge: { y: 1.1, ahead: 0.35, dist: 5, tall: 6.6, yaw: 0.7, pitch: 0.12 },
-  podium: { y: 1.1, ahead: 0.2, dist: 5, tall: 5, yaw: 0.6, pitch: 0.12 },
 };
 export function beautyShot(e, kind, at, aspect = 1) {
   const sc = e.scale ?? 1;
@@ -525,6 +525,41 @@ export function beautyShot(e, kind, at, aspect = 1) {
   const f = o.ahead * sc;
   at.set(e.position.x + Math.sin(e.heading) * f, e.position.y + o.y * sc, e.position.z + Math.cos(e.heading) * f);
   return { at, heading: e.heading, dist: (aspect < 0.8 ? o.tall : o.dist) * sc, yaw: o.yaw, pitch: o.pitch };
+}
+
+/**
+ * Au podium, un cheval (repère du monde) : l'enfant sur sa marche (step : { x, z, h }, le devant du podium vers −z),
+ * le cheval au sol devant le podium, de profil, le bout du nez au bord de la marche de l'enfant ; son corps part vers
+ * l'extérieur du podium (podX : son milieu), pas devant les autres marches (le milieu : vers +x). Renvoie
+ * { horse: { x, z, heading }, dir } (dir : ±1, côté du corps).
+ */
+export function beautyPodiumSpot(step, podX, sc = 1) {
+  const dir = step.x < podX - 0.05 ? -1 : 1;
+  // (marches de 1 m : bord à 0,5 m ; nez ≈ 1,1 m × sa taille devant son centre ; flanc ≈ 0,35 m × sa taille)
+  const x = step.x + dir * (0.55 + 1.1 * sc);
+  const z = step.z - 0.5 - 0.15 - 0.35 * sc;
+  return { horse: { x, z, heading: dir > 0 ? -Math.PI / 2 : Math.PI / 2 }, dir };
+}
+
+/**
+ * Plan du podium avec un cheval (rig.focus.shot, et la photo de l'album) : de face au podium, un peu du côté de la
+ * tête du cheval, visé entre l'enfant (sur sa marche) et le cheval, assez loin pour les voir entiers tous les deux
+ * (avant, la photo ne montrait que le cheval et le haut de la tête de l'enfant, dans un coin). aspect : largeur /
+ * hauteur de l'écran (≈ 30° de large sur un téléphone en hauteur).
+ */
+export function beautyPodiumShot(e, player, at, aspect = 1) {
+  const sc = e.scale ?? 1;
+  const p = player.position ?? player.root?.position;
+  const ground = e.position.y;
+  const top = Math.max(2.1 * sc, p.y - ground + 1.6);
+  // (le milieu entre l'enfant et le centre du cheval, à mi-hauteur)
+  at.set((e.position.x + p.x) / 2, ground + top * 0.48, (e.position.z + p.z) / 2);
+  const span = Math.hypot(e.position.x - p.x, e.position.z - p.z) + 1.6 * sc + 0.6;
+  const w = aspect < 1 ? Math.max(0.4, aspect) : 1;
+  const dist = Math.max(1.6 + top * 1.7, (span * 0.5) / (0.4 * w) + 1);
+  // (de face au podium : heading π ; un peu du côté de la tête du cheval, qui regarde vers l'enfant)
+  const headSide = Math.sign(p.x - e.position.x) || 1;
+  return { at, heading: Math.PI, dist, yaw: -0.35 * headSide, pitch: 0.12 };
 }
 
 export const RING = {
@@ -1051,15 +1086,26 @@ class BeautySession extends Session {
     e.onTable = false;
     e.carried = false;
     this.releaseArms(); // (la joueuse repose les bras : l'animal est sur sa marche)
-    e.position.set(px, this.y(px, pz) + s.h, pz);
-    e.heading = Math.PI; // face au joueur (côté −z)
+    if (e.data.species === 'horse') {
+      // Un cheval, comme en vrai : il ne monte pas sur la marche (il y était debout, les sabots sur la boîte jaune).
+      // L'enfant est sur sa marche, face à la photo, et tient son cheval, au sol devant le podium, de profil, le nez
+      // près d'elle (beautyPodiumSpot).
+      const spot = beautyPodiumSpot({ x: px, z: pz, h: s.h }, this.podium.x, e.scale ?? 1);
+      e.position.set(spot.horse.x, this.y(spot.horse.x, spot.horse.z), spot.horse.z);
+      e.heading = spot.horse.heading;
+      this.hold = { x: px, z: pz, heading: Math.PI, lift: s.h };
+    } else {
+      e.position.set(px, this.y(px, pz) + s.h, pz);
+      e.heading = Math.PI; // face au joueur (côté −z)
+      // Le joueur se met sur le côté : la photo montre l'animal sur sa marche, pas le dos du joueur.
+      this.hold = { x: this.back.x - 1.1, z: this.back.z, heading: 0 };
+    }
     e.speed = 0;
     e.root.rotation.y = e.heading;
-    // Le joueur se met sur le côté : la photo montre l'animal sur sa marche, pas le dos du joueur.
-    this.hold = { x: this.back.x - 1.1, z: this.back.z, heading: 0 };
-    this.holdPlayer(this.hold.x, this.hold.z, 0);
+    this.holdPlayer(this.hold.x, this.hold.z, this.hold.heading);
+    this.game.player.root.position.y += this.hold.lift ?? 0;
     this.hud.hint(ta(this.rank && this.rank <= 3 ? 'beauty_hintPodium' : 'beauty_hintPhoto', this.animal));
-    g.rig.yaw = 0;
+    g.rig.yaw = this.hold.heading;
     g.rig.pitch = 0.22;
     g.rig.dist = 6.5;
     this.hud.big(this.rank ? (this.rank <= 3 ? t('actv_podium', { n: this.rank }) : t('actv_ranked', { n: this.rank })) : t('beauty_photo'), 1600, 'good');
@@ -1079,18 +1125,23 @@ class BeautySession extends Session {
     const pl = this.game.player;
     this.holdPlayer(this.hold.x, this.hold.z, 0);
     // (photo : la caméra cadre l'animal sur sa marche, de face, à 2,5 m environ — il restait petit et loin, derrière la
+  /** Le plan du podium (rig.focus.shot) : un cheval et l'enfant sur sa marche (beautyPodiumShot), sinon l'animal sur sa marche. */
+  podiumShot() {
+    const e = this.e;
+    const sc = e.scale ?? 1;
+    const at = (this.shotAt ??= new THREE.Vector3());
+    if (e.data.species === 'horse') return beautyPodiumShot(e, this.game.player, at, this.game.camera.aspect);
+    return { at: at.set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 };
+  }
+
     // joueuse)
     // Un cheval : de trois quarts (beautyShot, 'podium'), la tête, le corps et l'enfant dans l'image (visé à 0,4 m et
     // à 2,5 m, la photo de l'album ne montrait que ses pattes).
     const e = this.e;
-    if (e && this.phaseT < 3.2) {
-      const sc = e.scale ?? 1;
-      const at = (this.shotAt ??= new THREE.Vector3());
-      this.game.rig.focus = { shot: e.data.species === 'horse' ? beautyShot(e, 'podium', at, this.game.camera.aspect)
-        : { at: at.set(e.position.x, e.position.y + 0.4 * sc, e.position.z), heading: e.heading, dist: 1.1 + 1.4 * sc, yaw: 0.12, pitch: 0.16 } };
-    }
-    pl.heading = 0;
-    this.game.rig.yaw += wrap(0 - this.game.rig.yaw) * Math.min(1, dt * 4);
+    if (e && this.phaseT < 3.2) this.game.rig.focus = { shot: this.podiumShot() };
+    pl.root.position.y += this.hold.lift ?? 0;
+    pl.heading = this.hold.heading;
+    this.game.rig.yaw += wrap(this.hold.heading - this.game.rig.yaw) * Math.min(1, dt * 4);
     if (this.phaseT > 1.6 && !this.photoDone) {
       this.photoDone = true;
       this.takePhoto();
@@ -1152,6 +1203,7 @@ class BeautySession extends Session {
       const src = g.renderer.domElement;
       const c = document.createElement('canvas');
       c.width = 192;
+    let saved = null;
       c.height = 120;
       const ctx = c.getContext('2d');
       const ratio = c.width / c.height;
@@ -1172,6 +1224,14 @@ class BeautySession extends Session {
       ctx.drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, c.width, c.height);
       const d = activityData(g.profile);
       d.photos.push({ sight: 'podium', day: g.day, place: g.profile.place, data: c.toDataURL('image/jpeg', 0.7) });
+      // (la caméra à la place exacte du plan, même si elle n'y est pas encore arrivée : téléphone lent)
+      if (this.e) {
+        const shot = this.podiumShot();
+        saved = { p: cam.position.clone(), q: cam.quaternion.clone() };
+        shotPose(shot, cam.position, (x, z) => g.world.heightAt(x, z));
+        cam.lookAt(shot.at);
+        cam.updateMatrixWorld(true);
+      }
       if (d.photos.length > 24) d.photos.shift();
       addStat(g.profile, 'actvPhotos');
       g.ui.toast(t('actv_photoTaken', { what: t('beauty_sight_podium') }), 3000);
@@ -1186,6 +1246,11 @@ class BeautySession extends Session {
   }
 
   cleanup() {
+      if (saved) {
+        cam.position.copy(saved.p);
+        cam.quaternion.copy(saved.q);
+        cam.updateMatrixWorld(true);
+      }
     this.releaseArms();
     this.game.rig.frameWith = null;
     this.game.rig.occluders = null;

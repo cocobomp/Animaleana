@@ -28,8 +28,8 @@ Conversion : FBX → glTF binaire avec three.js (FBXLoader + GLTFExporter), anim
 ré-échantillonnées à 12 images/s, compression `meshopt` via glTF-Transform. Tout le reste
 (bâtiments, personnages, autres espèces) est pour l'instant dessiné par le code du jeu.
 Le cheval est le modèle réaliste de Lyndon Daniels (squelette de ChadM), complété et animé pour le jeu
-(allures, os de paturon, robe recolorée par shader, proportions des 33 races : voir `tools/cheval/LISEZMOI.md`
-et `src/game/models/horseReal.js`). Le cheval sculpté par le code (`src/game/models/horseModel.js`) reste le
+(allures, os de paturon, robe recolorée par shader, proportions des 33 races, bord des îlots de la carte de relief
+refait le long des coutures de la tête : voir `tools/cheval/LISEZMOI.md` et `src/game/models/horseReal.js`). Le cheval sculpté par le code (`src/game/models/horseModel.js`) reste le
 modèle de repli si le fichier ne se charge pas.
 
 ### Les chiens (CC BY 4.0)

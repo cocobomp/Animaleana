@@ -111,7 +111,9 @@ près (715 648 octets au lieu de 715 656 : 8 octets d'en-tête WebP de la carte 
    Écart du bord au fond de l'îlot (tout, profondeur 1 à 3, sur 255) : 10,8 / 6,1 / 4,7 → 5,7 / 4,3 / 3,9.
    Géométrie, allures et autres images identiques (accesseurs et images comparés au bit près) ; carte de relief
    43,3 → 26,1 Kio (l'extérieur des îlots, rempli à nouveau depuis un bord propre, a perdu ses traînées).
-   Fichier final : **698 088 octets** (mêmes sources, licence inchangée : CC0).
+   Fichier final : **698 088 octets** (mêmes sources, licence inchangée : CC0). Le fichier d'avant cette retouche est
+   gardé par git : `git show 37911aa:public/models/horse_real.glb > horse_real.orig.glb` (715 656 octets) ; pas de
+   copie dans `public/` (elle partirait avec le jeu et dans le cache hors ligne).
 
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail

@@ -52,6 +52,27 @@ export function ceremonySpot(pod, rank, { mounted = true, scale = 1 } = {}) {
 }
 
 /**
+ * Le podium est-il pris dans un bâtiment du lieu (à la maison, l'écurie occupe sa place : la cérémonie et sa photo se
+ * passaient entre les murs des boxes) ? insideBuilding : World.insideBuilding(x, y, z).
+ */
+export function podiumBlocked(pod, insideBuilding, heightAt = () => 0) {
+  if (!insideBuilding) return false;
+  return pod.steps.some((s) => insideBuilding(s.x, heightAt(s.x, s.z) + 0.4, s.z));
+}
+
+/**
+ * Podium pris dans un bâtiment : la cérémonie se fait dans la carrière, à 4,5 m de sa lice d'entrée (+x), face à la
+ * carrière, au sol (une marche « virtuelle » à hauteur 0, mêmes places que ceremonySpot). Le décor de la carrière
+ * est alors derrière la caméra, rien ne la gêne.
+ */
+export function arenaCeremonySpot(rank, opts = {}) {
+  const x = SHOWGROUND.x + SHOWGROUND.hw - 4.5;
+  const z = SHOWGROUND.z;
+  const pod = { x, z, steps: [{ x, z, y: 0 }, { x, z, y: 0 }, { x, z, y: 0 }] };
+  return ceremonySpot(pod, rank <= 3 ? 1 : rank, opts);
+}
+
+/**
  * Plan de la cérémonie (rig.focus.shot) : de trois quarts avant, le podium derrière. La caméra reste hors de la
  * carrière (7 m devant le podium : avec un angle plus faible, elle se mettait derrière sa palissade, qui cachait tout). Monté (rider.mount === e), le
  * cheval et sa cavalière entiers (visée à mi-hauteur entre les sabots et son casque). À pied (rider = la joueuse sur sa
@@ -416,7 +437,9 @@ export class CompetitionVenue {
     const pl = g.player;
     pl.cancelGoTo();
     const mounted = !!e && pl.mount === e;
-    const spot = ceremonySpot(pod, rank, { mounted, scale: e?.scale ?? 1 });
+    // (à la maison, l'écurie occupe la place du podium : cérémonie dans la carrière)
+    const inArena = podiumBlocked(pod, g.world.insideBuilding?.bind(g.world), (x, z) => g.world.heightAt(x, z));
+    const spot = inArena ? arenaCeremonySpot(rank, { mounted, scale: e?.scale ?? 1 }) : ceremonySpot(pod, rank, { mounted, scale: e?.scale ?? 1 });
     const { x, z } = spot.player;
     const y = g.world.heightAt(x, z) + spot.player.y;
     pl.root.position.set(x, y, z);

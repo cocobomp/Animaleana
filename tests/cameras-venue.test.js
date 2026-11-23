@@ -134,3 +134,41 @@ describe('📸 la caméra de la cérémonie', () => {
     }
   });
 });
+
+describe('🏠 podium pris dans un bâtiment (à la maison, l\'écurie occupe sa place)', () => {
+  it('détecté, et la cérémonie se fait dans la carrière, près de sa lice d\'entrée, face à la carrière', async () => {
+    const { SHOWGROUND } = await import('../src/sim/activities.js');
+    // (l'écurie de la maison : de x −27 à −17, de z −10 à 6 ; le podium du terrain de concours est à x −25, z 3,3 à 6,7)
+    const stable = (x, y, z) => x > -27 && x < -17 && z > -10 && z < 6 && y < 6;
+    const pod = { x: -25, z: 5, steps: [{ x: -25, z: 5, y: 0.75 }, { x: -25, z: 3.3, y: 0.5 }, { x: -25, z: 6.7, y: 0.3 }] };
+    expect(C.podiumBlocked(pod, stable)).toBe(true);
+    expect(C.podiumBlocked(POD, stable)).toBe(false);
+    expect(C.podiumBlocked(pod, undefined)).toBe(false);
+    for (const mounted of [true, false]) {
+      for (const rank of [1, 2, 5]) {
+        const s = C.arenaCeremonySpot(rank, { mounted, scale: 1 });
+        for (const q of [s.player, s.horse]) {
+          expect(q.x).toBeLessThan(SHOWGROUND.x + SHOWGROUND.hw - 1);
+          expect(q.x).toBeGreaterThan(SHOWGROUND.x - SHOWGROUND.hw + 1);
+          expect(Math.abs(q.z - SHOWGROUND.z)).toBeLessThan(SHOWGROUND.hd - 1);
+          expect(stable(q.x, 0.5, q.z)).toBe(false);
+        }
+        expect(s.player.y).toBe(0);
+      }
+    }
+    // la caméra de la cérémonie reste dans la carrière, loin de ses lices
+    const s = C.arenaCeremonySpot(1, { mounted: true, scale: 1 });
+    const e = { position: V(s.horse.x, 0, s.horse.z), heading: s.horse.heading, scale: 1 };
+    const rider = { position: e.position, eyeHeight: 2.65, heading: e.heading, speed: 0, auto: false, mount: e, avatar: { root: { visible: true } } };
+    const cam = new THREE.PerspectiveCamera(60, 390 / 844, 0.1, 500);
+    const rig = new CameraRig(cam);
+    rig.yaw = e.heading;
+    const at = new THREE.Vector3();
+    for (let i = 0; i < 300; i++) {
+      rig.focus = { shot: C.ceremonyShot(e, rider, at, 390 / 844) };
+      rig.update(1 / 30, { look: { dx: 0, dy: 0 }, zoom: 0 }, rider, { insideBuilding: () => false, heightAt: () => 0 });
+    }
+    expect(cam.position.x).toBeLessThan(SHOWGROUND.x + SHOWGROUND.hw - 1);
+    expect(Math.abs(cam.position.z - SHOWGROUND.z)).toBeLessThan(SHOWGROUND.hd - 1);
+  });
+});

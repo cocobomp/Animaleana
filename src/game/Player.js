@@ -1055,8 +1055,10 @@ export class Player {
  * (Réglages cherchés sur des chevaux mesurés dans le jeu, du Falabella au Percheron, au pas et au galop, et un modèle
  * de la cavalière : tête dégagée d'au moins 12 cm, cheval entier dans la zone libre de l'écran, tête hors du bouton
  * « ⬆️ Debout » du trot enlevé (et « Bravo », « Saute », au même endroit), tête la plus grande possible.)
+ * shift : sur un écran en hauteur, la visée glisse à droite de shift × la distance (le cheval glisse à gauche, ≈ 6 % de
+ * la largeur) : dans un virage, la tête du Percheron passait sous la colonne des allures (Arrêt, Pas, Trot, Galop).
  */
-export const RIDE_CAM = { az: 0.75, azSmall: 1.2, slack: 0.1, slackOut: 0.15, pitch: 0.14, near: 2, nearWide: 1.2, far: 5, ahead: 0.3, aimK: 0.34 };
+export const RIDE_CAM = { az: 0.75, azSmall: 1.2, slack: 0.1, slackOut: 0.15, pitch: 0.14, near: 2, nearWide: 1.2, far: 5, ahead: 0.3, aimK: 0.34, shift: 0.035 };
 /**
  * Caméra à cheval pendant une séance où l'on dirige son cheval vers des repères (saut d'obstacles, leçon, dressage,
  * balade : rig.course, posé par Game.frame) : il faut voir ce qui arrive devant. La caméra de balade (RIDE_CAM, de
@@ -1426,6 +1428,12 @@ export class CameraRig {
       target.y += (y - target.y) * s2 * this.pairK;
       const far = (FOLLOW_CAM.near + FOLLOW_CAM.far * ps + FOLLOW_CAM.sep * Math.min(5, sep)) * (this.camera.aspect < 0.8 ? FOLLOW_CAM.tall : 1);
       dist += (Math.min(2.4, sep * 0.9) * (1 - s2) + (far - dist) * s2) * this.pairK;
+    }
+    if (mount && ride > 0.001 && cam.aspect < 0.8) {
+      // (à droite de l'écran : la colonne des allures ; le cheval glisse un peu à gauche — RIDE_CAM.shift)
+      const k = RIDE_CAM.shift * dist * ride * (1 - ck);
+      target.x -= Math.cos(camYaw) * k;
+      target.z += Math.sin(camYaw) * k;
     }
     const want = target.clone().addScaledVector(back, dist);
     // Décor qui coupe la vue (concours de beauté : arche d'arrivée, panneau du terrain, cabane du jury, barrières —

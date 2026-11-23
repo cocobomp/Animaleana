@@ -137,7 +137,11 @@ describe('🐴 à cheval, la tête de son cheval à côté de la cavalière', ()
       const { cam, rig } = settle(h, PORTRAIT, { yawLag: lag });
       // (le lacet du joystick n'a pas bougé : seule la caméra tourne autour du cheval)
       expect(rig.yaw).toBeCloseTo(lag, 5);
-      const c = cam.position.clone().sub(V(0, 0, P.RIDE_CAM.ahead)).setY(0);
+      // (sans le glissement à droite de l'écran en hauteur, RIDE_CAM.shift : la caméra a glissé avec sa visée)
+      cam.updateMatrixWorld(true);
+      const right = V(0, 0, 0).setFromMatrixColumn(cam.matrixWorld, 0).setY(0).normalize();
+      const c0 = cam.position.clone().sub(V(0, 0, P.RIDE_CAM.ahead));
+      const c = c0.addScaledVector(right, -P.RIDE_CAM.shift * c0.length()).setY(0);
       const rel = Math.atan2(-c.x, -c.z);
       expect(rel, `retard ${lag}`).toBeGreaterThan(P.rideAzimuth(1) - P.RIDE_CAM.slack - 0.02);
       expect(rel, `retard ${lag}`).toBeLessThan(P.rideAzimuth(1) + P.RIDE_CAM.slackOut + 0.02);

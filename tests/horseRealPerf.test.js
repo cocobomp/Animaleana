@@ -313,14 +313,15 @@ describe('cheval réaliste arrivé en cours de partie', () => {
     const b = mk('b', { ridden: true });
     const c = mk('c');
     const gone = mk('d', { disposed: true });
-    const g = { horseSwap: [gone, a, b, c], player: { mount: b } };
+    // (monté et en marche : il attend ; à l'arrêt, il change aussi — tests/cameras-loading.test.js)
+    const g = { horseSwap: [gone, a, b, c], player: { mount: b, speed: 2 } };
     const swap = () => Game.prototype.swapRealHorses.call(g);
     swap();
     expect(a.rebuildModel).toHaveBeenCalledTimes(1);
     expect(c.rebuildModel).not.toHaveBeenCalled();
     swap();
     expect(c.rebuildModel).toHaveBeenCalledTimes(1);
-    expect(b.rebuildModel).not.toHaveBeenCalled(); // monté : il attend
+    expect(b.rebuildModel).not.toHaveBeenCalled(); // monté, en marche : il attend
     expect(g.horseSwap).toEqual([b]);
     b.ridden = false;
     g.player.mount = null;

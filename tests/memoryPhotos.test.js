@@ -136,6 +136,29 @@ describe('📸 dans le jeu (src/game/Game.js)', () => {
     }
   });
 
+  it('monté : une prise à part, de trois quarts avant (pas le dos de la cavalière), puis la caméra est remise', () => {
+    const a = horse();
+    remember(a, 'firstRide', 3);
+    const { g, e } = fakeGame(a, { mounted: true });
+    // (le cavalier : cap 0, la caméra du jeu 6 m derrière lui)
+    Object.assign(g.player, { position: e.position, heading: 0, eyeHeight: 2.66 });
+    g.camera.position.set(1.5, 3, -6);
+    g.camera.lookAt(0, 1.5, 0);
+    const before = { p: g.camera.position.clone(), q: g.camera.quaternion.clone(), fov: g.camera.fov };
+    let seen = null;
+    g.renderer.render = (scene, cam) => { seen = { p: cam.position.clone(), fov: cam.fov }; };
+    Game.prototype.memoryPhoto.call(g, a, 'firstRide', g.profile);
+    expect(memoriesOf(a).find((m) => m.id === 'firstRide').ph).toBe(jpeg());
+    // pendant la photo : devant le cheval (z > 0), de côté, à quelques mètres
+    expect(seen.p.z).toBeGreaterThan(2);
+    expect(Math.abs(seen.p.x)).toBeGreaterThan(2);
+    expect(seen.fov).toBeGreaterThan(60); // (la bande gardée est étroite en hauteur : champ élargi)
+    // après : comme avant
+    expect(g.camera.position.distanceTo(before.p)).toBeLessThan(1e-9);
+    expect(g.camera.quaternion.angleTo(before.q)).toBeLessThan(1e-6);
+    expect(g.camera.fov).toBe(before.fov);
+  });
+
   it('pas de photo si quelque chose cache la 3D, ou si le cheval n\'est pas bien en vue', () => {
     const cases = [
       [{ mounted: true }, (g) => { g.ui.panel = {}; }],

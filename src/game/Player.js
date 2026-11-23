@@ -178,7 +178,7 @@ export class Player {
   }
 
   get eyeHeight() {
-    return this.mount ? this.mount.model.saddleY * this.mount.scale + 1.15 : 1.5;
+    return this.mount ? this.mount.model.saddleY * this.mount.scale + RIDER_EYE : 1.5;
   }
 
   spawn(x, z) {
@@ -1038,16 +1038,224 @@ export class Player {
   }
 }
 
-/** Décalage de la caméra sur le côté quand on monte sur un écran en hauteur (m, voir CameraRig.update). */
-export const MOUNT_SIDE = 1.8;
-/** Part du décalage reprise par la cible (cheval au milieu de l'écran) et visée abaissée (m), monté en portrait. */
-export const MOUNT_AIM = 0;
-export const MOUNT_DROP = 1.1;
-export const MOUNT_AHEAD = 0.1;
+/**
+ * Caméra à cheval (3e personne), au téléphone en hauteur comme en largeur : de trois quarts arrière, du côté droit du
+ * cheval, assez bas, qui vise devant la selle. La tête et l'encolure sortent à droite de la cavalière (de dos ou à
+ * gauche, elle les cachait : on ne voyait qu'une oreille) ; la croupe et les postérieurs restent au-dessus du joystick,
+ * loin de « Descendre » et des boutons d'allure (à droite de l'écran en hauteur). Le lacet (yaw), qui oriente le
+ * joystick, reste derrière le cheval : seule la caméra tourne autour de lui, pour l'image (tourner le lacet faisait
+ * tourner le cheval en rond).
+ * az : angle (rad) depuis l'arrière du cheval, positif à sa droite (≈ 43°) ; azSmall en plus pour un petit poney
+ * (× (1 − taille)) : la jambe de la cavalière cachait sa tête basse ; slack, slackOut : dans un virage, le lacet suit le
+ * cheval avec retard, l'angle reste entre az − slack et az + slackOut (vers la caméra, la cavalière recachait la tête) ; pitch :
+ * angle de vue (le réglage de la joueuse s'y ajoute) ; distance near + far × taille (nearWide sur un écran en
+ * largeur) ; visée ahead × taille devant la selle (vers le garrot), à aimK de la hauteur des sabots au casque (le
+ * cheval entier, de la queue au bout du nez, et la cavalière tiennent entre le bandeau du haut et les boutons du bas ;
+ * sur un petit poney, la cavalière, qui ne rapetisse pas, compte plus).
+ * (Réglages cherchés sur des chevaux mesurés dans le jeu, du Falabella au Percheron, au pas et au galop, et un modèle
+ * de la cavalière : tête dégagée d'au moins 12 cm, cheval entier dans la zone libre de l'écran, tête hors du bouton
+ * « ⬆️ Debout » du trot enlevé (et « Bravo », « Saute », au même endroit), tête la plus grande possible.)
+ * shift : sur un écran en hauteur, la visée glisse à droite de shift × la distance (le cheval glisse à gauche, ≈ 6 % de
+ * la largeur) : dans un virage, la tête du Percheron passait sous la colonne des allures (Arrêt, Pas, Trot, Galop).
+ */
+export const RIDE_CAM = { az: 0.75, azSmall: 1.2, slack: 0.1, slackOut: 0.15, pitch: 0.14, near: 2, nearWide: 1.2, far: 5, ahead: 0.3, aimK: 0.34, shift: 0.035 };
+/**
+ * Caméra à cheval pendant une séance où l'on dirige son cheval vers des repères (saut d'obstacles, leçon, dressage,
+ * balade : rig.course, posé par Game.frame) : il faut voir ce qui arrive devant. La caméra de balade (RIDE_CAM, de
+ * trois quarts sur le côté) cachait l'obstacle suivant : il n'apparaissait que sous le cheval, sous « Sauter » et le
+ * joystick. Ici (coursePose) elle est derrière le cheval, à back + backK × taille (backWide sur un écran en largeur),
+ * décalée à droite de lat × cette distance : la tête sort à droite de la cavalière. Le même angle pour toutes les
+ * tailles : plus de côté, un très petit poney sortait de l'écran en hauteur. Elle regarde loin devant (ahead
+ * m), à aimK de la hauteur des sabots au casque, presque droit devant (look : 1 = parallèle au cheval, 0 = vers son
+ * chemin), d'un peu haut (pitch). Le lacet suit le cheval plus vite (follow, au lieu de 0,8).
+ */
+export const COURSE_CAM = { back: 3, backWide: 2.2, backK: 4.6, lat: 0.32, ahead: 3, look: 0.2, aimK: 0.5, pitch: 0.28, follow: 1.8 };
+/** Haut du casque de la cavalière au-dessus de la selle (m). */
+export const RIDER_TOP = 1.05;
+/**
+ * Vue de la selle (1re personne) à cheval : l'œil de la cavalière assise, eye m au-dessus de la selle (pas debout sur
+ * elle : 1,15 m), à sa place (ahead × taille), le regard baissé vers les oreilles (au moins down rad, au plus downMax
+ * pour un petit poney) ; sur un écran en hauteur, un champ plus large (fovTall°, comme la vue du cavalier en balade,
+ * TrailView) : avec 60°, on ne voyait que la nuque et deux oreilles géantes. On voit les oreilles, le toupet, la
+ * crinière et les rênes en bas de l'écran, le chemin au-dessus. Sur un très petit poney, l'œil recule de back ×
+ * (1 − taille) (la masse de crinière, tout près, couvrait l'écran, joystick et boutons compris) ; sur un écran en
+ * largeur, le regard baisse de wide de plus (le bas de l'encolure passait sous « Descendre »).
+ */
+export const RIDE_FP = { eye: 0.85, ahead: -0.1, back: 0.6, down: -0.35, downMax: -0.72, wide: 0.1, fovTall: 80 };
+
+/** Place de l'œil en 1re personne à cheval : m devant la selle (négatif : derrière) pour un cheval de taille sc. */
+export function rideEyeAhead(sc) {
+  return RIDE_FP.ahead * sc - RIDE_FP.back * THREE.MathUtils.clamp(1 - sc, 0, 0.6);
+}
+/**
+ * Un cheval qui suit la joueuse (« Me suivre ») ou qu'elle mène en main : il marche derrière elle, entre elle et la
+ * caméra (on ne voyait que sa tête géante, coupée en bas, ou rien). La caméra se met de côté (az rad, à droite), vise
+ * entre eux deux à mi-hauteur (aimY m × sa taille) et recule selon l'écart : near + far × sa taille + sep × l'écart
+ * (× tall sur un écran en hauteur : ≈ 30° de large).
+ */
+export const FOLLOW_CAM = { az: 0.55, aimY: 0.9, near: 2.5, far: 3.3, sep: 0.7, tall: 1.1 };
+/** Œil du cavalier au-dessus de la selle (m) : Player.eyeHeight. */
+export const RIDER_EYE = 1.15;
 // (vecteurs de travail du cadrage, voir CameraRig.focus)
 const _pv = new THREE.Vector3();
 const _sv = new THREE.Vector3();
 const _lv = new THREE.Vector3();
+const _rv = new THREE.Vector3();
+const _cv = new THREE.Vector3();
+const _ca = new THREE.Vector3();
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/**
+ * Place de la caméra d'un plan (rig.focus.shot : { at, heading, dist, yaw, pitch }) : autour de at, à dist m, à yaw rad
+ * du devant (heading), pitch rad au-dessus ; jamais sous le sol + 0,3 m. Utilisé aussi pour une photo prise avant que
+ * la caméra y soit arrivée (CompetitionVenue.takePhoto).
+ */
+export function shotPose(s, out, heightAt = () => 0) {
+  const a = s.heading + (s.yaw ?? 0.7);
+  const pt = s.pitch ?? 0.22;
+  out.set(s.at.x + Math.sin(a) * Math.cos(pt) * s.dist, s.at.y + Math.sin(pt) * s.dist, s.at.z + Math.cos(a) * Math.cos(pt) * s.dist);
+  const g2 = heightAt(out.x, out.z) + 0.3;
+  if (out.y < g2) out.y = g2;
+  return out;
+}
+
+/** Hauteur de la selle (m au-dessus des sabots) du cheval monté. */
+function seatOf(player) {
+  const eye = player.eyeHeight;
+  return Number.isFinite(eye) ? Math.max(0.3, eye - RIDER_EYE) : 1.5 * (player.mount?.scale ?? 1);
+}
+
+/** Angle (rad) du regard depuis la selle, en 1re personne : vers les oreilles du cheval de taille sc. */
+export function rideLookDown(sc, aspect = 0.5) {
+  const s = Math.max(0.3, sc);
+  // (oreilles : ≈ 0,45 m × taille au-dessus de la selle, 1,3 m × taille devant ; l'œil à RIDE_FP.eye, rideEyeAhead)
+  const ears = Math.atan2(0.45 * s - RIDE_FP.eye, Math.max(0.3, 1.3 * s - rideEyeAhead(sc)));
+  return THREE.MathUtils.clamp(ears, RIDE_FP.downMax, RIDE_FP.down) - (aspect >= 0.8 ? RIDE_FP.wide : 0);
+}
+
+/** Azimut voulu de la caméra montée (rad, depuis l'arrière, positif à droite du cheval) pour un cheval de taille sc. */
+export function rideAzimuth(sc) {
+  return RIDE_CAM.az + RIDE_CAM.azSmall * THREE.MathUtils.clamp(1 - sc, 0, 0.6);
+}
+
+/** Distance de la caméra montée (m) pour un cheval de taille sc, selon la forme de l'écran. */
+export function rideDistance(sc, aspect) {
+  return (aspect < 0.8 ? RIDE_CAM.near : RIDE_CAM.nearWide) + RIDE_CAM.far * sc;
+}
+
+/**
+ * Place de la caméra montée pendant une séance (COURSE_CAM) : derrière le cheval (p : sa place, yaw : le lacet, qui suit
+ * son cap), un peu à droite ; out : position, aim : point visé. seat : hauteur de la selle (m), aspect : largeur / hauteur.
+ */
+export function coursePose(p, yaw, sc, seat, aspect, out, aim) {
+  const C = COURSE_CAM;
+  const fx = Math.sin(yaw);
+  const fz = Math.cos(yaw);
+  // (à droite du cavalier : −cos, +sin)
+  const rx = -Math.cos(yaw);
+  const rz = Math.sin(yaw);
+  const B = (aspect < 0.8 ? C.back : C.backWide) + C.backK * sc;
+  const L = C.lat * B;
+  const y = p.y + C.aimK * (seat + RIDER_TOP);
+  aim.set(p.x + fx * C.ahead + rx * L * C.look, y, p.z + fz * C.ahead + rz * L * C.look);
+  out.set(p.x - fx * B + rx * L, y + (B + C.ahead) * Math.tan(C.pitch), p.z - fz * B + rz * L);
+  return out;
+}
+
+/**
+ * 📸 Photo souvenir à cheval (Game.memoryPhoto) : la caméra posée de trois quarts avant du cheval monté (≈ 43° depuis
+ * le devant, un peu au-dessus), du côté éclairé par le soleil si on le connaît, assez loin pour que le cheval et sa
+ * cavalière tiennent dans la bande gardée (band : sa hauteur / celle de l'écran) avec un champ vertical de ≈ 30° dans
+ * cette bande. Pas dans un bâtiment, et sans décor devant eux (occluders : grands objets du lieu, une barrière le long
+ * de laquelle on passe cachait le poney) : l'autre côté, un autre angle, un peu plus haut. Ne touche pas au CameraRig :
+ * remettre la caméra avec restorePhotoCamera. Renvoie l'état d'avant (ou null : pas de cheval monté).
+ */
+export function placeRidePhotoCamera(cam, player, world = null, { band = 1, sun = null, occluders = null } = {}) {
+  const m = player.mount;
+  if (!m) return null;
+  const saved = { pos: cam.position.clone(), quat: cam.quaternion.clone(), fov: cam.fov };
+  const sc = m.scale ?? 1;
+  const p = player.position ?? m.position;
+  const h = player.heading ?? m.heading ?? 0;
+  const seat = seatOf(player);
+  // (le sujet : des sabots au casque, de la queue au bout du nez ; visée un peu devant la selle, à mi-hauteur)
+  const H = seat + RIDER_TOP + 0.05;
+  const fx = Math.sin(h);
+  const fz = Math.cos(h);
+  const aim = new THREE.Vector3(p.x + fx * 0.25 * sc, p.y + H * 0.52, p.z + fz * 0.25 * sc);
+  const vb = THREE.MathUtils.degToRad(30);
+  cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(vb / 2) / Math.max(0.2, Math.min(1, band))));
+  cam.updateProjectionMatrix();
+  const dist = Math.max(H / 0.74 / (2 * Math.tan(vb / 2)), 3.2 * sc + 1.2);
+  // côté gauche (+) ou droit (−) du cheval : celui que le soleil éclaire d'abord
+  let first = 1;
+  if (sun) first = fz * sun.x - fx * sun.z >= 0 ? 1 : -1;
+  const at = (side, yaw, pitch) => {
+    const a = h + side * yaw;
+    return new THREE.Vector3(aim.x + Math.sin(a) * Math.cos(pitch) * dist, aim.y + Math.sin(pitch) * dist, aim.z + Math.cos(a) * Math.cos(pitch) * dist);
+  };
+  const inside = (q) => {
+    if (!world?.insideBuilding) return false;
+    for (let i = 1; i <= 8; i++) {
+      const u = i / 8;
+      if (world.insideBuilding(aim.x + (q.x - aim.x) * u, aim.y + (q.y - aim.y) * u, aim.z + (q.z - aim.z) * u)) return true;
+    }
+    return false;
+  };
+  // (ce que la photo doit montrer : la tête du cheval, la cavalière, le corps et les jambes du cheval)
+  const subject = [
+    new THREE.Vector3(p.x + fx * 1.35 * sc, p.y + seat + 0.35 * sc, p.z + fz * 1.35 * sc),
+    new THREE.Vector3(p.x, p.y + seat + 0.6, p.z),
+    new THREE.Vector3(p.x, p.y + seat * 0.75, p.z),
+    new THREE.Vector3(p.x + fx * 0.5 * sc, p.y + seat * 0.35, p.z + fz * 0.5 * sc),
+  ];
+  const hidden = (q) => {
+    if (!occluders?.length) return 0;
+    _photoRay ??= new THREE.Raycaster();
+    let n = 0;
+    for (const t of subject) {
+      _rv.subVectors(q, t);
+      const L = _rv.length();
+      _photoRay.set(t, _rv.normalize());
+      _photoRay.far = L;
+      if (_photoRay.intersectObjects(occluders, false).some((x) => x.object.visible !== false)) n++;
+    }
+    return n;
+  };
+  let pos = null;
+  let best = Infinity;
+  for (const [yaw, pitch] of [[0.75, 0.1], [0.5, 0.1], [1.05, 0.1], [0.75, 0.32]]) {
+    for (const side of [first, -first]) {
+      const q = at(side, yaw, pitch);
+      if (inside(q)) continue;
+      const n = hidden(q);
+      if (n < best) {
+        best = n;
+        pos = q;
+      }
+      if (n === 0) break;
+    }
+    if (best === 0) break;
+  }
+  if (!pos) pos = at(first, 0.75, 0.1);
+  const ground = (world?.heightAt?.(pos.x, pos.z) ?? p.y) + 0.5;
+  if (pos.y < ground) pos.y = ground;
+  cam.position.copy(pos);
+  cam.lookAt(aim);
+  cam.updateMatrixWorld(true);
+  return saved;
+}
+let _photoRay = null;
+
+/** Remet la caméra comme avant placeRidePhotoCamera. */
+export function restorePhotoCamera(cam, saved) {
+  if (!saved) return;
+  cam.position.copy(saved.pos);
+  cam.quaternion.copy(saved.quat);
+  cam.fov = saved.fov;
+  cam.updateProjectionMatrix();
+  cam.updateMatrixWorld(true);
+}
 
 export class CameraRig {
   constructor(camera) {
@@ -1068,17 +1276,22 @@ export class CameraRig {
     look.dy += keyLook.y * dt * 300;
     // Quand on marche sans toucher la vue, la caméra revient doucement derrière le personnage.
     this.idleLook = look.dx || look.dy || keyLook.x || keyLook.y ? 0 : (this.idleLook ?? 0) + dt;
-    // À cheval sur un écran en hauteur (champ étroit : environ 30° de large) : la caméra se décale sur le côté
-    // (MOUNT_SIDE, côté montoir), se rapproche et vise l'encolure, pour qu'on voie la tête et l'encolure de son
-    // cheval au lieu d'une croupe (le cavalier cachait la tête). Un décalage, pas une rotation : le lacet (yaw), qui
-    // oriente le joystick, reste derrière le cheval — tourner la caméra faisait tourner le cheval en rond.
-    // Lissé (ride : 0 → 1).
-    const portraitRide = player.mount && this.mode === 'third' && this.camera.aspect < 0.8 ? 1 : 0;
-    this.ride = (this.ride ?? 0) + (portraitRide - (this.ride ?? 0)) * Math.min(1, dt * 2);
+    // À cheval (3e personne) : la caméra de trois quarts arrière (RIDE_CAM), lissée (ride : 0 → 1).
+    const mount = player.mount;
+    const sc = mount?.scale ?? 1;
+    const riding = mount && this.mode === 'third' ? 1 : 0;
+    this.ride = (this.ride ?? 0) + (riding - (this.ride ?? 0)) * Math.min(1, dt * 2);
+    // (séance à cheval vers des repères : COURSE_CAM, en fondu ; rig.course, remis à zéro après usage)
+    const course = riding && this.course ? 1 : 0;
+    this.course = false;
+    this.courseK = (this.courseK ?? 0) + (course - (this.courseK ?? 0)) * Math.min(1, dt * 2);
+    const ck = this.courseK;
     if (this.mode === 'third' && player.speed > 1 && this.idleLook > 1.5 && !player.auto) {
       let diff = player.heading - this.yaw;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      this.yaw += diff * Math.min(1, dt * 0.8);
+      // (séance à cheval : le lacet suit le cheval plus vite — COURSE_CAM.follow — dans un virage vers un obstacle,
+      // on le voyait de côté, l'obstacle hors de l'écran)
+      this.yaw += diff * Math.min(1, dt * (0.8 + (COURSE_CAM.follow - 0.8) * (this.courseK ?? 0)));
     }
     if (this.mode === 'third') {
       this.pitch = THREE.MathUtils.clamp(this.pitch + look.dy * 0.004, 0.02, 1.25);
@@ -1090,33 +1303,67 @@ export class CameraRig {
     const p = player.position;
     const eye = new THREE.Vector3(p.x, p.y + player.eyeHeight, p.z);
     const cam = this.camera;
+    // Champ de vision : 60°, sauf dans la vue de la selle sur un écran en hauteur (RIDE_FP.fovTall).
+    const fov = this.mode === 'first' && mount && cam.aspect < 0.8 ? RIDE_FP.fovTall : 60;
+    if (cam.fov !== fov && (this.fovSet || fov !== 60)) {
+      cam.fov = fov;
+      cam.updateProjectionMatrix();
+      this.fovSet = fov !== 60;
+    }
     if (this.mode === 'first') {
       player.avatar.root.visible = false;
-      cam.position.copy(eye).add(new THREE.Vector3(Math.sin(player.heading), 0, Math.cos(player.heading)).multiplyScalar(player.mount ? 0.3 : 0.12));
-      const dir = new THREE.Vector3(Math.sin(this.yaw) * Math.cos(this.fpPitch), Math.sin(this.fpPitch), Math.cos(this.yaw) * Math.cos(this.fpPitch));
-      cam.lookAt(cam.position.clone().add(dir));
+      if (mount) {
+        // Vue de la selle : l'œil de la cavalière assise (RIDE_FP), le regard baissé vers les oreilles (réglable).
+        const y = p.y + seatOf(player) + RIDE_FP.eye;
+        cam.position.set(p.x + Math.sin(player.heading) * rideEyeAhead(sc), y, p.z + Math.cos(player.heading) * rideEyeAhead(sc));
+      } else {
+        cam.position.copy(eye).add(_rv.set(Math.sin(player.heading), 0, Math.cos(player.heading)).multiplyScalar(0.12));
+      }
+      const fp = THREE.MathUtils.clamp(this.fpPitch + (mount ? rideLookDown(sc, cam.aspect) : 0), -1.35, 1.2);
+      const dir = _rv.set(Math.sin(this.yaw) * Math.cos(fp), Math.sin(fp), Math.cos(this.yaw) * Math.cos(fp));
+      cam.lookAt(_lv.copy(cam.position).add(dir));
       return;
     }
     player.avatar.root.visible = true;
     const target = eye.clone().add(new THREE.Vector3(0, -0.2, 0));
     const ride = this.ride ?? 0;
-    // (décalage de côté, à gauche de la caméra : MOUNT_SIDE pour elle, la moitié pour sa cible — le cheval reste au
-    // milieu de l'écran ; avec 15 %, il était à droite et sa croupe, sa queue et ses postérieurs passaient sous
-    // « Descendre » et les boutons ronds du bas)
-    const sideX = Math.cos(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
-    const sideZ = -Math.sin(this.yaw) * MOUNT_SIDE * ride * (player.mount?.scale ?? 1);
     if (ride > 0.001) {
-      // (visée vers l'avant et plus bas : entre les mains du cavalier et la tête du cheval)
-      const k = ride * (player.mount?.scale ?? 1);
-      target.x += Math.sin(player.heading) * MOUNT_AHEAD * k + sideX * MOUNT_AIM;
-      target.z += Math.cos(player.heading) * MOUNT_AHEAD * k + sideZ * MOUNT_AIM;
-      // (visée plus basse : le cheval entier, sabots compris, au-dessus de la rangée de boutons du bas)
-      target.y -= MOUNT_DROP * k;
+      // (visée : à hauteur de selle, devant elle — vers l'encolure)
+      const ahead = RIDE_CAM.ahead * sc;
+      _rv.set(p.x + Math.sin(player.heading) * ahead, p.y + RIDE_CAM.aimK * (seatOf(player) + RIDER_TOP), p.z + Math.cos(player.heading) * ahead);
+      target.lerp(_rv, ride);
     }
-    const back = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
+    // Azimut de la caméra autour de la cible : derrière (le lacet) ; à cheval, de trois quarts à droite du cheval,
+    // gardé près de cet angle par rapport au cheval quand on ne touche pas à la vue (dans un virage, le lacet suit
+    // le cheval avec retard).
+    // (cheval qui suit ou mené en main : rig.focus.pair avec side, posé par Game.frame — lu ici, consommé plus bas)
+    const follow = !mount && this.mode === 'third' && this.focus?.pair && this.focus.side ? this.focus : null;
+    if (follow) {
+      // (du côté où il n'est pas : à côté d'elle à droite, il passait entre elle et la caméra ; on ne change de côté que
+      // s'il est franchement de l'autre, à 40 cm au moins)
+      const lat = (follow.pair.x - p.x) * Math.cos(this.yaw) - (follow.pair.z - p.z) * Math.sin(this.yaw);
+      if (Math.abs(lat) > 0.4) this.followSide = lat > 0 ? 1 : -1;
+    }
+    const azWant = mount && this.mode === 'third' ? rideAzimuth(sc) : follow ? FOLLOW_CAM.az * (this.followSide ?? 1) : 0;
+    this.azOff = (this.azOff ?? 0) + (azWant - (this.azOff ?? 0)) * Math.min(1, dt * (follow ? 1.5 : 3));
+    let off = this.azOff;
+    if (mount && azWant && this.idleLook > 1.5) {
+      // (pas lissé : le cheval tourne vite, jusqu'à 3 rad/s ; la position de la caméra, elle, est lissée plus bas)
+      const lag = wrapAngle(this.yaw - player.heading);
+      const rel = lag + off;
+      if (rel < azWant - RIDE_CAM.slack) off = azWant - RIDE_CAM.slack - lag;
+      else if (rel > azWant + RIDE_CAM.slackOut) off = azWant + RIDE_CAM.slackOut - lag;
+    }
+    // (à cheval, l'angle vient avec ride ; à pied, il s'éteint de lui-même avec azOff)
+    let camYaw = this.yaw + (mount ? off * ride : off);
+    // Angle de vue et distance : ceux de la joueuse à pied ; à cheval, ceux de RIDE_CAM (le réglage de la joueuse,
+    // pincer et glisser, s'y ajoute).
+    const ridePitch = THREE.MathUtils.clamp(RIDE_CAM.pitch + this.pitch - 0.35, 0.02, 1.1);
+    const basePitch = this.pitch + (ridePitch - this.pitch) * ride;
+    const rideDist = rideDistance(sc, this.camera.aspect) + (this.dist - 7) * 0.6;
     // Si un mur se trouve entre la caméra et le joueur, la caméra monte pour regarder
     // par-dessus (au lieu de se coller au mur) ; en dernier recours, elle se rapproche.
-    let dist = this.dist + (player.mount ? 2 - 2.5 * ride : 0);
+    let dist = this.dist + (Math.max(1.5, rideDist) - this.dist) * ride;
     // Animal mené à cadrer avec le joueur (concours de beauté : rig.frameWith) : on vise entre eux deux, un peu
     // plus loin, plus encore sur un écran en hauteur (avant, le cheval était coupé au bord de l'écran).
     const w = this.frameWith;
@@ -1131,33 +1378,44 @@ export class CameraRig {
       target.y += (Math.min(target.y, q.y) - target.y) * this.frameAmt;
       dist += this.frameAmt * (gap * 0.8 + (this.camera.aspect < 0.8 ? 1.6 : 0.4));
     }
-    const blocked = (pitch, d) => {
-      const b = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(this.yaw) * Math.cos(pitch));
+    const blocked = (pitch, d, yaw = camYaw) => {
+      const b = _sv.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
       for (let i = 1; i <= 12; i++) {
-        const q = target.clone().addScaledVector(b, (d * i) / 12);
+        const q = _pv.copy(target).addScaledVector(b, (d * i) / 12);
         if (world.insideBuilding(q.x, q.y, q.z)) return true;
       }
       return false;
     };
-    if (blocked(this.pitch, dist)) {
-      let pitch = this.pitch;
+    // À cheval le long d'un mur (écurie, maison) : la caméra revient vers l'arrière du cheval jusqu'à ne plus entrer
+    // dans le bâtiment (avant de monter ou de se rapprocher) ; lissé.
+    let sideF = 1;
+    if ((ride > 0.001 || !mount) && Math.abs(off) > 0.01) {
+      for (let i = 8; i >= 0; i--) {
+        sideF = i / 8;
+        if (!blocked(basePitch, dist, this.yaw + (mount ? off * ride : off) * sideF)) break;
+      }
+    }
+    this.sideF = (this.sideF ?? sideF) + (sideF - (this.sideF ?? sideF)) * Math.min(1, dt * 6);
+    camYaw = this.yaw + (mount ? off * ride : off) * Math.min(sideF, this.sideF);
+    if (blocked(basePitch, dist)) {
+      let pitch = basePitch;
       while (pitch < 1.35 && blocked(pitch, dist)) pitch += 0.1;
       if (!blocked(pitch, dist)) {
         this.autoPitch = pitch;
       } else {
-        this.autoPitch = this.pitch;
+        this.autoPitch = basePitch;
         for (let i = 12; i >= 1; i--) {
-          if (!blocked(this.pitch, (dist * i) / 12)) {
+          if (!blocked(basePitch, (dist * i) / 12)) {
             dist = Math.max(2.2, (dist * i) / 12);
             break;
           }
         }
       }
     } else {
-      this.autoPitch = this.pitch;
+      this.autoPitch = basePitch;
     }
-    this.curPitch = (this.curPitch ?? this.pitch) + (this.autoPitch + 0.2 * ride - (this.curPitch ?? this.pitch)) * Math.min(1, dt * 4);
-    back.set(-Math.sin(this.yaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(this.yaw) * Math.cos(this.curPitch));
+    this.curPitch = (this.curPitch ?? basePitch) + (this.autoPitch - (this.curPitch ?? basePitch)) * Math.min(1, dt * 4);
+    const back = new THREE.Vector3(-Math.sin(camYaw) * Math.cos(this.curPitch), Math.sin(this.curPitch), -Math.cos(camYaw) * Math.cos(this.curPitch));
     // Cadrage demandé pour cette image (this.focus, remis à zéro après usage) : « pair » — la joueuse et son chien en
     // laisse ensemble (viser entre les deux, reculer selon l'écart) ; « shot » — plan rapproché sur un animal (tour du
     // spectacle, photo du podium : de trois quarts ou de face, à quelques mètres), en fondu à l'aller et au retour.
@@ -1165,32 +1423,26 @@ export class CameraRig {
     this.focus = null;
     this.pairK = (this.pairK ?? 0) + ((f?.pair ? 1 : 0) - (this.pairK ?? 0)) * Math.min(1, dt * 2.5);
     if (f?.pair) (this.pairAt ??= new THREE.Vector3()).copy(f.pair);
+    this.pairSide = (this.pairSide ?? 0) + ((f?.pair && f.side ? 1 : 0) - (this.pairSide ?? 0)) * Math.min(1, dt * 2.5);
+    if (f?.pair) this.pairScale = f.scale ?? 1;
     if (this.pairK > 0.001 && this.pairAt) {
       const sep = Math.hypot(this.pairAt.x - target.x, this.pairAt.z - target.z);
-      target.lerp(_pv.set(this.pairAt.x, target.y - 0.25, this.pairAt.z), 0.45 * this.pairK);
-      dist += Math.min(2.4, sep * 0.9) * this.pairK;
+      // (chien en laisse : entre les deux, plus loin ; cheval qui suit : entre les deux, à mi-hauteur, de côté)
+      const s2 = this.pairSide;
+      const ps = this.pairScale ?? 1;
+      const y = target.y - 0.25 + (p.y + FOLLOW_CAM.aimY * ps - (target.y - 0.25)) * s2;
+      target.lerp(_pv.set(this.pairAt.x, y, this.pairAt.z), (0.45 + 0.05 * s2) * this.pairK);
+      target.y += (y - target.y) * s2 * this.pairK;
+      const far = (FOLLOW_CAM.near + FOLLOW_CAM.far * ps + FOLLOW_CAM.sep * Math.min(5, sep)) * (this.camera.aspect < 0.8 ? FOLLOW_CAM.tall : 1);
+      dist += (Math.min(2.4, sep * 0.9) * (1 - s2) + (far - dist) * s2) * this.pairK;
+    }
+    if (mount && ride > 0.001 && cam.aspect < 0.8) {
+      // (à droite de l'écran : la colonne des allures ; le cheval glisse un peu à gauche — RIDE_CAM.shift)
+      const k = RIDE_CAM.shift * dist * ride * (1 - ck);
+      target.x -= Math.cos(camYaw) * k;
+      target.z += Math.sin(camYaw) * k;
     }
     const want = target.clone().addScaledVector(back, dist);
-    // Décalage de côté (monté en portrait) testé lui aussi contre les murs : il était ajouté après le test, et la
-    // caméra entrait dans l'écurie quand on longeait son mur côté montoir. Réduit jusqu'au premier mur, sur le
-    // chemin du décalage comme sur la ligne de vue vers la cible ; lissé.
-    let sideF = 1;
-    if (ride > 0.001) {
-      for (let i = 1; i <= 8 && sideF === 1; i++) {
-        const f = i / 8;
-        const cx = want.x + sideX * 0.85 * f;
-        const cz = want.z + sideZ * 0.85 * f;
-        let hit = world.insideBuilding(cx, want.y, cz);
-        for (let j = 1; j < 6 && !hit; j++) {
-          const u = j / 6;
-          hit = world.insideBuilding(cx + (target.x - cx) * u, want.y + (target.y - want.y) * u, cz + (target.z - cz) * u);
-        }
-        if (hit) sideF = (i - 1) / 8;
-      }
-    }
-    this.sideF = (this.sideF ?? sideF) + (sideF - (this.sideF ?? sideF)) * Math.min(1, dt * 6);
-    want.x += sideX * 0.85 * Math.min(sideF, this.sideF);
-    want.z += sideZ * 0.85 * Math.min(sideF, this.sideF);
     // Décor qui coupe la vue (concours de beauté : arche d'arrivée, panneau du terrain, cabane du jury, barrières —
     // rig.occluders, posé par Beauty.js) : la caméra se place devant lui au lieu de reculer derrière (avant, l'arche
     // et ses lettres géantes, puis un panneau, cachaient l'enfant et son cheval). Les petites pièces (fanions)
@@ -1211,16 +1463,20 @@ export class CameraRig {
     this.shotK = (this.shotK ?? 0) + ((f?.shot ? 1 : 0) - (this.shotK ?? 0)) * Math.min(1, dt * 2.5);
     if (f?.shot) this.shot = f.shot;
     let aim = target;
+    if (ck > 0.001) {
+      // (séance : derrière le cheval, un peu à droite, le regard loin devant — coursePose)
+      coursePose(p, this.yaw, sc, seatOf(player), cam.aspect, _cv, _ca);
+      const g2 = world.heightAt(_cv.x, _cv.z) + 0.4;
+      if (_cv.y < g2) _cv.y = g2;
+      want.lerp(_cv, ck);
+      aim = _lv.copy(target).lerp(_ca, ck);
+    }
     if (this.shotK > 0.001 && this.shot) {
       const s = this.shot;
       // (de face : yaw 0 ; trois quarts : ± 0,7 rad depuis le devant de l'animal)
-      const a = s.heading + (s.yaw ?? 0.7);
-      const pt = s.pitch ?? 0.22;
-      const shotPos = _sv.set(s.at.x + Math.sin(a) * Math.cos(pt) * s.dist, s.at.y + Math.sin(pt) * s.dist, s.at.z + Math.cos(a) * Math.cos(pt) * s.dist);
-      const g2 = world.heightAt(shotPos.x, shotPos.z) + 0.3;
-      if (shotPos.y < g2) shotPos.y = g2;
+      const shotPos = shotPose(s, _sv, (x, z) => world.heightAt(x, z));
       want.lerp(shotPos, this.shotK);
-      aim = _lv.copy(target).lerp(s.at, this.shotK);
+      aim = _lv.copy(aim).lerp(s.at, this.shotK);
     }
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));
     cam.position.copy(this.pos);

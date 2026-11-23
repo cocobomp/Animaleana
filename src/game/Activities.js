@@ -7,7 +7,7 @@ import { tackEffects } from '../sim/gear.js'; // effets de la selle en balade
 import {
   SHOWGROUND, JUMP_COURSE, AGILITY_COURSE, AGILITY_LENGTH, TRAIL, toWorld, approach, alignment, takeoffQuality, TAKEOFF,
   jumpChance, horseJumpStats, refuses, jumpingResult, parTime, trailCollectibles, trailResult, trailEnduranceGain,
-  courseForStage, stageFor, stageForLevel, refusalChance, LESSON_STEPS, LESSON_JUMPS, lessonStart, lessonGain, lessonResult, JUMP_STAGES,
+  courseForStage, scaledCourse, stageFor, stageForLevel, refusalChance, LESSON_STEPS, LESSON_JUMPS, lessonStart, lessonGain, lessonResult, JUMP_STAGES,
   HOP_COURSE, hopChance, hopPar, hopResult, HUTCH_TOYS, hutchPlay, hutchPlayBlock,
   agilityChance, agilitySpeed, agilityResult, agilityPar, commandQuality, AGILITY_TYPES, trickWindow, trickPoints, showResult,
   showAudience, ranking, placementAward, practiceAward, addAward, recordBest, activityData, activitySkillGain, eligibility,
@@ -634,8 +634,9 @@ class JumpingSession extends Session {
     this.lesson = type === 'lesson';
     // Le parcours : des barres au sol pour débuter, plus haut quand le cheval a appris.
     this.stage = this.comp ? stageForLevel(this.level) : (opts.stage ?? stageFor(a.skills.jump));
-    // opts.course : parcours de concours (src/sim/competitions.js), sinon le parcours du niveau.
-    const course = opts.course ?? courseForStage(this.stage);
+    // opts.course : parcours de concours (src/sim/competitions.js), sinon le parcours du niveau ; barres baissées pour un
+    // très petit poney (scaledCourse).
+    const course = scaledCourse(opts.course ?? courseForStage(this.stage), e.scale ?? 1);
     this.start = this.lesson ? LESSON_START : course.start;
     if (this.lesson) {
       // Leçon : un seul obstacle au milieu, la barre monte à chaque réussite.
@@ -917,7 +918,9 @@ class JumpingSession extends Session {
     this.jump = {
       o, counts, clean, t: 0, dur: 0.62 + o.height * 0.22,
       from: pl.root.position.clone(), heading, h0: pl.heading,
-      dist: Math.max(3.6, speed * (0.62 + o.height * 0.22)), height: o.height * 1.1 + 0.3, speed, timing,
+      // (hauteur de l'envol : la barre plus une marge à la taille du cheval — 0,3 m pour tous, un Falabella s'envolait
+      // plus haut que lui)
+      dist: Math.max(3.6, speed * (0.62 + o.height * 0.22)), height: jumpArc(o.height, this.mount?.scale ?? 1), speed, timing,
     };
     if (counts && timing > 0.85) this.hud.big(t('actv_perfect'), 700, 'good');
   }
@@ -1732,10 +1735,11 @@ class ShowSession extends Session {
           this.cheered = true;
           const pts = this.results[this.results.length - 1].points;
           this.applause(pts / 10);
-          this.burst(pts >= 8 ? '⭐' : pts >= 5 ? '👏' : '😅', { x: e.position.x, y: e.position.y + 1.8, z: e.position.z }, Math.max(2, Math.round(pts / 2)), 1.2);
+          this.burst(pts >= 8 ? '⭐' : pts >= 5 ? '👏' : '😅', { x: e.position.x, y: e.position.y + cheerHeight(e), z: e.position.z }, Math.max(2, Math.round(pts / 2)), 1.2);
         }
         if (k >= 1) {
           this.cheered = false;
+          walkBackwards(e, false);
           e.scaleGroup.position.set(0, 0, 0);
           e.scaleGroup.rotation.set(0, 0, 0);
           if (e.model.cat || e.model.realCat) e.catPoseOverride = null; // chat : fin de la pose du tour
@@ -1764,12 +1768,19 @@ class ShowSession extends Session {
     }
     // Pendant le tour (face au public, jauge, tour, salut) : la caméra se rapproche de l'artiste, de trois quarts à
     // environ 3 m, puis revient à la vue normale (au fond de la scène, le chien faisait une quarantaine de pixels).
+    // Un cheval : showShot (le cheval entier, tête comprise ; visé à 0,45 m, on ne voyait que ses pattes et son ventre).
     if (this.phase === 'face' || this.phase === 'gauge' || this.phase === 'trick' || this.phase === 'bow') {
       const sc = e.scale ?? 1;
-      // (lapin : une trentaine de centimètres de haut, deux fois plus près et visé à hauteur de son dos ; à 3 m il ne
-      // faisait qu'une tache sur la scène)
-      const k = e.data.species === 'rabbit' ? 0.5 : 1;
-      this.game.rig.focus = { shot: { at: (this.shotAt ??= new THREE.Vector3()).set(e.position.x, e.position.y + 0.45 * sc * k, e.position.z), heading: e.heading, dist: (1.4 + 1.6 * sc) * (k < 1 ? 0.55 : 1), yaw: 0.75, pitch: 0.2 } };
+      const at = (this.shotAt ??= new THREE.Vector3());
+      if (e.data.species === 'horse') {
+        const smile = this.phase === 'trick' && this.acts[this.index]?.trick === 'smile' ? e.model.head : null;
+        this.game.rig.focus = { shot: showShot(e, this.game.camera.aspect, at, smile) };
+      } else {
+        // (lapin : une trentaine de centimètres de haut, deux fois plus près et visé à hauteur de son dos ; à 3 m il ne
+        // faisait qu'une tache sur la scène)
+        const k = e.data.species === 'rabbit' ? 0.5 : 1;
+        this.game.rig.focus = { shot: { at: at.set(e.position.x, e.position.y + 0.45 * sc * k, e.position.z), heading: e.heading, dist: (1.4 + 1.6 * sc) * (k < 1 ? 0.55 : 1), yaw: 0.75, pitch: 0.2 } };
+      }
     }
     const onStage = Math.hypot(e.position.x - this.center.x, e.position.z - this.center.z) < 3.3;
     e.position.y = this.y(e.position.x, e.position.z) + (onStage ? this.stageTop : 0) + (e.scaleGroup.position.y > 0 ? 0 : 0);
@@ -1793,12 +1804,74 @@ class ShowSession extends Session {
 
   cleanup() {
     this.hud.setGauge(null);
-    for (const e of this.cast ?? []) if (e.model?.cat || e.model?.realCat) e.catPoseOverride = null; // chats : poses libres
+    for (const e of this.cast ?? []) {
+      if (e.model?.cat || e.model?.realCat) e.catPoseOverride = null; // chats : poses libres
+      walkBackwards(e, false); // (arrêté pendant « recule » : son pas repart à l'endroit)
+    }
   }
 }
 
+/** Sourire du cheval réaliste : encolure relevée, tête tendue vers l'avant (rad), petit hochement. */
+export const SMILE = { neck: 0.22, head: 0.12, nod: 0.06 };
+
+/**
+ * « Sourire » : tourne l'os b de a rad autour de x, ajouté à la pose de son clip. Si le clip ne l'a pas repris depuis
+ * l'image d'avant (animation en pause), on repart de la pose d'avant : sinon le geste s'ajoutait à chaque image et
+ * la tête finissait à l'envers.
+ */
+export function smileTurn(e, key, b, a) {
+  const st = ((e.smileQ ??= {})[key] ??= { before: new THREE.Quaternion(), after: new THREE.Quaternion(), set: false });
+  if (st.set && b.quaternion.equals(st.after)) b.quaternion.copy(st.before);
+  st.before.copy(b.quaternion);
+  b.rotateX(a);
+  st.after.copy(b.quaternion);
+  st.set = true;
+}
+
+/**
+ * Plan du spectacle sur un cheval (rig.focus.shot) : de trois quarts avant (yaw rad depuis le devant), visé au garrot
+ * (y × sa taille), un peu devant lui (ahead × sa taille : sa tête, plus près de la caméra, sortait de l'image) ou, pour
+ * « sourire », entre le garrot et la tête (head : son groupe md.head) ; assez loin pour voir le cheval entier sur un
+ * téléphone en hauteur (champ de 30° de large) comme en largeur (dist × sa taille), regard presque à l'horizontale.
+ * Visé à 0,45 m et à 3 m, on ne voyait que ses pattes et son ventre. at : vecteur réutilisé.
+ */
+export const SHOW_SHOT = { y: 1.0, ahead: 0.35, tall: { dist: 4.5, yaw: 0.5 }, wide: { dist: 4.2, yaw: 0.6 }, pitch: 0.12 };
+export function showShot(e, aspect, at, head = null) {
+  const sc = e.scale ?? 1;
+  const o = aspect < 0.8 ? SHOW_SHOT.tall : SHOW_SHOT.wide;
+  const f = SHOW_SHOT.ahead * sc;
+  at.set(e.position.x + Math.sin(e.heading) * f, e.position.y + SHOW_SHOT.y * sc, e.position.z + Math.cos(e.heading) * f);
+  if (head) {
+    head.updateWorldMatrix(true, false);
+    const m = head.matrixWorld.elements;
+    at.set((at.x + m[12]) / 2, (at.y + m[13]) / 2, (at.z + m[14]) / 2);
+  }
+  return { at, heading: e.heading, dist: o.dist * sc, yaw: o.yaw, pitch: SHOW_SHOT.pitch };
+}
+
+/**
+ * Hauteur (m) dont le cheval s'élève au-dessus d'une barre de h m : la barre (× 1,1) plus une marge de 0,3 m à sa
+ * taille sc. Avec des barres baissées à sa taille (scaledCourse), c'est l'envol d'un grand cheval multiplié par sa
+ * taille ; sans les sabots qui passeraient à travers la barre.
+ */
+export function jumpArc(h, sc = 1) {
+  return h * 1.1 + 0.3 * Math.min(1.2, Math.max(0.3, sc));
+}
+
+/** Hauteur (m) d'où partent l'étoile ou les applaudissements d'un tour : au-dessus de la tête d'un cheval (≈ 2,6 m × sa
+ * taille ; partis à 1,8 m, ils se posaient sur sa tête), 1,8 m pour les autres. */
+export function cheerHeight(e) {
+  return e.data?.species === 'horse' ? 2.6 * (e.scale ?? 1) : 1.8;
+}
+
+/** Cheval réaliste : son pas joué à l'envers (on) ou à l'endroit (horloge de ses clips, RealHorseAnim.mixer). */
+function walkBackwards(e, on) {
+  const mixer = e.model?.anim?.mixer;
+  if (mixer) mixer.timeScale = on ? -1 : 1;
+}
+
 /** Animation simple d'un tour (k : 0 → 1). Modifie la pose du modèle de l'animal. */
-function animateTrick(e, trick, k, dt) {
+export function animateTrick(e, trick, k, dt) {
   const s = Math.sin(Math.PI * k);
   const sg = e.scaleGroup;
   const md = e.model;
@@ -1914,7 +1987,11 @@ function animateTrick(e, trick, k, dt) {
     case 'back':
       if (trick === 'back') {
         sg.position.z = -1.2 * s;
-        e.speed = 1;
+        // (cheval réaliste : le pas joué à l'envers tant qu'il recule — il avançait sur place en glissant en arrière —,
+        // à l'endroit quand il revient ; au rythme de son déplacement)
+        const v = ((1.2 * Math.PI) / 2.6) * Math.cos(Math.PI * k);
+        e.speed = md.anim?.mixer ? Math.max(0.45, Math.abs(v)) : 1;
+        walkBackwards(e, k < 0.5);
       } else if (!realLegPose(md, 'down', Math.min(1, s * 2), sg)) {
         sg.position.y = -0.22 * Math.min(1, s * 2);
         for (const l of md.legs) l.pivot.rotation.x = (l.front ? -1.3 : 1.3) * Math.min(1, s * 2);
@@ -1948,8 +2025,19 @@ function animateTrick(e, trick, k, dt) {
       }
       break;
     case 'smile':
-      md.neck.rotation.x = e.data.look.neckAngle - 0.6 * Math.min(1, s * 2);
-      md.head.rotation.z = Math.sin(k * 20) * 0.1;
+      if (md.real) {
+        // Cheval réaliste : tête relevée un peu et tendue vers l'avant, oreilles pointées, petit hochement ; aucun roulis
+        // (l'encolure relevée de 0,6 et la tête roulée de droite à gauche : il regardait le ciel en disant « non »).
+        // Ajouté à la pose de son clip (rotations locales, reprises à l'image suivante).
+        const u = Math.min(1, s * 2);
+        smileTurn(e, 'neck', md.neck, -SMILE.neck * u);
+        smileTurn(e, 'head', md.head, -SMILE.head * u + Math.sin(k * Math.PI * 6) * SMILE.nod * u);
+        e.earsPose = 'forward';
+        e.earsT = Math.max(e.earsT ?? 0, 0.5);
+      } else {
+        md.neck.rotation.x = e.data.look.neckAngle - 0.6 * Math.min(1, s * 2);
+        md.head.rotation.z = Math.sin(k * 20) * 0.1;
+      }
       break;
     case 'fetch':
     case 'come':

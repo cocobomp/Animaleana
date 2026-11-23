@@ -411,8 +411,10 @@ export function horsePhoto(g, a, { before = false, style = null, done = [], acc 
       sparkleCorners(c, W, H, !!style);
       if (style) drawEmoji(c, STYLES[style]?.emoji ?? '✂️', W - 22, 22, 20);
       // ce qu'on a fait pendant la séance, en petit en bas (et son ruban ou son nœud, à sa couleur)
-      const icons = done.map((id) => STEPS[id]?.emoji).filter(Boolean);
-      if (acc?.id && ACCESSORIES[acc.id]) icons.push(ACCESSORIES[acc.id].emoji);
+      // (avec un accessoire, son emoji remplace celui des finitions : pas deux 🎀 de suite)
+      const withAcc = !!(acc?.id && ACCESSORIES[acc.id]);
+      const icons = done.filter((id) => !(withAcc && id === 'finish')).map((id) => STEPS[id]?.emoji).filter(Boolean);
+      if (withAcc) icons.push(ACCESSORIES[acc.id].emoji);
       const n = icons.length;
       if (n) {
         const sz = 13;

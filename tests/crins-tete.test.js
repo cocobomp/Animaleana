@@ -70,3 +70,40 @@ describe('toupet', () => {
     md.dispose();
   }, 60000);
 });
+
+// Toupet couché sur le front (reprise) : de profil, il se dressait devant le front comme une plume (masse épaisse de 2 cm,
+// bosse de 4 cm sous la nuque). La masse, de mi-hauteur des yeux à ses pointes, reste près de la vraie peau de la tête.
+describe('toupet couché sur le front', () => {
+  it.each([['selle_francais'], ['arabe'], ['shetland'], ['falabella'], ['frison'], ['percheron']])('%s : masse du toupet à moins de 2,2 cm de la peau (médiane 1,35)', (breed) => {
+    const md = horse(breed);
+    md.root.updateMatrixWorld(true);
+    const T = md.sdf.head.skin.tris;
+    const g = md.hairMesh.geometry.attributes;
+    const tri = new THREE.Triangle();
+    const cp = new THREE.Vector3();
+    const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    const dist = (p) => {
+      let best = Infinity;
+      for (let k = 0; k < T.length; k += 9) {
+        a.set(T[k], T[k + 1], T[k + 2]);
+        if (a.distanceToSquared(p) > 0.01) continue;
+        tri.set(a, b.set(T[k + 3], T[k + 4], T[k + 5]), c.set(T[k + 6], T[k + 7], T[k + 8])).closestPointToPoint(p, cp);
+        best = Math.min(best, cp.distanceTo(p));
+      }
+      return best;
+    };
+    const ds = [];
+    for (let i = 0; i < g.position.count; i++) {
+      if (g.hairRoot.getW(i) !== 9 || g.hairG.getX(i) < 0.3) continue;
+      const p = md.head.worldToLocal(new THREE.Vector3().fromBufferAttribute(g.position, i));
+      ds.push(dist(p));
+    }
+    ds.sort((x, y) => x - y);
+    if (process.env.CRINS_DBG) console.log(breed, 'toupet', ds.length, 'médiane', ds[ds.length >> 1].toFixed(4), 'max', ds.at(-1).toFixed(4));
+    expect(ds.length).toBeGreaterThan(40);
+    // (avant : médiane 1,5 à 2 cm, jusqu'à 3,3 cm)
+    expect(ds[ds.length >> 1], breed).toBeLessThan(0.0135);
+    expect(ds.at(-1), breed).toBeLessThan(0.022);
+    md.dispose();
+  }, 60000);
+});

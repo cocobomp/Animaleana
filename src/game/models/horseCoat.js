@@ -75,6 +75,11 @@ export const FORE_MASS_W = 0.8;
 export const FORE_PINCH = 0.45;
 export const FORE_FAN = 0.08;
 /**
+ * Bout d'une mèche du toupet : sa largeur à la pointe (part de sa largeur). Les crins de longueurs inégales de la texture
+ * finissent la mèche ; à 0,18, chaque mèche finissait en épine, et le toupet se lisait en pinceau peint sur le front.
+ */
+export const FORE_TIP = 0.4;
+/**
  * Ombre de contact du toupet sur le front : pleine sous chaque mèche, un liseré de FORE_SHADE_EDGE (demi-largeurs du
  * toupet) au-delà de ses bords — dans le jour entre deux mèches, une rainure grise —, finie avant la pointe de chaque mèche
  * (FORE_SHADE_TIP[0] à [1] avant elle : il n'y reste que des crins fins).
@@ -89,7 +94,7 @@ const smoothJS = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b -
 export function foreLock(f, len, l, nl) {
   const rc = ((l + 0.5) / nl) * 2 - 1;
   const sp = (1 + 0.1 * smoothJS(0, 0.12, f) * (1 - smoothJS(0.12, 0.3, f))) * (1 - FORE_PINCH * smoothJS(0.05, 0.7, f)) + FORE_FAN * smoothJS(0.4, 1, f / len);
-  const hw = (1.12 / nl) * FORE_MASS_W * (1 - 0.3 * smoothJS(0.05, 0.6, f)) * (1 - 0.82 * smoothJS(0.3 * len, len, f));
+  const hw = (1.12 / nl) * FORE_MASS_W * (1 - 0.3 * smoothJS(0.05, 0.6, f)) * (1 - (1 - FORE_TIP) * smoothJS(0.3 * len, len, f));
   return [rc * FORE_MASS_W * sp, hw];
 }
 /**
@@ -111,7 +116,7 @@ const FORE_GLSL = /* glsl */ `
 // Mèche du toupet (voir foreLock) : centre et demi-largeur, en demi-largeurs du toupet.
 vec2 hForeLock(float f, float len, float rc, float nl) {
   float sp = (1.0 + 0.1 * smoothstep(0.0, 0.12, f) * (1.0 - smoothstep(0.12, 0.3, f))) * (1.0 - ${glf(FORE_PINCH)} * smoothstep(0.05, 0.7, f)) + ${glf(FORE_FAN)} * smoothstep(0.4, 1.0, f / len);
-  float hw = (1.12 / nl) * ${glf(FORE_MASS_W)} * (1.0 - 0.3 * smoothstep(0.05, 0.6, f)) * (1.0 - 0.82 * smoothstep(0.3 * len, len, f));
+  float hw = (1.12 / nl) * ${glf(FORE_MASS_W)} * (1.0 - 0.3 * smoothstep(0.05, 0.6, f)) * (1.0 - ${glf(1 - FORE_TIP)} * smoothstep(0.3 * len, len, f));
   return vec2(rc * ${glf(FORE_MASS_W)} * sp, hw);
 }
 // Ombre de contact d'une mèche du toupet (voir foreShadeAt).

@@ -1032,9 +1032,9 @@ const LEFT_VSPAN = 0.5;
 const LEFT_STEP = 0.05;
 const MANE_MASS_LEN = 0.8;
 const FORE_CARDS = 0.6;
-const FORE_THICK = 0.02;
+const FORE_THICK = 0.011;
 const FORE_LOCKS = 3;
-const FORE_LOCK_BUMP = 0.008;
+const FORE_LOCK_BUMP = 0.005;
 const FORE_CORE = 0.3;
 const TAIL_CARDS = 0.62;
 const TAIL_DEPTH = 0.8;
@@ -1797,9 +1797,9 @@ function forelockCards(S, B, body, base) {
   // l'avant — vu de face, le haut du toupet est arrondi, pas un bord droit sur le front), s'amincit vers la pointe et
   // sur les côtés.
   const TF0 = FORE_THICK * Math.sqrt(Math.min(1.4, B.mane ?? 1));
-  // (bosse de 4 cm sous la nuque : de trois quarts, le toupet sort en arrondi d'entre les oreilles au lieu d'une
-  // plaque couchée sur le front)
-  const tf = (r, f) => TF0 * smooth(0, 0.07, f) * (1 + 1.1 * (1 - smooth(0.04, 0.32, f))) * (1 - 0.6 * smooth(0.1, 0.9, f)) * Math.max(0, 1 - r * r) ** 0.8;
+  // (bosse sous la nuque : de trois quarts, le toupet sort en arrondi d'entre les oreilles au lieu d'une plaque couchée
+  // sur le front ; à 4 cm, de profil, il se dressait devant le front comme une plume : 2,8 cm)
+  const tf = (r, f) => TF0 * smooth(0, 0.07, f) * (1 + 0.4 * (1 - smooth(0.04, 0.25, f))) * (1 - 0.6 * smooth(0.1, 0.9, f)) * Math.max(0, 1 - r * r) ** 0.8;
   // Ligne du milieu, posée par la pesanteur sur le front, dans le repère de la tête.
   const rootY = (x, z) => {
     let y = 0.3;
@@ -1925,8 +1925,9 @@ function forelockCards(S, B, body, base) {
       // (racine dans la peau, 4 mm sous elle : rentrée sous un bonnet, la mèche se replie sous le voile)
       pts.push(surfX(x, f, k ? thick(x, Math.min(1, f)) + h : -0.004, zTop));
       const [, hw] = foreLock(fl, len, lk, NL);
-      // (plus fines qu'avant et plus nombreuses : des crins, pas des rubans plats)
-      widths.push(Math.min((primary ? 0.019 : 0.015) * (1 - (0.85 * k) / 4) + 0.002, 1.1 * hw * halfM + 0.001));
+      // (plus fines qu'avant et plus nombreuses : des crins, pas des rubans plats ; le bout pas en épine — la texture le
+      // finit en crins inégaux)
+      widths.push(Math.min((primary ? 0.019 : 0.015) * (1 - (0.6 * k) / 4) + 0.002, 1.1 * hw * halfM + 0.001));
     }
     const normals = pts.map((p) => hd.grad(p, V()));
     const m = 2;

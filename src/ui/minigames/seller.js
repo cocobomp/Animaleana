@@ -13,6 +13,7 @@
 
 import { drawAnimal, animalShape, fitAnimal, rrect, ellipse, circle, label, clamp, lerp, dist } from './draw.js';
 import { groomBackground, justRule } from './grooming.js';
+import { drawHorseVet } from '../vetHorse.js';
 import { justOutcome } from './score.js';
 import { nbsp } from './frame.js';
 
@@ -265,10 +266,14 @@ export function sellerGame(ctx) {
       const st = stage();
       groomBackground(g, ctx, floorY);
       const tooTight = st === 'girth' && tension > 0.95;
-      drawAnimal(g, a, {
+      // (le cheval : le beau cheval dessiné de la visite du vétérinaire, à la même place et à la même taille que le
+      // corps de la règle — avant, un cheval-girafe en ronds, sans crinière)
+      const look = {
         x: fit.x, y: floorY, s, f: 1, time: ctx.time,
         happy: ctx.done && results.every((r) => r.verdict === 'just'), earsBack: annoyed > 0 || tooTight,
-      });
+      };
+      if (a?.species === 'horse') drawHorseVet(g, a, look);
+      else drawAnimal(g, a, look);
       // Là où va la selle (tant qu'elle n'est pas posée) : un contour pointillé derrière le garrot.
       if (!ctx.done && pause <= 0 && st !== 'girth' && !items[st].placed) {
         g.save();

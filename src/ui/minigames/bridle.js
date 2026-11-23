@@ -12,7 +12,7 @@
 import { rrect, circle, label, clamp, lerp, dist, emoji, css } from './draw.js';
 import { justRule } from './grooming.js';
 import { justOutcome } from './score.js';
-import { drawHorseHead, HEAD, MOUTH, HEAD_LIFT } from './deworm.js';
+import { drawHorseHead, faceOf, HEAD, MOUTH, HEAD_LIFT } from './deworm.js';
 import { COLORS } from '../../sim/gear.js';
 
 /** Les trois étapes, et la sous-gorge : 0 lâche → 1,2 bien trop serrée ; juste entre 0,55 et 0,8. */
@@ -227,7 +227,7 @@ export function bridleGame(ctx) {
       g.save();
       g.translate(ZOOM.x, ZOOM.y);
       g.scale(ZOOM.k, ZOOM.k);
-      drawHorseHead(g, col, annoyed, open, ctx.time, { ears: [fold(0), fold(1)], earsBack: tight });
+      drawHorseHead(g, col, annoyed, open, ctx.time, { ears: [fold(0), fold(1)], earsBack: tight, face: faceOf(a) });
       g.translate(0, -lift());
       if (!bitIn) drawTeeth(g);
       drawBridle(g, { bitIn, crown, throat, tight, leather, throatOn: earDone.every(Boolean) });

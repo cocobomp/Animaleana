@@ -1,7 +1,7 @@
 // Donner le vermifuge, comme en vrai (le carnet de santé du cheval, src/sim/horseHealth.js) :
 //
-//   1. La dose : on règle la bague de la seringue sur le poids du cheval (un poney ≈ 250 kg, un cheval ≈ 500 kg,
-//      un cheval de trait ≈ 750 kg ; un peu plus s'il est gros). Juste : son poids, ou un peu plus (on arrondit
+//   1. La dose : on règle la bague de la seringue sur le poids du cheval (un Shetland ≈ 165 kg, un cheval ≈ 500 kg,
+//      un cheval de trait ≈ 800 kg ; un peu plus s'il est gros). Juste : son poids, ou un peu plus (on arrondit
 //      toujours au-dessus, jusqu'à DOSE.over kg de plus) ; moins, jamais : ça marche mal et les vers s'habituent au
 //      produit (sous-dosé : noté, mais à refaire plus tôt — ctx.opts.out.dose, src/game/Game.js deworm). Beaucoup
 //      trop, ce n'est pas bon pour lui. Deux boutons −10 / +10 kg pour régler au doigt près.
@@ -15,17 +15,23 @@ import { rrect, ellipse, circle, label, clamp, lerp, dist, css, shade } from './
 import { justOutcome } from './score.js';
 import { sizeOf } from '../../sim/gear.js';
 import { growthScale } from '../../sim/animal.js';
+import { horseFaceMark, horseBreedOf } from '../../sim/horseLook.js';
 import { nbsp } from './frame.js';
 
 export const DOSE = { min: 100, max: 900, slack: 5, over: 50, step: 10 }; // (juste : son poids, jusqu'à un cran de 50 kg au-dessus)
 
 /**
- * Le poids du cheval (kg), d'après sa taille, son embonpoint (a.weight : 50 = idéal) et son âge : un poulain pèse bien
- * moins qu'un adulte (le poids suit la taille au cube, growthScale). Jamais moins que la plus petite dose de la
- * seringue (DOSE.min) : pour un tout petit poulain, on donne cette dose-là.
+ * Le poids du cheval (kg), d'après sa race (sa taille : look.scale, son épaisseur : look.fluff, un cheval de trait est
+ * plus lourd), son embonpoint (a.weight : 50 = idéal) et son âge : un poulain pèse bien moins qu'un adulte (le poids
+ * suit la taille au cube, growthScale). Un Falabella ≈ 100 kg, un Shetland ≈ 165 kg, un selle français ≈ 500 kg, un
+ * percheron ≈ 800 kg. Jamais moins que la plus petite dose de la seringue (DOSE.min) : pour un tout petit poulain ou un
+ * Falabella, on donne cette dose-là.
  */
 export function horseKg(a) {
-  const base = { pony: 250, horse: 500, draft: 750 }[sizeOf(a) ?? 'horse'] ?? 500;
+  const size = sizeOf(a) ?? 'horse';
+  const scale = a?.look?.scale ?? { pony: 0.75, horse: 1, draft: 1.06 }[size] ?? 1;
+  const fluff = a?.look?.fluff ?? 1;
+  const base = 500 * scale ** 2.3 * fluff * (size === 'draft' ? 1.4 : 1);
   const grow = a?.species && Number.isFinite(a?.ageDays) ? growthScale(a) ** 3 : 1;
   return Math.max(DOSE.min, Math.round((base * (0.8 + 0.4 * ((a?.weight ?? 50) / 100)) * grow) / 10) * 10);
 }
@@ -44,6 +50,7 @@ export function dewormGame(ctx) {
   const name = a?.name ?? ctx.name;
   const kg = horseKg(a);
   const col = ctx.col ?? { coat: '#8a5a2b', mane: '#2b1d14', light: '#b07a45', dark: '#5c3a1c' };
+  const face = faceOf(a);
   const bar = { ...MOUTH.bar }; // le coin de la bouche
   const teeth = { ...MOUTH.teeth }; // le bout du nez, les dents de devant
   let stage = 'dose';
@@ -193,7 +200,7 @@ export function dewormGame(ctx) {
       g.fillRect(v.x0, v.y0, v.w, v.h);
       g.fillStyle = '#d9c39a';
       g.fillRect(v.x0, 250, v.w, v.y1 - 250);
-      drawHorseHead(g, col, annoyed, grimace, ctx.time);
+      drawHorseHead(g, col, annoyed, grimace, ctx.time, { face });
       // le poids du cheval
       g.save();
       g.fillStyle = 'rgba(255,255,255,0.9)';
@@ -222,74 +229,254 @@ export function dewormGame(ctx) {
 
 // ---------------------------------------------------------------- dessins
 
+/** La marque en tête de l'animal (0 aucune … 4 ladre), pour le dessin. */
+export function faceOf(a) {
+  if (a?.species !== 'horse') return 0;
+  try {
+    return horseFaceMark(a.look ?? {}, horseBreedOf(a.look ?? {}, a.breed));
+  } catch {
+    return 0;
+  }
+}
+
+/** Clarté (0 à 1) d'une couleur css (#rrggbb ou rgb(…)), pour éclaircir le contour d'une robe noire. */
+function lightness(c) {
+  const m = /^#([0-9a-f]{6})$/i.exec(c ?? '') ?? null;
+  let r;
+  let gg;
+  let b;
+  if (m) {
+    const n = parseInt(m[1], 16);
+    r = n >> 16;
+    gg = (n >> 8) & 255;
+    b = n & 255;
+  } else {
+    const k = /rgba?\(([^)]+)\)/.exec(c ?? '');
+    if (!k) return 0.5;
+    [r, gg, b] = k[1].split(',').map((x) => parseFloat(x));
+  }
+  return (0.299 * r + 0.587 * gg + 0.114 * b) / 255;
+}
+
+/** Le contour de la tête de profil (repère de la tête : HEAD en 0,0 ; le nez à gauche, vers le bas). */
+function headPath(g) {
+  g.beginPath();
+  g.moveTo(34, -50); // la nuque
+  g.bezierCurveTo(16, -54, -6, -48, -28, -32); // le front
+  g.bezierCurveTo(-56, -12, -86, 12, -108, 32); // le chanfrein
+  g.bezierCurveTo(-120, 42, -126, 56, -122, 68); // le bout du nez
+  g.bezierCurveTo(-120, 76, -114, 81, -106, 81); // la lèvre du haut
+  g.bezierCurveTo(-104, 88, -98, 94, -88, 93); // la lèvre du bas, le menton
+  g.bezierCurveTo(-76, 92, -66, 86, -54, 84); // la barbe
+  g.bezierCurveTo(-30, 82, -10, 82, 10, 78); // le dessous de la mâchoire
+  g.bezierCurveTo(40, 72, 56, 46, 52, 18); // la ganache, ronde
+  g.bezierCurveTo(50, 0, 46, -30, 34, -50); // derrière la joue, vers la nuque
+  g.closePath();
+}
+
 /**
  * La tête du cheval de profil (le nez à gauche) : aussi pour la ration (ration.js) et le filet (bridle.js).
- * o : { ears: [près, loin] (pliées vers l'avant, 0 à 1 : on dessine alors aussi l'oreille de derrière), earsBack }
+ * o : { ears: [près, loin] (pliées vers l'avant, 0 à 1 : on dessine alors aussi l'oreille de derrière), earsBack,
+ *       face (marque en tête : 0 aucune, 1 étoile, 2 liste fine, 3 large liste, 4 ladre au bout du nez, voir
+ *       horseFaceMark) }.
+ * Une vraie tête de cheval : encolure et crinière aux couleurs des crins, toupet, ganache ronde, chanfrein, naseau et
+ * bouche tirés de la robe, œil avec son reflet (visible même sur un cheval noir : sa tête a alors un contour plus clair),
+ * la marque blanche de l'animal.
  */
 export function drawHorseHead(g, col, annoyed, grimace, time, o = {}) {
   const lift = annoyed * HEAD_LIFT;
   const ear = annoyed > 0 || o.earsBack ? 0.9 : Math.sin(time * 2) * 0.1;
+  const coat = col.coat;
+  const dark = col.dark ?? coat;
+  const light = col.light ?? coat;
+  const mane = col.mane ?? dark;
+  const L = lightness(coat);
+  const black = L < 0.2;
+  const rim = black ? 'rgba(255,255,255,0.28)' : 'rgba(40,24,12,0.35)';
   g.save();
-  g.translate(0, -lift);
-  // encolure
-  g.fillStyle = col.coat;
+  g.translate(HEAD.x, HEAD.y - lift);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  // encolure (derrière la tête), avec son ombre sous la gorge
+  g.fillStyle = coat;
   g.beginPath();
-  g.moveTo(HEAD.x + 40, HEAD.y - 70);
-  g.lineTo(HEAD.x + 150, HEAD.y - 10);
-  g.lineTo(HEAD.x + 150, HEAD.y + 110);
-  g.lineTo(HEAD.x + 30, HEAD.y + 40);
+  g.moveTo(30, -56);
+  g.bezierCurveTo(70, -60, 120, -40, 160, -20);
+  g.lineTo(160, 120);
+  g.bezierCurveTo(110, 100, 70, 70, 44, 44);
   g.closePath();
   g.fill();
-  // crinière
-  g.strokeStyle = col.mane;
-  g.lineWidth = 12;
-  g.beginPath();
-  g.moveTo(HEAD.x + 36, HEAD.y - 76);
-  g.lineTo(HEAD.x + 150, HEAD.y - 16);
+  g.strokeStyle = rim;
+  g.lineWidth = 2;
   g.stroke();
-  // (l'autre oreille, derrière la tête)
-  if (o.ears) {
-    g.fillStyle = col.dark ?? col.coat;
-    g.save();
-    g.translate(HEAD.x + 8, HEAD.y - 44);
-    g.rotate(-0.5 + ear - o.ears[1] * 1.1);
-    ellipse(g, 0, -18, 9, 22);
-    g.fill();
-    g.restore();
+  // la crinière : des mèches qui tombent du bord de l'encolure
+  g.strokeStyle = mane;
+  for (let i = 0; i < 11; i++) {
+    const k = i / 10;
+    const x = 34 + k * 120;
+    const y = -56 + k * 34 + Math.sin(k * 9) * 2;
+    g.lineWidth = 9 - k * 2;
+    g.beginPath();
+    g.moveTo(x - 6, y - 4);
+    g.quadraticCurveTo(x + 4, y + 10, x + 2 + Math.sin(time * 1.5 + i) * 1.5, y + 26 + (i % 3) * 5);
+    g.stroke();
   }
-  // tête (de profil, le nez à gauche)
-  g.fillStyle = col.coat;
-  ellipse(g, HEAD.x, HEAD.y, 58, 46, 0.25);
+  // (l'autre oreille, derrière la tête)
+  const drawEar = (x, y, rot, back) => {
+    g.save();
+    g.translate(x, y);
+    g.rotate(rot);
+    g.fillStyle = back ? dark : coat;
+    g.beginPath();
+    g.moveTo(-9, 2);
+    g.bezierCurveTo(-11, -16, -6, -34, 1, -42);
+    g.bezierCurveTo(8, -32, 11, -14, 9, 2);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = rim;
+    g.lineWidth = 1.5;
+    g.stroke();
+    if (!back) {
+      g.fillStyle = shadeCss(dark, 0.6);
+      g.beginPath();
+      g.moveTo(-4, -2);
+      g.bezierCurveTo(-5, -14, -2, -28, 1, -34);
+      g.bezierCurveTo(4, -26, 5, -12, 4, -2);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  };
+  if (o.ears) drawEar(14, -46, -0.45 + ear - o.ears[1] * 1.1, true);
+  // la tête
+  headPath(g);
+  g.fillStyle = coat;
   g.fill();
-  ellipse(g, HEAD.x - 70, HEAD.y + 52, 46, 30, 0.55);
-  g.fill();
-  // naseau, bouche (la grimace : lèvre retroussée)
-  g.fillStyle = shade(0x8a5a2b, -0.4);
-  circle(g, HEAD.x - 104, HEAD.y + 50, 5);
-  g.fill();
-  g.strokeStyle = '#3a2618';
-  g.lineWidth = 3;
+  // (le relief : la joue plus claire, le chanfrein et le dessous plus sombres)
+  g.save();
+  headPath(g);
+  g.clip();
+  const cheek = g.createRadialGradient(18, 22, 4, 18, 22, 46);
+  cheek.addColorStop(0, black ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.22)');
+  cheek.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = cheek;
+  g.fillRect(-30, -30, 100, 100);
+  const under = g.createLinearGradient(0, 40, 0, 96);
+  under.addColorStop(0, 'rgba(0,0,0,0)');
+  under.addColorStop(1, 'rgba(0,0,0,0.22)');
+  g.fillStyle = under;
+  g.fillRect(-130, 40, 200, 60);
+  // la marque blanche (étoile, liste, large liste, ladre)
+  const face = o.face ?? 0;
+  if (face) {
+    g.fillStyle = '#f5f1ea';
+    g.beginPath();
+    if (face === 1) {
+      g.ellipse(-14, -30, 7, 5, -0.5, 0, Math.PI * 2);
+    } else if (face === 4) {
+      g.ellipse(-112, 58, 12, 16, 0.4, 0, Math.PI * 2);
+    } else {
+      const w = face === 3 ? 13 : 6;
+      g.moveTo(-10 - w * 0.6, -38);
+      g.bezierCurveTo(-40, -18, -80, 14, -112 - w * 0.4, 44);
+      g.lineTo(-114 + w * 0.8, 66);
+      g.bezierCurveTo(-96 + w, 24, -50 + w, -8, -6 + w * 0.6, -36);
+      g.closePath();
+    }
+    g.fill();
+  }
+  g.restore();
+  headPath(g);
+  g.strokeStyle = rim;
+  g.lineWidth = 2;
+  g.stroke();
+  // la ganache (le rond de la joue)
+  g.strokeStyle = black ? 'rgba(255,255,255,0.16)' : 'rgba(40,24,12,0.18)';
+  g.lineWidth = 2;
   g.beginPath();
-  g.moveTo(HEAD.x - 108, HEAD.y + 78);
-  g.quadraticCurveTo(HEAD.x - 84, HEAD.y + 84 + grimace * 6, HEAD.x - 58, HEAD.y + 72);
+  g.arc(20, 30, 30, 1.9, 4.3);
+  g.stroke();
+  // le naseau (une virgule, plus sombre que la robe) et la bouche
+  g.fillStyle = black ? '#050403' : shadeCss(dark, -0.35);
+  g.beginPath();
+  g.moveTo(-104, 46);
+  g.bezierCurveTo(-112, 44, -118, 52, -114, 60);
+  g.bezierCurveTo(-110, 64, -104, 60, -106, 54);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = black ? 'rgba(255,255,255,0.3)' : shadeCss(dark, -0.2);
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.arc(-110, 53, 8, 2.2, 5.0);
+  g.stroke();
+  g.strokeStyle = black ? 'rgba(255,255,255,0.35)' : '#3a2618';
+  g.lineWidth = 2.5;
+  g.beginPath();
+  g.moveTo(-112, 81);
+  g.quadraticCurveTo(-88, 84 + grimace * 5, -60, 76);
   g.stroke();
   if (grimace > 0.2) {
-    g.fillStyle = '#e88a9a'; // la langue
-    ellipse(g, HEAD.x - 92, HEAD.y + 86, 8 * grimace, 4 * grimace);
+    // la langue, qui sort au coin des lèvres
+    g.fillStyle = '#d4707e';
+    g.beginPath();
+    g.ellipse(-62, 84 + 6 * grimace, 9 * grimace, 5 * grimace, 0.5, 0, Math.PI * 2);
     g.fill();
   }
-  // œil, oreilles
-  g.fillStyle = '#1e140e';
-  circle(g, HEAD.x + 4, HEAD.y - 8, 6);
-  g.fill();
-  g.fillStyle = col.coat;
+  // l'œil : en amande, le bord des paupières, et son reflet (on le voit même sur un cheval noir)
   g.save();
-  g.translate(HEAD.x + 28, HEAD.y - 40);
-  g.rotate(-0.3 + ear - (o.ears?.[0] ?? 0) * 1.1);
-  ellipse(g, 0, -18, 9, 22);
+  g.translate(2, -10);
+  g.rotate(0.35);
+  g.fillStyle = black ? 'rgba(255,255,255,0.22)' : shadeCss(dark, -0.25);
+  g.beginPath();
+  g.ellipse(0, 0, 11, 7.5, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#1b120c';
+  g.beginPath();
+  g.ellipse(0, 0, 8.5, 6, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#4a2f1c';
+  g.beginPath();
+  g.ellipse(-1, 0.5, 5, 4, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.arc(-3, -2.2, 2.2, 0, Math.PI * 2);
+  g.fill();
+  g.globalAlpha = 0.6;
+  g.beginPath();
+  g.arc(2.5, 2, 1, 0, Math.PI * 2);
   g.fill();
   g.restore();
+  // l'oreille de devant, puis le toupet qui tombe sur le front, entre les oreilles
+  drawEar(28, -44, -0.25 + ear - (o.ears?.[0] ?? 0) * 1.1, false);
+  g.strokeStyle = mane;
+  for (let i = 0; i < 5; i++) {
+    g.lineWidth = 6 - i * 0.6;
+    g.beginPath();
+    g.moveTo(22 - i * 3, -50);
+    g.quadraticCurveTo(6 - i * 4, -40, -6 - i * 5 + Math.sin(time * 1.3 + i) * 1.2, -24 + i * 2);
+    g.stroke();
+  }
   g.restore();
+}
+
+/** Une couleur css un peu plus claire (k > 0) ou plus sombre (k < 0). */
+function shadeCss(c, k) {
+  const m = /^#([0-9a-f]{6})$/i.exec(c ?? '');
+  let r = 128;
+  let gg = 128;
+  let b = 128;
+  if (m) {
+    const n = parseInt(m[1], 16);
+    r = n >> 16;
+    gg = (n >> 8) & 255;
+    b = n & 255;
+  } else {
+    const q = /rgba?\(([^)]+)\)/.exec(c ?? '');
+    if (q) [r, gg, b] = q[1].split(',').map((x) => parseFloat(x));
+  }
+  const f = (v) => Math.round(k >= 0 ? v + (255 - v) * k : v * (1 + k));
+  return `rgb(${f(r)}, ${f(gg)}, ${f(b)})`;
 }
 
 function drawSyringeScale(g, ring, rx, lo, hi) {
@@ -341,8 +528,18 @@ function drawSyringe(g, x, y, left, placed) {
   g.fillStyle = '#d9dde0';
   rrect(g, -18, -5, 20, 10, 4);
   g.fill();
+  // le piston : son joint pousse la pâte (juste derrière elle), sa tige sort du corps, le poussoir au bout (pleine : la
+  // tige sort de toute sa longueur ; vide : le poussoir touche le corps). Avant : le poussoir flottait loin du corps.
+  const seal = 4 + 112 * left;
+  const push = seal + 114;
+  g.fillStyle = '#c3c8cc';
+  rrect(g, seal, -3.5, push - seal, 7, 3);
+  g.fill();
+  g.fillStyle = '#2d3a46';
+  rrect(g, seal - 3, -9, 6, 18, 2);
+  g.fill();
   g.fillStyle = '#3c7bd9';
-  rrect(g, 120 + (1 - left) * -100 + 100, -16, 14, 32, 5);
+  rrect(g, push, -16, 12, 32, 5);
   g.fill();
   g.restore();
 }

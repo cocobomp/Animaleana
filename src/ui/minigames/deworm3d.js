@@ -47,6 +47,8 @@ export function deworm3dGame(ctx) {
     return hit ? head.worldToLocal(hit.point.clone()).add(v3(-0.004, 0, 0)) : local.clone().setX(-hr * 0.45);
   };
   const barLocal = onSkin(v3(0, -hr * 0.42, snout - hr * 0.85));
+  // (l'embout : au coin des lèvres, posé devant la peau, pas dedans)
+  const tipLocal = barLocal.clone().add(v3(-0.006, 0, 0));
   const teethLocal = v3(-hr * 0.1, -0.15 * snout, snout * 1.0);
   const W = (local) => head.localToWorld(local.clone());
 
@@ -66,6 +68,36 @@ export function deworm3dGame(ctx) {
     hand.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xh, yh, zh));
     hand.position.set(syr.tip + syr.len * 0.8, -0.03, -0.012);
   }
+  const handRest = { p: hand.position.clone(), q: hand.quaternion.clone() };
+  /**
+   * Seringue dans la bouche : la main la tient près du piston, le poignet et la manche viennent de notre côté, d'en bas
+   * et vers nous (avant : la manche pendait droit sous la seringue comme un bâton bleu).
+   */
+  const _hm = new THREE.Matrix4();
+  const _hq2 = new THREE.Quaternion();
+  function handInMouth() {
+    const c = sc.camera;
+    holder.updateWorldMatrix(true, false);
+    const grip = holder.localToWorld(syr.at(0.9));
+    const toCam = c.position.clone().sub(grip).normalize();
+    const camRight = v3(1, 0, 0).applyQuaternion(c.quaternion);
+    const from = grip.clone().addScaledVector(toCam, 0.22).add(v3(0, -0.22, 0)).addScaledVector(camRight, -0.06);
+    const x = grip.clone().sub(from).normalize();
+    const axis = holder.localToWorld(syr.at(1)).sub(holder.localToWorld(syr.at(0))).normalize();
+    // (la paume vers le corps de la seringue : les doigts l'entourent)
+    let y = axis.clone().cross(x).normalize();
+    if (y.y < 0) y.negate();
+    const z = new THREE.Vector3().crossVectors(x, y).normalize();
+    y = new THREE.Vector3().crossVectors(z, x).normalize();
+    _hm.makeBasis(x, y, z);
+    const qW = new THREE.Quaternion().setFromRotationMatrix(_hm);
+    holder.getWorldQuaternion(_hq2).invert();
+    hand.quaternion.copy(_hq2.multiply(qW));
+    const sW = holder.getWorldScale(v3()).x || 1;
+    const pW = grip.clone().addScaledVector(x, -0.05 * 0.9).addScaledVector(y, -0.02 * 0.9);
+    hand.position.copy(holder.worldToLocal(pW));
+    hand.scale.setScalar(0.9 / sW);
+  }
   holder.add(hand);
   sc.scene.add(holder);
   // la bande verte (la bonne dose) sur le corps
@@ -83,16 +115,83 @@ export function deworm3dGame(ctx) {
   // la mâchoire, détachée de la bouche.)
   // (la commissure : sur la peau, au bout du pli des lèvres, un peu au-dessus et en arrière de la barre où l'on pose
   // l'embout — mesurée sur le modèle avec des repères de couleur)
-  const tongueAt = onSkin(v3(0, barLocal.y + hr * 0.23, barLocal.z - hr * 0.15));
-  const tongueGeo = own(new THREE.CapsuleGeometry(0.5, 1, 6, 12));
-  tongueGeo.translate(0, 1, 0); // (la base au coin des lèvres, la langue s'allonge vers +y)
-  const tongue = new THREE.Mesh(tongueGeo, own(new THREE.MeshStandardMaterial({ color: 0xd9727f, roughness: 0.32 })));
+  // (le pli des lèvres, cherché sur le côté de la bouche : la hauteur où la peau rentre le plus d'un coup, la lèvre du
+  // haut qui déborde au-dessus de celle du bas ; d'un gabarit à l'autre, d'un poulain à un cheval de trait, il bouge)
+  const creaseY = (() => {
+    const z = barLocal.z - hr * 0.15;
+    const depth = (y) => {
+      const from = head.localToWorld(v3(-0.6, y, z));
+      const hit = sc.proxy.hitAll(new THREE.Ray(from, sideW()))[0];
+      return hit ? -head.worldToLocal(hit.point.clone()).x : null;
+    };
+    let best = barLocal.y + hr * 0.23;
+    let drop = 0;
+    for (let k = 0; k <= 16; k++) {
+      const y = hr * (0.05 - k * 0.03);
+      const a = depth(y + hr * 0.04);
+      const b = depth(y - hr * 0.04);
+      if (a !== null && b !== null && a - b > drop) {
+        drop = a - b;
+        best = y;
+      }
+    }
+    return best;
+  })();
+  // (la racine un peu sous le pli : sur la lèvre du bas, juste sous celle du haut)
+  const tongueAt = onSkin(v3(0, creaseY - hr * 0.04, barLocal.z - hr * 0.15));
+  // (une vraie langue : plate, plus large et arrondie au bout, plus étroite à la racine, qui retombe un peu ; la racine
+  // au coin des lèvres, elle s'allonge vers +y)
+  const tongueGeo = own(new THREE.SphereGeometry(0.5, 20, 14));
+  {
+    const tp = tongueGeo.attributes.position;
+    for (let i = 0; i < tp.count; i++) {
+      const x = tp.getX(i);
+      const y = tp.getY(i);
+      const z = tp.getZ(i);
+      const u = y + 0.5; // (0 racine, 1 bout)
+      const w = 0.62 + 0.5 * Math.sin(Math.PI * Math.min(1, u * 0.9 + 0.1)) * (0.7 + 0.3 * u);
+      tp.setXYZ(i, x * w, u, z * 0.42 - 0.35 * u * u);
+    }
+    tongueGeo.computeVertexNormals();
+  }
+  const tongueMat = own(new THREE.MeshStandardMaterial({ color: 0xc9606c, roughness: 0.28, metalness: 0 }));
+  const tongue = new THREE.Mesh(tongueGeo, tongueMat);
+  tongue.castShadow = true;
   tongue.visible = false;
-  tongue.position.copy(tongueAt).add(v3(0.01, 0, 0)); // (un peu dans la lèvre : la langue sort d'entre les lèvres)
-  // (vers nous et un peu vers le bas et l'avant : la langue qui pend au coin de la bouche)
-  tongue.quaternion.setFromUnitVectors(v3(0, 1, 0), v3(-1, -0.75, 0.35).normalize());
-  head.add(tongue);
+  const tonguePivot = new THREE.Group();
+  tonguePivot.position.copy(tongueAt).add(v3(0.01, 0, 0)); // (la racine dans la lèvre : la langue sort d'entre les lèvres)
+  tonguePivot.add(tongue);
+  head.add(tonguePivot);
   const tongueR = 0.018 / Math.max(0.6, head.getWorldScale(v3()).x);
+  // (elle pend : vers le bas du monde, en s'écartant de la lèvre, un peu vers l'avant ; sa face large vers nous, le bout
+  // qui se recourbe vers le dehors. Refait à chaque image : quand il relève la tête, elle pend toujours vers le bas)
+  const _td = v3();
+  const _tx = v3();
+  const _tz = v3();
+  const _tq = new THREE.Quaternion();
+  const _tm = new THREE.Matrix4();
+  function hangTongue(sway) {
+    head.getWorldQuaternion(_tq).invert();
+    _td.set(0, -1, 0).applyQuaternion(_tq).multiplyScalar(0.9).add(v3(-0.3, 0, 0.25 + sway)).normalize();
+    _tz.set(1, 0, 0).addScaledVector(_td, -_td.x).normalize();
+    _tx.crossVectors(_td, _tz).normalize();
+    tonguePivot.quaternion.setFromRotationMatrix(_tm.makeBasis(_tx, _td, _tz));
+  }
+  hangTongue(0);
+  // La pâte blanche au coin des lèvres (un peu en reste, comme en vrai), qu'il lèche ensuite : de petites boules
+  // rondes et blanches, posées sur la lèvre du bas, devant la langue.
+  const pasteMat = own(new THREE.MeshStandardMaterial({ color: 0xfbf8f0, roughness: 0.45, emissive: 0x2a2822 }));
+  const pasteGeo = own(new THREE.SphereGeometry(0.007, 12, 9));
+  const paste = new THREE.Group();
+  for (const [dx, dy, dz, r] of [[0, 0, 0, 1.25], [0.002, -0.01, 0.009, 1], [0.001, 0.004, 0.014, 0.8], [0.003, -0.018, 0.002, 0.7], [0.002, -0.006, -0.01, 0.85]]) {
+    const b = new THREE.Mesh(pasteGeo, pasteMat);
+    b.position.set(-dx, dy, dz);
+    b.scale.set(0.7 * r, r, 1.1 * r);
+    paste.add(b);
+  }
+  paste.position.copy(onSkin(v3(0, creaseY - hr * 0.1, barLocal.z + hr * 0.05))).add(v3(0.002, 0, 0));
+  paste.visible = false;
+  head.add(paste);
   const ring = pulseRing(own, { r: 0.028 * Math.max(0.8, S) });
   sc.scene.add(ring);
 
@@ -103,6 +202,7 @@ export function deworm3dGame(ctx) {
   let dragRing = false;
   const sy = { placed: false, pushing: false, left: 1, drag: false, out: false };
   let grimace = 0;
+  let lickGuard = 0;
   let annoyed = 0;
   let pause = 0;
   let licked = false;
@@ -174,7 +274,22 @@ export function deworm3dGame(ctx) {
       // (la grimace : sa tête telle qu'elle est, de trois quarts, avec de la place pour la relever ; on voit la langue
       // sortir au coin des lèvres)
       sc.setFocus(null);
-      sc.frame([...pts, W(v3(0, hr * 0.5, snout * 1.15))], { dir: [0.45, 0.02, 1], pad: 1.28, now });
+      // (et les oreilles en entier, avec de la place au-dessus : il relève la tête en faisant la grimace)
+      // (couchées, elles partent en arrière : on garde aussi la place où elles seront)
+      const ears = (md.ears ?? []).flatMap((e) => {
+        const base = e.getWorldPosition(v3());
+        const tip = e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0));
+        const len = tip.distanceTo(base);
+        const back = W(v3(0, 0, -1)).sub(W(v3())).normalize();
+        return [tip.add(v3(0, 0.08 * S, 0)), base.clone().addScaledVector(back, len * 1.1).add(v3(0, len * 0.6, 0))];
+      });
+      sc.frame([sc.live('muzzle'), sc.live('poll'), ...ears, W(v3(0, hr * 0.5, snout * 1.15)), W(teethLocal.clone().add(v3(0, -hr * 0.9, 0))), W(v3(0, -hr * 1.4, 0))], { dir: [0.45, 0.02, 1], pad: 1.45, now });
+    } else if (st === 'placed') {
+      // (la seringue au coin des lèvres : la tête et toute la seringue, plus près — on voit le geste)
+      sc.setFocus(null);
+      const live = [sc.live('muzzle'), sc.live('poll'), W(v3(0, hr * 0.3, snout * 0.35)), W(teethLocal.clone().add(v3(0, -hr * 0.6, 0)))];
+      const syrPts = [holder.localToWorld(syr.at(0)), holder.localToWorld(syr.at(1)), holder.localToWorld(syr.at(1.6))];
+      sc.frame([...live, ...syrPts], { dir: [0.7, 0.05, 1], pad: 1.25, now });
     } else {
       sc.setFocus(null);
       sc.frame([...pts, L.neck], { dir: [0.7, 0.05, 1], pad: 1.35, now });
@@ -204,17 +319,29 @@ export function deworm3dGame(ctx) {
     return { pos, q };
   }
   /**
-   * La seringue dans le coin de sa bouche, dans le repère de la tête : l'embout dedans, le corps vers nous et vers le
-   * bas (la main la tient sous la ganache, comme on donne la pâte). Avant : le corps partait vers l'arrière, le piston
-   * finissait près de l'œil.
+   * La seringue dans le coin de sa bouche, dans le repère de la tête : l'embout posé au coin des lèvres, devant la peau ;
+   * le corps part de la joue vers nous, vers l'arrière et vers le bas, et se couche EN TRAVERS de l'image (on enlève
+   * presque tout ce qui va vers la caméra) : on voit toute la seringue, la graduation et la main au bout, sur le piston,
+   * loin de sa tête. (Avant : le corps partait droit vers la caméra, on ne voyait que la main et la tige du piston,
+   * plantée dans la joue comme une sucette.)
    */
-  const outL = v3(-0.62, -0.72, 0.12).normalize();
+  const _hq = new THREE.Quaternion();
   function inMouthLocal() {
-    const up = v3(0, 0, 1); // (le dessus de la seringue, sa graduation, regarde vers le bout du nez)
+    head.updateWorldMatrix(true, false);
+    const toLocal = head.getWorldQuaternion(_hq).invert();
+    const down = v3(0, -1, 0).applyQuaternion(toLocal);
+    const fwd = sc.camera.getWorldDirection(v3()).applyQuaternion(toLocal);
+    const outL = v3(-0.62, 0, 0).addScaledVector(v3(0, 0, -1), 0.42).addScaledVector(down, 0.5).normalize();
+    outL.addScaledVector(fwd, -0.85 * outL.dot(fwd));
+    // (jamais vers la tête : il reste toujours de notre côté de la joue)
+    if (outL.x > -0.25) outL.x = -0.25;
+    outL.normalize();
+    // (le dessus de la seringue, sa graduation, regarde vers nous)
+    const up = fwd.clone().negate();
     const z = new THREE.Vector3().crossVectors(outL, up).normalize();
     const y = new THREE.Vector3().crossVectors(z, outL).normalize();
     const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(outL, y, z));
-    return { pos: barLocal.clone().addScaledVector(outL, -0.01), q };
+    return { pos: tipLocal.clone(), q };
   }
   /** La même pose, dans le monde (pour la glisser jusque-là du doigt). */
   function inMouthPose() {
@@ -239,6 +366,7 @@ export function deworm3dGame(ctx) {
     holder.scale.set(1, 1, 1);
   }
   let pose = null;
+  let framePlaced = 0; // (un instant après la pose, la caméra s'approche)
 
   // ---------------------------------------------------------------- la pose : tête relevée, grimace
   const unhook = afterLife(sc, () => {
@@ -279,8 +407,15 @@ export function deworm3dGame(ctx) {
         results: results.map((r) => ({ ...r })),
         bar: sc.project(W(barLocal)), teeth: sc.project(W(teethLocal)), out: sy.out,
         /** (tests) l'embout de la seringue et la base de la langue, dans le repère de la tête */
-        tipInHead: head.worldToLocal(holder.getWorldPosition(v3())), barLocal: barLocal.clone(), tongueBase: tongue.position.clone(),
-        tongueShown: tongue.visible,
+        tipInHead: head.worldToLocal(holder.getWorldPosition(v3())), barLocal: barLocal.clone(), tongueBase: tonguePivot.position.clone(),
+        tongueShown: tongue.visible, pasteShown: paste.visible, weightShown: !sy.out,
+        ears: (md.ears ?? []).map((e) => sc.project(e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0)))),
+        /** (tests) la seringue (repère monde) : l'embout, le milieu du corps, le bout du corps ; et à l'écran */
+        bodyWorld: [holder.localToWorld(v3()), holder.localToWorld(syr.at(0.5)), holder.localToWorld(syr.at(1))],
+        bodyScreen: [sc.project(holder.localToWorld(v3())), sc.project(holder.localToWorld(syr.at(1)))],
+        tongueTip: tongue.visible ? sc.project(tongue.localToWorld(v3(0, 1, 0))) : null,
+        /** (tests) la langue, repère monde : la racine, le milieu, le bout */
+        tongueWorld: tongue.visible ? [0.05, 0.5, 0.95].map((u) => tongue.localToWorld(v3(0, u, -0.35 * u * u * 0.42 / 0.42))) : null,
         syringe: rp ? sc.project(holder.localToWorld(syr.at(0.45))) : null,
         ringX: sc.project(holder.localToWorld(syr.ringAt(kOf(dose)))),
         doseAt: (w) => sc.project(holder.localToWorld(syr.ringAt(kOf(w)))),
@@ -323,6 +458,7 @@ export function deworm3dGame(ctx) {
       const teeth = sc.project(W(teethLocal));
       if (dist2(tip, bar) < 48 && dist2(tip, bar) <= dist2(tip, teeth) + 6) {
         sy.placed = true;
+        framePlaced = 0.15;
         ctx.hint(t('mg_deworm_push', { name }), 'good');
         m.ears = 'back';
         m.nod = 0.4;
@@ -330,7 +466,7 @@ export function deworm3dGame(ctx) {
         annoyed = 1;
         m.annoyed = 1.2;
         const h = sc.project(L.poll);
-        fx.float(h.x, h.y - 20, '💢', 22);
+        fx.float(h.x, Math.max(ctx.view.y0 + 34, h.y - 20), '💢', 22);
         ctx.hint(t('mg_deworm_teeth', { name }), 'warn');
         snort(sc);
       }
@@ -348,12 +484,32 @@ export function deworm3dGame(ctx) {
     update(dt) {
       annoyed = Math.max(0, annoyed - dt);
       grimace = Math.max(0, grimace - dt * (sy.out ? 0.3 : 0.5));
+      // (la grimace : il secoue et relève la tête ; si une oreille ou le nez touche le bord, on recadre)
+      lickGuard -= dt;
+      if (sy.out && lickGuard <= 0 && sc.settled(0.05)) {
+        lickGuard = 0.8;
+        const v = ctx.view;
+        const out = [sc.live('muzzle'), ...(md.ears ?? []).map((e) => e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0)))].some((p) => {
+          const q = sc.project(p);
+          return q.behind || q.x < v.x0 + 14 || q.x > v.x1 - 14 || q.y < v.y0 + 14 || q.y > v.y1 - 14;
+        });
+        if (out) frameFor('lick');
+      }
       if (pause > 0) pause = Math.max(0, pause - dt);
       // la seringue : au repos (devant nous), tenue (sous le doigt) ou dans sa bouche
       syr.setDose(kOf(dose));
       syr.setLeft(sy.left);
-      if (sy.placed && !sy.out) holdInMouth();
-      else if (!sy.drag) {
+      if (sy.placed && !sy.out) {
+        holdInMouth();
+        handInMouth();
+        if (framePlaced > 0) {
+          framePlaced -= dt;
+          if (framePlaced <= 0) frameFor('placed');
+        }
+      } else if (!sy.drag) {
+        hand.position.copy(handRest.p);
+        hand.quaternion.copy(handRest.q);
+        hand.scale.setScalar(0.9);
         freeFromMouth();
         pose = restPose();
         const k = Math.min(1, dt * (sy.out ? 4 : 7));
@@ -389,10 +545,17 @@ export function deworm3dGame(ctx) {
       const tk = sy.out ? smooth(clamp((grimace - 0.2) / 0.35)) : 0;
       tongue.visible = tk > 0.02;
       if (tongue.visible) {
-        const lick = 0.55 + 0.45 * Math.abs(Math.sin(sc.time * 5));
-        const len = tongueR * 2.9 * tk * lick;
-        tongue.scale.set(tongueR * 2.9, len, tongueR * 0.95);
+        // (elle sort, lèche le coin des lèvres, rentre à moitié et ressort ; le bout bouge)
+        // (elle reste bien visible : elle ne rentre jamais à moins des trois quarts)
+        const lick = 0.78 + 0.22 * Math.abs(Math.sin(sc.time * 4.2));
+        const len = Math.max(tongueR * 4.4, hr * 0.9) * tk * lick;
+        tongue.scale.set(tongueR * 2.9, len, tongueR * 3.2);
+        hangTongue(Math.sin(sc.time * 3.1) * 0.15);
       }
+      // la pâte au coin des lèvres : dès qu'elle sort, jusqu'à ce qu'il l'ait léchée
+      const pk = sy.left < 0.95 ? (sy.out ? clamp((grimace - 0.05) / 0.3) : 1) : 0;
+      paste.visible = pk > 0.02;
+      if (paste.visible) paste.scale.setScalar(Math.max(0.6, S) * (0.4 + 0.6 * pk) * Math.min(1, (1 - sy.left) * 2.5));
       // il regarde la seringue (curieux), puis la supporte, oreilles couchées
       const fidget = busy.update(dt, sy.drag || dragRing || sy.pushing || ctx.done);
       if (!fidget) m.lift = null;
@@ -406,13 +569,15 @@ export function deworm3dGame(ctx) {
     draw(g) {
       if (!sc.ready) return;
       const v = ctx.view;
-      // le poids du cheval
-      g.save();
-      g.fillStyle = 'rgba(255,255,255,0.9)';
-      rrect(g, v.x0 + 12, v.y0 + 12, 170, 40, 12);
-      g.fill();
-      label(g, `⚖️ ${t('mg_deworm_weight', { kg })}`, v.x0 + 97, v.y0 + 12 + 20, 16, '#23302a');
-      g.restore();
+      // le poids du cheval (pas pendant la grimace : l'étiquette passait sur ses oreilles, la dose est donnée)
+      if (!sy.out) {
+        g.save();
+        g.fillStyle = 'rgba(255,255,255,0.9)';
+        rrect(g, v.x0 + 12, v.y0 + 12, 170, 40, 12);
+        g.fill();
+        label(g, `⚖️ ${t('mg_deworm_weight', { kg })}`, v.x0 + 97, v.y0 + 12 + 20, 16, '#23302a');
+        g.restore();
+      }
       if (stage === 'dose') {
         // la dose réglée, au-dessus de la bague
         const q = sc.project(holder.localToWorld(syr.ringAt(kOf(dose)).add(v3(0, 0.03, 0))));
@@ -430,7 +595,7 @@ export function deworm3dGame(ctx) {
     destroy() {
       unhook();
       sc.setFocus(null);
-      head.remove(tongue);
+      head.remove(tonguePivot, paste);
       holder.parent?.remove(holder);
       sc.scene.remove(ring);
       own.free();

@@ -209,9 +209,15 @@ describe('tresser en 3D', () => {
       run(ctx, game, sc, 2, 1 / 30, () => { worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min); });
       expect(worst, key).toBeGreaterThanOrEqual(0.05);
       const seen = [];
+      let toTail = false;
       braidKeys(game, ctx, 'blue', () => {
         run(ctx, game, sc, 0.2);
         seen.push(game.peek().knobs);
+        // (vers la queue : un changement de plan net, pas un long glissement le long du dos où la tête est coupée)
+        if (game.peek().view === 'tail' && !toTail) {
+          toTail = true;
+          expect(sc.settled(0.01), `${key} : plan net vers la queue`).toBe(true);
+        }
         // (gros plan de la crinière, tresses puis rubans : la tête toujours entière)
         // (en revenant de la queue, un changement de plan net : la tête est là tout de suite)
         const v = game.peek().view;
@@ -220,6 +226,7 @@ describe('tresser en 3D', () => {
         }
       });
       expect(worst, `${key} (tresses et rubans)`).toBeGreaterThanOrEqual(0.05);
+      expect(toTail).toBe(true);
       // les boutons sont venus un par un (jamais moins qu'avant), tous à la fin
       for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1]);
       const s = game.peek();

@@ -680,7 +680,9 @@ export function braid3dGame(ctx) {
     sc.setFocus(0, Math.max(sc.size.h * 0.5, (o.y * ctx.view.scale + ctx.view.oy) - 6));
     if (what === 'tail') {
       const pts = [L.tail, L.croup, L.tailTip, L.tail.clone().lerp(L.tailTip, 0.5).add(v3(0, 0, 0.15 * S)), L.croup.clone().add(v3(0.3 * S, 0.12 * S, 0)), L.croup.clone().add(v3(0.1 * S, -0.45 * S, 0))];
-      sc.frame(pts, { dir: [-0.6, 0.22, 1], pad: 1.2, half: 0.6 });
+      // (un changement de plan net vers la queue, comme au retour : pendant un long glissement le long du dos, on
+      // voyait l'encolure en gros plan avec la tête coupée au bord)
+      sc.frame(pts, { dir: [-0.6, 0.22, 1], pad: 1.2, half: 0.6, now: true });
       return;
     }
     // la crinière : toute l'encolure et la tête (ses vrais bords : bout du nez, oreilles), de notre côté, un peu d'en haut ; la même vue pour chaque tresse

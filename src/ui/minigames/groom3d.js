@@ -389,7 +389,10 @@ export function gknots3dGame(ctx) {
     if (part === 'mane') {
       maneFollow.set({}, () => [...pts, L.withers, L.neck.clone().add(v3(0, -0.25 * S, 0))]);
       maneFollow.frame(false);
-    } else sc.frame([...pts, L.tail, L.croup, L.tailTip, L.tailTip.clone().add(v3(0, -0.1, 0))], { dir: [-0.25, 0.15, 1], pad: 1.25 });
+    } else {
+      // la queue : un changement de plan net (un long glissement le long du dos montrait un cheval sans tête)
+      sc.frame([...pts, L.tail, L.croup, L.tailTip, L.tailTip.clone().add(v3(0, -0.1, 0))], { dir: [-0.25, 0.15, 1], pad: 1.25, now: true });
+    }
   }
 
   function work(p) {

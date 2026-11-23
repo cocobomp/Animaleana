@@ -152,8 +152,12 @@ describe('séchage en 3D', () => {
 describe('démêlage en 3D', () => {
   /** Peigne chaque nœud de haut en bas (lent : doux ; rapide : ça tire). */
   function combAll(sc, game, ctx, fast = false) {
+    let wasOn = game.peek().on;
     for (let i = 0; i < 40 && !ctx.done; i++) {
       const s = game.peek();
+      // (vers la queue : un changement de plan net, la caméra est déjà posée)
+      if (s.on === 'tail' && wasOn !== 'tail') expect(sc.settled(0.01), 'plan net vers la queue').toBe(true);
+      wasOn = s.on;
       const k = s.knots.find((x) => x.part === s.on) ?? s.knots[0];
       if (!k) break;
       ctx.pointer.down = true;

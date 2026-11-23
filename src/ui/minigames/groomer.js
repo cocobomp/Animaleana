@@ -9,13 +9,13 @@ import { ACCESSORIES, ACC_COLORS } from '../../sim/groomer.js';
 
 const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
 
-/** Décor du salon : carrelage pastel et tapis. */
 /**
  * Le cheval dessiné du salon (repli sans 3D) : le beau cheval de profil du vétérinaire (drawHorseVet : mêmes options
  * et même géométrie que drawAnimal, les zones tombent juste) ; les autres animaux gardent drawAnimal.
  */
 const drawBody = (g, a, o) => (a.species === 'horse' ? drawHorseVet(g, a, o) : drawAnimal(g, a, o));
 
+/** Décor du salon : carrelage pastel et tapis. */
 function salonBackground(g, ctx, floorY = 300) {
   fillView(g, ctx.view, '#fdf0f5', '#f7dbe6');
   tiles(g, ctx.view, '#fbe6ee', '#f3cfdd', 44);

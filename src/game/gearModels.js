@@ -172,10 +172,26 @@ function solid(geo) {
  * dans la joue, l'autre dressée (un bâton, un point rouge qui sortait de la joue).
  */
 function strap(pts, halfWidth, thick, closed = false, side = [0, 0, 1]) {
-  const list = closed ? [pts[pts.length - 1], ...pts, pts[0], pts[1]] : pts;
-  return solid(loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
-    radial: 6, sub: closed ? 1 : 2, side, capStart: !closed, capEnd: !closed,
+  // (boucle fermée : le tour une fois, revenu au premier point, puis le dernier anneau soudé au premier. Avant, le tube
+  // repassait sur ses deux premiers segments : deux tubes l'un dans l'autre, un peu tournés, un cran clair sur la têtière.)
+  const list = closed ? [...pts, pts[0]] : pts;
+  const geo = solid(loft(list.map((p) => ({ p: [p.x, p.y, p.z], rx: halfWidth, ry: thick })), {
+    radial: 6, sub: 2, side, capStart: !closed, capEnd: !closed,
   }));
+  if (closed) {
+    const W = 7;
+    const last = (geo.userData.frame.rings.length - 1) * W;
+    const pos = geo.attributes.position;
+    const nrm = geo.attributes.normal;
+    const v = new THREE.Vector3();
+    for (let j = 0; j < W; j++) {
+      pos.setXYZ(last + j, pos.getX(j), pos.getY(j), pos.getZ(j));
+      v.set(nrm.getX(j) + nrm.getX(last + j), nrm.getY(j) + nrm.getY(last + j), nrm.getZ(j) + nrm.getZ(last + j)).normalize();
+      nrm.setXYZ(j, v.x, v.y, v.z);
+      nrm.setXYZ(last + j, v.x, v.y, v.z);
+    }
+  }
+  return geo;
 }
 
 /**

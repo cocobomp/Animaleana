@@ -114,3 +114,44 @@ describe('🏁 les drapeaux du retour', () => {
     expect(min).toBeGreaterThan(1.2);
   });
 });
+
+describe('🎀 cheval mené au pas vers le juge (rig.focus.pair de côté, posé par Beauty.update)', () => {
+  for (const [label, aspect] of [['téléphone en hauteur', PORTRAIT], ['en largeur', LANDSCAPE]]) {
+    it(`${label} : en marchant et en tournant vers le juge, la caméra reste loin de lui et le montre entier`, () => {
+      const cam = new THREE.PerspectiveCamera(60, aspect, 0.1, 500);
+      const rig = new CameraRig(cam);
+      const child = V(0, 0, 0);
+      const p = { position: child, eyeHeight: 1.5, heading: 0, speed: 1.2, auto: true, mount: null, avatar: { root: { visible: true } } };
+      const e = { position: V(0, 0, 0), heading: 0, scale: 1 };
+      rig.yaw = 0;
+      let worst = 99;
+      for (let i = 0; i < 300; i++) {
+        // (à mi-chemin, l'enfant tourne d'un quart de tour vers la gauche, vers le juge)
+        if (i === 120) p.heading = Math.PI / 2;
+        p.yaw = p.heading;
+        child.x += Math.sin(p.heading) * 1.2 / 30;
+        child.z += Math.cos(p.heading) * 1.2 / 30;
+        // (le cheval 1,1 m à droite de l'enfant, 0,5 m derrière : Beauty.animalGoal)
+        const right = V(-Math.cos(p.heading), 0, Math.sin(p.heading));
+        const fwd = V(Math.sin(p.heading), 0, Math.cos(p.heading));
+        e.position.copy(child).addScaledVector(right, 1.1).addScaledVector(fwd, -0.5);
+        e.heading = p.heading;
+        rig.yaw += (p.heading - rig.yaw) * Math.min(1, 3 / 30);
+        rig.focus = { pair: e.position, side: true, scale: 1 };
+        rig.update(1 / 30, still(), p, world);
+        if (i < 60) continue;
+        cam.updateMatrixWorld(true);
+        worst = Math.min(worst, ...HORSE.map((q) => toWorld(e, q).distanceTo(cam.position)));
+        if (i > 200) {
+          for (const q of HORSE) {
+            const s = toWorld(e, q).project(cam);
+            expect(Math.abs(s.x), `${i} ${q}`).toBeLessThan(1);
+            expect(Math.abs(s.y), `${i} ${q}`).toBeLessThan(1);
+          }
+        }
+      }
+      // (jamais tout près de lui, même pendant le virage)
+      expect(worst).toBeGreaterThan(2.2);
+    });
+  }
+});

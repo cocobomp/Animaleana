@@ -885,9 +885,13 @@ class BeautySession extends Session {
     const pl = g.player;
     const e = this.e;
     // La caméra cadre l'animal mené avec l'enfant (pas quand il est porté, sur la table ou au podium).
-    g.rig.frameWith = this.carried || this.onTable || this.phase === 'podium' ? null : e;
+    // Un cheval mené au pas ou au trot : la caméra de côté, du côté où il n'est pas, comme quand il suit la joueuse
+    // (rig.focus.pair avec side) ; avant, en tournant vers le juge, il passait tout près de la caméra (tête géante).
+    const sideHorse = e.data.species === 'horse' && !this.carried && !this.onTable && (this.phase === 'walk' || this.phase === 'trot' || this.state === 'countdown');
+    g.rig.frameWith = this.carried || this.onTable || this.phase === 'podium' || sideHorse ? null : e;
+    if (sideHorse && !g.rig.focus) g.rig.focus = { pair: e.position, side: true, scale: e.scale ?? 1 };
     // (décor du terrain et arche d'arrivée : la caméra qui recule pour cadrer se place devant eux — Player.js)
-    g.rig.occluders = g.rig.frameWith ? [this.flags, g.world.showground].filter(Boolean) : null;
+    g.rig.occluders = g.rig.frameWith || sideHorse ? [this.flags, g.world.showground].filter(Boolean) : null;
     this.phaseT += dt;
     this.judgeSprite.position.y = this.y(this.judgeSprite.position.x, this.judgeSprite.position.z) + 2.15 + Math.sin(this.time * 2) * 0.03;
     if (this.judgeNpc) {

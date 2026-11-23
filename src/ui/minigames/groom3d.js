@@ -367,6 +367,7 @@ export function gknots3dGame(ctx) {
   let badLen = 0;
   let saidTail = false;
   let on = null;
+  const maneFollow = headFollow(sc, headShape(sc), () => [], { dir: [0.2, 0.2, 1], pad: 1.22, half: 0.5, reach: 0.06 });
   const progress = () => 1 - knots.reduce((n, k) => n + k.left, 0) / Math.max(1, total);
   ctx.hint(t('mg_gknots3d_hint'));
 
@@ -382,8 +383,12 @@ export function gknots3dGame(ctx) {
     if (on === part) return;
     on = part;
     const pts = knots.filter((k) => k.part === part).map((k) => k.mesh.getWorldPosition(v3()));
-    if (part === 'mane') sc.frame([...pts, L.withers, L.poll, ...L.ears, L.neck.clone().add(v3(0, -0.25 * S, 0))], { dir: [0.15, 0.2, 1], pad: 1.3 });
-    else sc.frame([...pts, L.tail, L.croup, L.tailTip, L.tailTip.clone().add(v3(0, -0.1, 0))], { dir: [-0.25, 0.15, 1], pad: 1.25 });
+    // la crinière : toute la tête aussi (avant, le bout du nez et la moitié de la tête sortaient à droite) ; elle est
+    // suivie en douceur quand il tourne un peu la tête
+    if (part === 'mane') {
+      maneFollow.set({}, () => [...pts, L.withers, L.neck.clone().add(v3(0, -0.25 * S, 0))]);
+      maneFollow.frame(false);
+    } else sc.frame([...pts, L.tail, L.croup, L.tailTip, L.tailTip.clone().add(v3(0, -0.1, 0))], { dir: [-0.25, 0.15, 1], pad: 1.25 });
   }
 
   function work(p) {
@@ -471,6 +476,7 @@ export function gknots3dGame(ctx) {
       if (!ctx.done) sc.setFocus(40 * ctx.view.scale, sc.size.h);
       if (!started) sc.reframe(true);
       started = true;
+      if (!ctx.done && on === 'mane') maneFollow.update(dt);
       const maneLeft = knots.some((k) => k.part === 'mane' && k.left > 0);
       if (!ctx.done) {
         if (!maneLeft && on === 'mane') {

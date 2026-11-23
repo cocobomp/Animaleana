@@ -182,6 +182,24 @@ describe('démêlage en 3D', () => {
     sc.dispose();
   }, 30000);
 
+  it('la crinière : toute la tête reste dans l\'image (bout du nez et oreilles, marge ≥ 5 %), pour 5 chevaux', async () => {
+    const headFrame = await import('../src/ui/minigames/headFrame.js');
+    for (const [breed, foal] of [['selle_francais', false], ['frison', false], ['shetland', false], ['falabella', false], ['selle_francais', true]]) {
+      const { a, sc } = makeStage({ breed, foal });
+      const ctx = salonCtx(a, sc);
+      const game = groom3d.gknots3dGame(ctx);
+      const shape = headFrame.headShape(sc);
+      let worst = 9;
+      run(ctx, game, sc, 2.5, 1 / 30, (k) => {
+        if (k > 20 && game.peek().on === 'mane') worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min);
+      });
+      expect(game.peek().on, breed).toBe('mane');
+      expect(worst, `${breed}${foal ? ' poulain' : ''}`).toBeGreaterThanOrEqual(0.05);
+      game.destroy();
+      sc.dispose();
+    }
+  }, 60000);
+
   it('trop vite, ça tire : « Aïe », et la même note que le jeu dessiné (moins un seizième par coup de trop)', () => {
     const { a, sc } = makeStage({ breed: 'shetland' });
     const ctx = salonCtx(a, sc);

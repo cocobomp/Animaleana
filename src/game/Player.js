@@ -1067,6 +1067,13 @@ export const RIDER_TOP = 1.05;
  * crinière et les rênes en bas de l'écran, le chemin au-dessus.
  */
 export const RIDE_FP = { eye: 0.85, ahead: -0.1, down: -0.35, downMax: -0.5, fovTall: 80 };
+/**
+ * Un cheval qui suit la joueuse (« Me suivre ») ou qu'elle mène en main : il marche derrière elle, entre elle et la
+ * caméra (on ne voyait que sa tête géante, coupée en bas, ou rien). La caméra se met de côté (az rad, à droite), vise
+ * entre eux deux à mi-hauteur (aimY m × sa taille) et recule selon l'écart : near + far × sa taille + sep × l'écart
+ * (× tall sur un écran en hauteur : ≈ 30° de large).
+ */
+export const FOLLOW_CAM = { az: 0.55, aimY: 0.9, near: 2.5, far: 3.3, sep: 0.7, tall: 1.1 };
 /** Œil du cavalier au-dessus de la selle (m) : Player.eyeHeight. */
 export const RIDER_EYE = 1.15;
 // (vecteurs de travail du cadrage, voir CameraRig.focus)
@@ -1267,17 +1274,26 @@ export class CameraRig {
     // Azimut de la caméra autour de la cible : derrière (le lacet) ; à cheval, de trois quarts à droite du cheval,
     // gardé près de cet angle par rapport au cheval quand on ne touche pas à la vue (dans un virage, le lacet suit
     // le cheval avec retard).
-    const azWant = mount && this.mode === 'third' ? rideAzimuth(sc) : 0;
-    this.azOff = (this.azOff ?? 0) + (azWant - (this.azOff ?? 0)) * Math.min(1, dt * 3);
+    // (cheval qui suit ou mené en main : rig.focus.pair avec side, posé par Game.frame — lu ici, consommé plus bas)
+    const follow = !mount && this.mode === 'third' && this.focus?.pair && this.focus.side ? this.focus : null;
+    if (follow) {
+      // (du côté où il n'est pas : à côté d'elle à droite, il passait entre elle et la caméra ; on ne change de côté que
+      // s'il est franchement de l'autre, à 40 cm au moins)
+      const lat = (follow.pair.x - p.x) * Math.cos(this.yaw) - (follow.pair.z - p.z) * Math.sin(this.yaw);
+      if (Math.abs(lat) > 0.4) this.followSide = lat > 0 ? 1 : -1;
+    }
+    const azWant = mount && this.mode === 'third' ? rideAzimuth(sc) : follow ? FOLLOW_CAM.az * (this.followSide ?? 1) : 0;
+    this.azOff = (this.azOff ?? 0) + (azWant - (this.azOff ?? 0)) * Math.min(1, dt * (follow ? 1.5 : 3));
     let off = this.azOff;
-    if (azWant && this.idleLook > 1.5) {
+    if (mount && azWant && this.idleLook > 1.5) {
       // (pas lissé : le cheval tourne vite, jusqu'à 3 rad/s ; la position de la caméra, elle, est lissée plus bas)
       const lag = wrapAngle(this.yaw - player.heading);
       const rel = lag + off;
       if (rel < azWant - RIDE_CAM.slack) off = azWant - RIDE_CAM.slack - lag;
       else if (rel > azWant + RIDE_CAM.slackOut) off = azWant + RIDE_CAM.slackOut - lag;
     }
-    let camYaw = this.yaw + off * ride;
+    // (à cheval, l'angle vient avec ride ; à pied, il s'éteint de lui-même avec azOff)
+    let camYaw = this.yaw + (mount ? off * ride : off);
     // Angle de vue et distance : ceux de la joueuse à pied ; à cheval, ceux de RIDE_CAM (le réglage de la joueuse,
     // pincer et glisser, s'y ajoute).
     const ridePitch = THREE.MathUtils.clamp(RIDE_CAM.pitch + this.pitch - 0.35, 0.02, 1.1);
@@ -1311,14 +1327,14 @@ export class CameraRig {
     // À cheval le long d'un mur (écurie, maison) : la caméra revient vers l'arrière du cheval jusqu'à ne plus entrer
     // dans le bâtiment (avant de monter ou de se rapprocher) ; lissé.
     let sideF = 1;
-    if (ride > 0.001 && Math.abs(off) > 0.01) {
+    if ((ride > 0.001 || !mount) && Math.abs(off) > 0.01) {
       for (let i = 8; i >= 0; i--) {
         sideF = i / 8;
-        if (!blocked(basePitch, dist, this.yaw + off * ride * sideF)) break;
+        if (!blocked(basePitch, dist, this.yaw + (mount ? off * ride : off) * sideF)) break;
       }
     }
     this.sideF = (this.sideF ?? sideF) + (sideF - (this.sideF ?? sideF)) * Math.min(1, dt * 6);
-    camYaw = this.yaw + off * ride * Math.min(sideF, this.sideF);
+    camYaw = this.yaw + (mount ? off * ride : off) * Math.min(sideF, this.sideF);
     if (blocked(basePitch, dist)) {
       let pitch = basePitch;
       while (pitch < 1.35 && blocked(pitch, dist)) pitch += 0.1;
@@ -1345,10 +1361,18 @@ export class CameraRig {
     this.focus = null;
     this.pairK = (this.pairK ?? 0) + ((f?.pair ? 1 : 0) - (this.pairK ?? 0)) * Math.min(1, dt * 2.5);
     if (f?.pair) (this.pairAt ??= new THREE.Vector3()).copy(f.pair);
+    this.pairSide = (this.pairSide ?? 0) + ((f?.pair && f.side ? 1 : 0) - (this.pairSide ?? 0)) * Math.min(1, dt * 2.5);
+    if (f?.pair) this.pairScale = f.scale ?? 1;
     if (this.pairK > 0.001 && this.pairAt) {
       const sep = Math.hypot(this.pairAt.x - target.x, this.pairAt.z - target.z);
-      target.lerp(_pv.set(this.pairAt.x, target.y - 0.25, this.pairAt.z), 0.45 * this.pairK);
-      dist += Math.min(2.4, sep * 0.9) * this.pairK;
+      // (chien en laisse : entre les deux, plus loin ; cheval qui suit : entre les deux, à mi-hauteur, de côté)
+      const s2 = this.pairSide;
+      const ps = this.pairScale ?? 1;
+      const y = target.y - 0.25 + (p.y + FOLLOW_CAM.aimY * ps - (target.y - 0.25)) * s2;
+      target.lerp(_pv.set(this.pairAt.x, y, this.pairAt.z), (0.45 + 0.05 * s2) * this.pairK);
+      target.y += (y - target.y) * s2 * this.pairK;
+      const far = (FOLLOW_CAM.near + FOLLOW_CAM.far * ps + FOLLOW_CAM.sep * Math.min(5, sep)) * (this.camera.aspect < 0.8 ? FOLLOW_CAM.tall : 1);
+      dist += (Math.min(2.4, sep * 0.9) * (1 - s2) + (far - dist) * s2) * this.pairK;
     }
     const want = target.clone().addScaledVector(back, dist);
     // Décor qui coupe la vue (concours de beauté : arche d'arrivée, panneau du terrain, cabane du jury, barrières —

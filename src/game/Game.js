@@ -1376,10 +1376,17 @@ export class Game {
     this.player.afterSessions?.(); // rênes : à la place finale du cheval et du cavalier (saut soulevé)
     if (mgmt) this.mgmt.update(dt, ctrl);
     else if (!this.tripFlow.viewCamera(dt, ctrl)) { // (vue dans le véhicule : TripFlow place la caméra)
-      // (chien en laisse : la caméra cadre la joueuse et le chien ensemble — le teckel sortait de l'écran en courant)
+      // (chien en laisse : la caméra cadre la joueuse et le chien ensemble — le teckel sortait de l'écran en courant ;
+      // cheval qui suit ou mené en main : de côté, eux deux entiers — il marchait entre elle et la caméra)
       if (!this.rig.focus) {
         for (const e of entities) {
-          if (e.data.following && e.data.leashed && canLeash(e.data) && !e.inside) {
+          if (!e.data.following || e.inside) continue;
+          if (e.data.species === 'horse') {
+            if (this.player.mount || e.ridden) continue;
+            this.rig.focus = { pair: e.position, side: true, scale: e.scale ?? 1 };
+            break;
+          }
+          if (e.data.leashed && canLeash(e.data)) {
             this.rig.focus = { pair: e.position };
             break;
           }

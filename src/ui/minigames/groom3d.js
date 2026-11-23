@@ -452,7 +452,9 @@ export function gknots3dGame(ctx) {
       ctx.finish(1 - clamp(tugs / 8) * 0.5, tugs <= 1 ? t('mg_gknots_end', { name: a.name }) : undefined);
       nicker(sc);
       m.nod = 1;
-      sc.frame([L.muzzle, L.poll, ...L.ears, L.tail, L.croup, ...L.hooves], { dir: [0.35, 0.18, 1], pad: 1.12, half: 0.7 });
+      // tout le cheval, avec les vrais bords de sa tête (il hoche la tête : on la suit, au-dessus de la carte de fin)
+      maneFollow.set({ dir: [0.35, 0.18, 1], pad: 1.14, half: 0.6 }, () => [L.tail, L.croup, L.withers, ...L.hooves]);
+      maneFollow.frame(false);
     }
   }
 
@@ -476,7 +478,7 @@ export function gknots3dGame(ctx) {
       if (!ctx.done) sc.setFocus(40 * ctx.view.scale, sc.size.h);
       if (!started) sc.reframe(true);
       started = true;
-      if (!ctx.done && on === 'mane') maneFollow.update(dt);
+      if (ctx.done || on === 'mane') maneFollow.update(dt);
       const maneLeft = knots.some((k) => k.part === 'mane' && k.left > 0);
       if (!ctx.done) {
         if (!maneLeft && on === 'mane') {

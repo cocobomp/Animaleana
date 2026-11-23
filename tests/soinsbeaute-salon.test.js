@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import * as THREE from 'three';
 import { fakeCtx } from './fixtures/careCtx.js';
-import { loadStageMods, makeStage, ctxFor, run } from './fixtures/soinsbeauteStage.js';
+import { loadStageMods, makeStage, ctxFor, run, endCard } from './fixtures/soinsbeauteStage.js';
 
 let t;
 let sim;
@@ -168,7 +168,7 @@ describe('démêlage en 3D', () => {
     }
   }
 
-  it('la crinière, puis la queue, de haut en bas, doucement : tout est démêlé, note pleine', () => {
+  it('la crinière, puis la queue, de haut en bas, doucement : tout est démêlé, note pleine ; la tête entière à la carte de fin', async () => {
     const { a, sc } = makeStage({ breed: 'frison' });
     const ctx = salonCtx(a, sc);
     const game = groom3d.gknots3dGame(ctx);
@@ -178,6 +178,13 @@ describe('démêlage en 3D', () => {
     combAll(sc, game, ctx);
     expect(ctx.done).toBe(true);
     expect(ctx.finished.q).toBe(1);
+    // la carte de fin : tout le cheval au-dessus, la tête entière (marge ≥ 5 %)
+    const headFrame = await import('../src/ui/minigames/headFrame.js');
+    const shape = headFrame.headShape(sc);
+    endCard(sc, 0.5);
+    let worst = 9;
+    run(ctx, game, sc, 4, 1 / 30, (k) => { if (k > 60) worst = Math.min(worst, headFrame.headMargins(sc, shape.points(0)).min); });
+    expect(worst).toBeGreaterThanOrEqual(0.05);
     game.destroy();
     sc.dispose();
   }, 30000);

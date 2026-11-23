@@ -1030,6 +1030,7 @@ const fr = {
   statusLess: '➖ Replier',
   r_needBridle: 'Il faut mettre un filet ou un licol à {name} pour le monter (fiche de l\'animal).',
   r_needBridle_f: 'Il faut mettre un filet ou un licol à {name} pour la monter (fiche de l\'animal).',
+  r_horseLoading: '{name} arrive, encore un petit instant…',
   r_putHalterFirst: 'On met d\'abord le licol à {name}.', // (« 🏇 Monter » sans filet : celui qui reste à la sellerie)
   ridingBareback: 'Tu montes {name} à cru (sans selle) : il galope moins vite. Choisis l\'allure : 🐢 pas, 🐴 trot, 💨 galop !',
   ridingBareback_f: 'Tu montes {name} à cru (sans selle) : elle galope moins vite. Choisis l\'allure : 🐢 pas, 🐴 trot, 💨 galop !',
@@ -3349,6 +3350,7 @@ const en = {
   statusMore: '➕ {n} more',
   statusLess: '➖ Show less',
   r_needBridle: '{name} needs a bridle to be ridden (animal card or the stable\'s tack room).',
+  r_horseLoading: '{name} is on the way, just a moment…',
   r_putHalterFirst: 'We\'ll put the halter on {name} first.',
   ridingBareback: 'You are riding {name} bareback (no saddle): a slower canter. Pick the gait: 🐢 walk, 🐴 trot, 💨 canter!',
   do_tack: 'Tack room (saddles, blankets…)',

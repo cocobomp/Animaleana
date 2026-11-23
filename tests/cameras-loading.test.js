@@ -99,6 +99,32 @@ describe('⏳ le cheval réaliste attendu', () => {
     Game.prototype.swapRealHorses.call(g2);
     expect(s.rebuilt).toBe(0);
   });
+
+  it('caché en entier : selle et filet, bulle « il te demande » ; pas d\'étiquette de nom ; on ne le monte pas', () => {
+    setRealHorsePending(true);
+    let e;
+    try {
+      e = horse();
+    } finally {
+      setRealHorsePending(false);
+    }
+    // (le groupe du modèle, où sont aussi la selle et le filet)
+    expect(e.scaleGroup.visible).toBe(false);
+    e.wish = { id: 'hay', icon: '🌾' };
+    e.updateStatus({});
+    expect(e.status.visible).toBe(false);
+    // l'étiquette HTML : Game.frame ne la passe pas à updateLabels ; monter : un petit mot, rien d'autre
+    const toasts = [];
+    const g = { profile: { animals: [e.data] }, entities: new Map([[e.data.id, e]]), ui: { toast: (m) => toasts.push(m) }, player: { mount: null }, isHome: true };
+    const r = Game.prototype.ride.call(g, e.data);
+    expect(r).toBe(null);
+    expect(g.player.mount).toBe(null);
+    expect(toasts).toEqual([expect.stringContaining(e.data.name)]);
+    // chargement impossible : tout revient
+    const list = [e];
+    Game.prototype.showFallbackHorses.call({ allEntities: () => list });
+    expect(e.scaleGroup.visible).toBe(true);
+  });
 });
 
 describe('📸 ce qui peut cacher le cheval sur une photo souvenir (Game.photoOccluders)', () => {

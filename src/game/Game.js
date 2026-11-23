@@ -317,6 +317,7 @@ export class Game {
       if (!e.waitingReal) continue;
       e.waitingReal = false;
       if (e.model?.root) e.model.root.visible = true;
+      if (e.scaleGroup) e.scaleGroup.visible = true;
     }
   }
 
@@ -1422,7 +1423,8 @@ export class Game {
       this.rig.update(dt, ctrl, this.player, this.world);
       this.fadeOccluders();
     }
-    this.ui.updateLabels(entities, this.camera, this.player.position);
+    // (pas d'étiquette pour un cheval caché en attendant son vrai modèle : son nom flottait au-dessus de rien)
+    this.ui.updateLabels(entities.some((e) => e.waitingReal) ? entities.filter((e) => !e.waitingReal) : entities, this.camera, this.player.position);
     this.updateLeashes(entities);
     this.interiors.update(dt);
     this.horseBreath.update(wdt, entities, this); // 🌬️ (buée des naseaux quand il fait froid, vapeur s'il a transpiré)
@@ -2442,6 +2444,11 @@ export class Game {
   }
 
   ride(a, bareback = false) {
+    // (cheval caché en attendant son vrai modèle : on ne monte pas sur rien)
+    if (this.entities.get(a.id)?.waitingReal) {
+      this.ui.toast(t('r_horseLoading', { name: a.name }), 3000);
+      return null;
+    }
     const r = canRide(a);
     if (!r.ok) return this.ui.toast(ta(`r_${r.reason}`, a));
     let gear = rideGear(a, bareback);

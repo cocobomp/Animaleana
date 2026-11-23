@@ -1420,6 +1420,9 @@ export class Game {
           }
         }
       }
+      // (séance à cheval vers des repères — saut, leçon, dressage, balade : la caméra montre ce qui arrive devant)
+      const ses = this.activities.session;
+      this.rig.course = !!(ses?.mount && this.player.mount === ses.mount);
       this.rig.update(dt, ctrl, this.player, this.world);
       this.fadeOccluders();
     }

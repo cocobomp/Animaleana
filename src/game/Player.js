@@ -1057,6 +1057,17 @@ export class Player {
  * « ⬆️ Debout » du trot enlevé (et « Bravo », « Saute », au même endroit), tête la plus grande possible.)
  */
 export const RIDE_CAM = { az: 0.75, azSmall: 1.2, slack: 0.1, slackOut: 0.15, pitch: 0.14, near: 2, nearWide: 1.2, far: 5, ahead: 0.3, aimK: 0.34 };
+/**
+ * Caméra à cheval pendant une séance où l'on dirige son cheval vers des repères (saut d'obstacles, leçon, dressage,
+ * balade : rig.course, posé par Game.frame) : il faut voir ce qui arrive devant. La caméra de balade (RIDE_CAM, de
+ * trois quarts sur le côté) cachait l'obstacle suivant : il n'apparaissait que sous le cheval, sous « Sauter » et le
+ * joystick. Ici (coursePose) elle est derrière le cheval, à back + backK × taille (backWide sur un écran en largeur),
+ * décalée à droite de lat × cette distance : la tête sort à droite de la cavalière. Le même angle pour toutes les
+ * tailles : plus de côté, un très petit poney sortait de l'écran en hauteur. Elle regarde loin devant (ahead
+ * m), à aimK de la hauteur des sabots au casque, presque droit devant (look : 1 = parallèle au cheval, 0 = vers son
+ * chemin), d'un peu haut (pitch). Le lacet suit le cheval plus vite (follow, au lieu de 0,8).
+ */
+export const COURSE_CAM = { back: 3, backWide: 2.2, backK: 4.6, lat: 0.32, ahead: 3, look: 0.2, aimK: 0.5, pitch: 0.28, follow: 1.8 };
 /** Haut du casque de la cavalière au-dessus de la selle (m). */
 export const RIDER_TOP = 1.05;
 /**
@@ -1081,6 +1092,8 @@ const _pv = new THREE.Vector3();
 const _sv = new THREE.Vector3();
 const _lv = new THREE.Vector3();
 const _rv = new THREE.Vector3();
+const _cv = new THREE.Vector3();
+const _ca = new THREE.Vector3();
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 /**
@@ -1119,6 +1132,25 @@ export function rideAzimuth(sc) {
 /** Distance de la caméra montée (m) pour un cheval de taille sc, selon la forme de l'écran. */
 export function rideDistance(sc, aspect) {
   return (aspect < 0.8 ? RIDE_CAM.near : RIDE_CAM.nearWide) + RIDE_CAM.far * sc;
+}
+
+/**
+ * Place de la caméra montée pendant une séance (COURSE_CAM) : derrière le cheval (p : sa place, yaw : le lacet, qui suit
+ * son cap), un peu à droite ; out : position, aim : point visé. seat : hauteur de la selle (m), aspect : largeur / hauteur.
+ */
+export function coursePose(p, yaw, sc, seat, aspect, out, aim) {
+  const C = COURSE_CAM;
+  const fx = Math.sin(yaw);
+  const fz = Math.cos(yaw);
+  // (à droite du cavalier : −cos, +sin)
+  const rx = -Math.cos(yaw);
+  const rz = Math.sin(yaw);
+  const B = (aspect < 0.8 ? C.back : C.backWide) + C.backK * sc;
+  const L = C.lat * B;
+  const y = p.y + C.aimK * (seat + RIDER_TOP);
+  aim.set(p.x + fx * C.ahead + rx * L * C.look, y, p.z + fz * C.ahead + rz * L * C.look);
+  out.set(p.x - fx * B + rx * L, y + (B + C.ahead) * Math.tan(C.pitch), p.z - fz * B + rz * L);
+  return out;
 }
 
 /**
@@ -1240,10 +1272,17 @@ export class CameraRig {
     const sc = mount?.scale ?? 1;
     const riding = mount && this.mode === 'third' ? 1 : 0;
     this.ride = (this.ride ?? 0) + (riding - (this.ride ?? 0)) * Math.min(1, dt * 2);
+    // (séance à cheval vers des repères : COURSE_CAM, en fondu ; rig.course, remis à zéro après usage)
+    const course = riding && this.course ? 1 : 0;
+    this.course = false;
+    this.courseK = (this.courseK ?? 0) + (course - (this.courseK ?? 0)) * Math.min(1, dt * 2);
+    const ck = this.courseK;
     if (this.mode === 'third' && player.speed > 1 && this.idleLook > 1.5 && !player.auto) {
       let diff = player.heading - this.yaw;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      this.yaw += diff * Math.min(1, dt * 0.8);
+      // (séance à cheval : le lacet suit le cheval plus vite — COURSE_CAM.follow — dans un virage vers un obstacle,
+      // on le voyait de côté, l'obstacle hors de l'écran)
+      this.yaw += diff * Math.min(1, dt * (0.8 + (COURSE_CAM.follow - 0.8) * (this.courseK ?? 0)));
     }
     if (this.mode === 'third') {
       this.pitch = THREE.MathUtils.clamp(this.pitch + look.dy * 0.004, 0.02, 1.25);
@@ -1409,12 +1448,20 @@ export class CameraRig {
     this.shotK = (this.shotK ?? 0) + ((f?.shot ? 1 : 0) - (this.shotK ?? 0)) * Math.min(1, dt * 2.5);
     if (f?.shot) this.shot = f.shot;
     let aim = target;
+    if (ck > 0.001) {
+      // (séance : derrière le cheval, un peu à droite, le regard loin devant — coursePose)
+      coursePose(p, this.yaw, sc, seatOf(player), cam.aspect, _cv, _ca);
+      const g2 = world.heightAt(_cv.x, _cv.z) + 0.4;
+      if (_cv.y < g2) _cv.y = g2;
+      want.lerp(_cv, ck);
+      aim = _lv.copy(target).lerp(_ca, ck);
+    }
     if (this.shotK > 0.001 && this.shot) {
       const s = this.shot;
       // (de face : yaw 0 ; trois quarts : ± 0,7 rad depuis le devant de l'animal)
       const shotPos = shotPose(s, _sv, (x, z) => world.heightAt(x, z));
       want.lerp(shotPos, this.shotK);
-      aim = _lv.copy(target).lerp(s.at, this.shotK);
+      aim = _lv.copy(aim).lerp(s.at, this.shotK);
     }
     this.pos.lerp(want, this.pos.lengthSq() === 0 ? 1 : Math.min(1, dt * 10));
     cam.position.copy(this.pos);

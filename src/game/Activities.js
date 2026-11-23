@@ -1815,6 +1815,20 @@ class ShowSession extends Session {
 export const SMILE = { neck: 0.22, head: 0.12, nod: 0.06 };
 
 /**
+ * « Sourire » : tourne l'os b de a rad autour de x, ajouté à la pose de son clip. Si le clip ne l'a pas repris depuis
+ * l'image d'avant (animation en pause), on repart de la pose d'avant : sinon le geste s'ajoutait à chaque image et
+ * la tête finissait à l'envers.
+ */
+export function smileTurn(e, key, b, a) {
+  const st = ((e.smileQ ??= {})[key] ??= { before: new THREE.Quaternion(), after: new THREE.Quaternion(), set: false });
+  if (st.set && b.quaternion.equals(st.after)) b.quaternion.copy(st.before);
+  st.before.copy(b.quaternion);
+  b.rotateX(a);
+  st.after.copy(b.quaternion);
+  st.set = true;
+}
+
+/**
  * Plan du spectacle sur un cheval (rig.focus.shot) : de trois quarts avant (yaw rad depuis le devant), visé au garrot
  * (y × sa taille), un peu devant lui (ahead × sa taille : sa tête, plus près de la caméra, sortait de l'image) ou, pour
  * « sourire », entre le garrot et la tête (head : son groupe md.head) ; assez loin pour voir le cheval entier sur un
@@ -2016,8 +2030,8 @@ export function animateTrick(e, trick, k, dt) {
         // (l'encolure relevée de 0,6 et la tête roulée de droite à gauche : il regardait le ciel en disant « non »).
         // Ajouté à la pose de son clip (rotations locales, reprises à l'image suivante).
         const u = Math.min(1, s * 2);
-        md.neck.rotateX(-SMILE.neck * u);
-        md.head.rotateX(-SMILE.head * u + Math.sin(k * Math.PI * 6) * SMILE.nod * u);
+        smileTurn(e, 'neck', md.neck, -SMILE.neck * u);
+        smileTurn(e, 'head', md.head, -SMILE.head * u + Math.sin(k * Math.PI * 6) * SMILE.nod * u);
         e.earsPose = 'forward';
         e.earsT = Math.max(e.earsT ?? 0, 0.5);
       } else {

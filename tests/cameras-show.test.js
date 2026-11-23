@@ -150,3 +150,19 @@ describe('🎪 tours du cheval réaliste', () => {
     expect(e.earsPose).toBe('forward');
   });
 });
+
+describe('😄 « sourire » sans dérive', () => {
+  it('le geste s\'ajoute à la pose du clip ; si le clip est en pause, il ne s\'additionne pas d\'une image à l\'autre', () => {
+    const b = new THREE.Object3D();
+    const e = {};
+    // clip actif : il remet la pose à chaque image, le geste s'y ajoute une fois
+    for (let i = 0; i < 5; i++) {
+      b.rotation.set(0.1, 0, 0);
+      A.smileTurn(e, 'neck', b, -0.2);
+    }
+    expect(b.rotation.x).toBeCloseTo(-0.1, 5);
+    // clip en pause : la pose n'est plus reprise, la tête ne tourne pas plus
+    for (let i = 0; i < 30; i++) A.smileTurn(e, 'neck', b, -0.2);
+    expect(b.rotation.x).toBeCloseTo(-0.1, 5);
+  });
+});

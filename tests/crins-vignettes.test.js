@@ -40,7 +40,9 @@ describe('vignettes du cheval : du côté de la crinière', () => {
       expect(mean(ys.same), breed).toBeLessThan(mean(ys.other));
       md.dispose();
     }
-  });
+    // (trois chevaux construits : 2,7 s seul, plus de 5 s quand la machine est chargée — même marge que les autres
+    // tests qui construisent le cheval réaliste)
+  }, 60000);
 
   it('les autres espèces gardent leur vue', () => {
     expect(animalThumbDir('cow', false)).toEqual([1, 0.38, 0.72]);

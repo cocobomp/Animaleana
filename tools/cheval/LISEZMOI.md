@@ -101,6 +101,18 @@ près (715 648 octets au lieu de 715 656 : 8 octets d'en-tête WebP de la carte 
 
    Fichier final : **715 656 octets**.
 
+   **`--coutures-tete`** (`node bords.mjs horse_real.glb sortie.glb --coutures-tete`, sur le fichier du jeu) : refait
+   aussi le bord des îlots sous u = 0,4, mais seulement le long des **coutures** (arêtes de deux triangles voisins aux
+   UV différentes ; bande de 4 texels de chaque côté) et à partir de u = 0,15. La couture entre l'îlot de la tête
+   (u ≈ 0,2 à 0,3) et celui de l'encolure (u ≈ 0,34 à 0,41), de l'arrière de l'oreille à la ganache, gardait ses
+   dents : de profil, des deux côtés, un fin trait sombre en pointillé sur toutes les robes (vérifié au labo : il
+   disparaît sans la carte de relief, pas sans le modelé). Les naseaux, les lèvres et les yeux sont des bords
+   ouverts du maillage, pas des coutures : ils ne sont pas touchés (bout du nez vérifié de face et de dessous).
+   Écart du bord au fond de l'îlot (tout, profondeur 1 à 3, sur 255) : 10,8 / 6,1 / 4,7 → 5,7 / 4,3 / 3,9.
+   Géométrie, allures et autres images identiques (accesseurs et images comparés au bit près) ; carte de relief
+   43,3 → 26,1 Kio (l'extérieur des îlots, rempli à nouveau depuis un bord propre, a perdu ses traînées).
+   Fichier final : **698 088 octets** (mêmes sources, licence inchangée : CC0).
+
 Pour ne changer qu'une texture sans refaire les allures : relancer `lyndon_prep.py` et `prep2.py`, puis
 **`retex.mjs`** remplace l'image dans le GLB brut d'origine (`node retex.mjs horse_raw.glb horse_body_detail
 work/tex/horse_body_detail.png horse_raw_retex.glb`), `normfix.mjs` bouche les taches du relief (sortie

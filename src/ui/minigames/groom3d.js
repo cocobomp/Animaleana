@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import { withLogic } from './care3d.js';
-import { finishGame, cutGame } from './groomer.js';
+import { finishGame, cutGame, cutKeepsSome } from './groomer.js';
 import { groomTool } from '../../game/care/props.js';
 import { softDot } from '../../game/care/textures.js';
 import { ACC_COLORS } from '../../sim/groomer.js';
@@ -632,13 +632,25 @@ export function gfinish3dGame(ctx) {
 
 // ---------------------------------------------------------------- ✂️ la tonte
 
+/**
+ * La couleur du poil d'hiver (composantes linéaires, pour le voile) : la robe presque moitié plus sombre, mêlée d'un
+ * gris-brun terne. Un gris ou un blanc devient beige terne, un noir devient roussâtre, un alezan plus sombre et
+ * plus terne : les bandes tondues se voient sur toutes les robes.
+ */
+export function winterCoat(coat = 0x8a5a2b) {
+  const c = new THREE.Color(coat).convertLinearToSRGB().multiplyScalar(0.55);
+  c.lerp(new THREE.Color(0x8a785f).convertLinearToSRGB(), 0.38).convertSRGBToLinear();
+  return [c.r, c.g, c.b];
+}
+
 export function gcut3dGame(ctx) {
   const { a } = ctx;
   const { sc, keep, own, S, L, follow } = setup(ctx);
   const m = sc.mood;
   m.ears = 'forward';
   const t = ctx.t;
-  const hints = new Map([[t('mg_gcut_hint'), t('mg_gcut3d_hint')]]);
+  // (la tonte : aucune zone à garder, donc pas de « ronds verts » dans la consigne)
+  const hints = new Map([[t('mg_gcut_hint'), t(cutKeepsSome() ? 'mg_gcut3d_hint' : 'mg_gcut3d_hint_all')]]);
   let fxAt = null;
   const play = withLogic(ctx, cutGame, () => sc.project(fxAt ?? L.body), { hints });
   const sh = play.shape;
@@ -663,9 +675,9 @@ export function gcut3dGame(ctx) {
     const hit = sc.proxy.hitAll(new THREE.Ray(v3(w.x, w.y, w.z + 3), v3(0, 0, -1)))[0];
     return hit ? hit.point : w.add(v3(0, 0, 0.3 * S));
   };
-  // Le poil d'hiver : un voile plus foncé et mat sur toute la robe ; la tondeuse l'enlève en bandes.
-  const coatCol = new THREE.Color(a?.look?.coat ?? 0x8a5a2b);
-  const fur = coatGloss(sc, own, { additive: false, base: [coatCol.r * 0.55, coatCol.g * 0.5, coatCol.b * 0.45], alpha: 0.62, roughness: 1, env: 0, over: 99 });
+  // Le poil d'hiver : un voile terne sur toute la robe (winterCoat : plus sombre et plus gris-brun que sa robe, et
+  // assez couvrant pour se voir aussi sur un gris ou un blanc) ; la tondeuse l'enlève en bandes.
+  const fur = coatGloss(sc, own, { additive: false, base: winterCoat(a?.look?.coat), alpha: 0.86, roughness: 1, env: 0, over: 99 });
   if (fur) {
     const pos = fur.positions(0);
     const q = v3();

@@ -242,6 +242,16 @@ function keepFor(style) {
 }
 
 let cutStyle = 'court';
+/** La coupe demandée garde-t-elle des zones sur le corps (les ronds verts) ? (la tonte, la coupe courte : non) */
+export function cutKeepsSome(style = cutStyle) {
+  const keep = keepFor(style);
+  for (let u = -1; u <= 1; u += 0.1) for (let v = -1; v <= 1; v += 0.1) {
+    const k = Math.hypot(u, v);
+    if (k <= 1 && keep(u, v, k, false)) return true;
+  }
+  return false;
+}
+
 /** Coupe demandée (appelé par le salon avant runMinigame). */
 export function setCutStyle(style) {
   cutStyle = style ?? 'court';

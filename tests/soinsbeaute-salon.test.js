@@ -333,6 +333,41 @@ describe('tonte en 3D', () => {
   }, 60000);
 });
 
+describe('tonte en 3D : on voit le poil d\'hiver sur toutes les robes', () => {
+  it('le voile d\'hiver est nettement différent de la robe (gris, blanc, Appaloosa, noir, alezan)', () => {
+    // (écart perçu à l'écran, en sRGB : au moins 0,15 sur la clarté ou la teinte)
+    const srgb = (lin) => lin.map((x) => x ** (1 / 2.2));
+    for (const coat of [0xb3b0aa, 0xf1ece2, 0xd8d4cc, 0x1a1716, 0x8a4a22]) {
+      const c = new THREE.Color(coat);
+      const a = srgb([c.r, c.g, c.b]);
+      const w = srgb(groom3d.winterCoat(coat));
+      const d = Math.hypot(a[0] - w[0], a[1] - w[1], a[2] - w[2]);
+      expect(d, coat.toString(16)).toBeGreaterThan(0.15);
+    }
+  });
+
+  it('la consigne de la tonte ne parle pas de ronds verts (il n\'y en a pas) ; la coupe concours, si', () => {
+    for (const [style, green] of [['tonte', false], ['concours', true]]) {
+      groomer.setCutStyle(style);
+      expect(groomer.cutKeepsSome()).toBe(green);
+      const { a, sc } = makeStage({ breed: 'arabe' });
+      const ctx = salonCtx(a, sc);
+      const said = [];
+      const hint = ctx.hint;
+      ctx.hint = (text, kind) => {
+        said.push(text);
+        return hint?.(text, kind);
+      };
+      const game = groom3d.gcut3dGame(ctx);
+      run(ctx, game, sc, 0.2);
+      expect(said[0]).toBe(t(green ? 'mg_gcut3d_hint' : 'mg_gcut3d_hint_all'));
+      expect(game.peek().keep.length > 0).toBe(green);
+      game.destroy();
+      sc.dispose();
+    }
+  }, 30000);
+});
+
 describe('la tête dans l\'image au début de chaque jeu 3D du salon et du concours', () => {
   it('séchage, tonte, finitions, lustrage : bout du nez et oreilles avec au moins 5 % de marge (5 chevaux)', async () => {
     const headFrame = await import('../src/ui/minigames/headFrame.js');

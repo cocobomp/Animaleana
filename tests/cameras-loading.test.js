@@ -100,3 +100,34 @@ describe('⏳ le cheval réaliste attendu', () => {
     expect(s.rebuilt).toBe(0);
   });
 });
+
+describe('📸 ce qui peut cacher le cheval sur une photo souvenir (Game.photoOccluders)', () => {
+  it('toute la scène (aussi les lices hors du groupe du lieu, et ce qui est construit ensuite), sans les animaux ni la joueuse', () => {
+    const scene = new THREE.Scene();
+    const place = new THREE.Group();
+    scene.add(place);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(20, 0.1, 0.1));
+    const arena = new THREE.Group();
+    arena.add(rail);
+    scene.add(arena); // (pas dans le groupe du lieu)
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+    const pebble = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1));
+    place.add(flag, pebble);
+    const horseRoot = new THREE.Group();
+    horseRoot.add(new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2)));
+    const avatar = new THREE.Group();
+    avatar.add(new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1)));
+    scene.add(horseRoot, avatar);
+    const g = { scene, world: { group: place }, entities: new Map([[1, { root: horseRoot }]]), player: { avatar: { root: avatar }, root: new THREE.Group() } };
+    let list = Game.prototype.photoOccluders.call(g);
+    expect(list).toContain(rail);
+    expect(list).not.toContain(flag);
+    expect(list).not.toContain(pebble);
+    expect(list.some((o) => o.parent === horseRoot || o.parent === avatar)).toBe(false);
+    // un bâtiment construit après la première photo
+    const shed = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3));
+    place.add(shed);
+    list = Game.prototype.photoOccluders.call(g);
+    expect(list).toContain(shed);
+  });
+});

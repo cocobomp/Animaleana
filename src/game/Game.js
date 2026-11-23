@@ -127,6 +127,8 @@ export const JOBS = [
 
 export const VET_COST = { clinic: 30, home: 50 };
 
+const _occScale = new THREE.Vector3();
+
 export class Game {
   constructor(container, ui) {
     this.ui = ui;
@@ -1541,23 +1543,27 @@ export class Game {
   }
 
   /**
-   * 📸 Les grands objets du lieu (bâtiments, barrières, arbres…) qui peuvent cacher le cheval sur une photo souvenir
-   * (placeRidePhotoCamera) : ceux du lieu, calculés une fois par lieu (comme fadeOccluders), sans le sol.
+   * 📸 Les objets de la scène qui peuvent cacher le cheval sur une photo souvenir (placeRidePhotoCamera) : bâtiments,
+   * barrières, lices de la carrière, arbres, décor d'un concours… Recherchés à chaque photo (elles sont rares) dans
+   * toute la scène, pas seulement dans le groupe du lieu : une lice blanche, pas dans cette liste, traversait le petit
+   * poney sur la photo ; et un bâtiment construit ensuite est compté. Sans les animaux, la joueuse, les panneaux plats,
+   * les sprites et les petites pièces (moins de 30 cm).
    */
   photoOccluders() {
-    const group = this.world?.group;
-    if (!group) return null;
-    if (this.photoOccGroup !== group) {
-      this.photoOccGroup = group;
-      this.photoOcc = [];
-      group.traverse((o) => {
-        if (!o.isMesh || o.userData.noOccluder || o.geometry?.type === 'PlaneGeometry') return;
+    const skip = new Set([this.player?.avatar?.root, this.player?.root]);
+    for (const e of this.entities?.values?.() ?? []) skip.add(e.root);
+    const out = [];
+    const walk = (o) => {
+      if (skip.has(o) || o.visible === false || o.userData?.noOccluder) return;
+      if ((o.isMesh || o.isInstancedMesh) && !o.isSkinnedMesh && o.geometry && o.geometry.type !== 'PlaneGeometry') {
         if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
-        const r = o.geometry.boundingSphere.radius * Math.max(o.scale.x, o.scale.y, o.scale.z);
-        if (r > 0.4 && r < 120) this.photoOcc.push(o);
-      });
-    }
-    return this.photoOcc;
+        const sc = o.getWorldScale(_occScale);
+        if (o.geometry.boundingSphere.radius * Math.max(sc.x, sc.y, sc.z) > 0.3) out.push(o);
+      }
+      for (const c of o.children) walk(c);
+    };
+    if (this.scene) walk(this.scene);
+    return out;
   }
 
   /** Les murs et toits qui cachent le personnage deviennent transparents. */

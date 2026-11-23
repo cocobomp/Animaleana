@@ -1177,7 +1177,7 @@ export function placeRidePhotoCamera(cam, player, world = null, { band = 1, sun 
       const L = _rv.length();
       _photoRay.set(t, _rv.normalize());
       _photoRay.far = L;
-      if (_photoRay.intersectObjects(occluders, true).some((x) => x.object.visible !== false)) n++;
+      if (_photoRay.intersectObjects(occluders, false).some((x) => x.object.visible !== false)) n++;
     }
     return n;
   };

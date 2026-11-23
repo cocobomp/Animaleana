@@ -1077,9 +1077,16 @@ export const RIDER_TOP = 1.05;
  * elle : 1,15 m), à sa place (ahead × taille), le regard baissé vers les oreilles (au moins down rad, au plus downMax
  * pour un petit poney) ; sur un écran en hauteur, un champ plus large (fovTall°, comme la vue du cavalier en balade,
  * TrailView) : avec 60°, on ne voyait que la nuque et deux oreilles géantes. On voit les oreilles, le toupet, la
- * crinière et les rênes en bas de l'écran, le chemin au-dessus.
+ * crinière et les rênes en bas de l'écran, le chemin au-dessus. Sur un très petit poney, l'œil recule de back ×
+ * (1 − taille) (la masse de crinière, tout près, couvrait l'écran, joystick et boutons compris) ; sur un écran en
+ * largeur, le regard baisse de wide de plus (le bas de l'encolure passait sous « Descendre »).
  */
-export const RIDE_FP = { eye: 0.85, ahead: -0.1, down: -0.35, downMax: -0.72, fovTall: 80 };
+export const RIDE_FP = { eye: 0.85, ahead: -0.1, back: 0.6, down: -0.35, downMax: -0.72, wide: 0.1, fovTall: 80 };
+
+/** Place de l'œil en 1re personne à cheval : m devant la selle (négatif : derrière) pour un cheval de taille sc. */
+export function rideEyeAhead(sc) {
+  return RIDE_FP.ahead * sc - RIDE_FP.back * THREE.MathUtils.clamp(1 - sc, 0, 0.6);
+}
 /**
  * Un cheval qui suit la joueuse (« Me suivre ») ou qu'elle mène en main : il marche derrière elle, entre elle et la
  * caméra (on ne voyait que sa tête géante, coupée en bas, ou rien). La caméra se met de côté (az rad, à droite), vise
@@ -1119,11 +1126,11 @@ function seatOf(player) {
 }
 
 /** Angle (rad) du regard depuis la selle, en 1re personne : vers les oreilles du cheval de taille sc. */
-export function rideLookDown(sc) {
+export function rideLookDown(sc, aspect = 0.5) {
   const s = Math.max(0.3, sc);
-  // (oreilles : ≈ 0,45 m × taille au-dessus de la selle, 1,3 m × taille devant ; l'œil à RIDE_FP.eye, ahead devant)
-  const ears = Math.atan2(0.45 * s - RIDE_FP.eye, Math.max(0.3, 1.3 - RIDE_FP.ahead) * s);
-  return THREE.MathUtils.clamp(ears, RIDE_FP.downMax, RIDE_FP.down);
+  // (oreilles : ≈ 0,45 m × taille au-dessus de la selle, 1,3 m × taille devant ; l'œil à RIDE_FP.eye, rideEyeAhead)
+  const ears = Math.atan2(0.45 * s - RIDE_FP.eye, Math.max(0.3, 1.3 * s - rideEyeAhead(sc)));
+  return THREE.MathUtils.clamp(ears, RIDE_FP.downMax, RIDE_FP.down) - (aspect >= 0.8 ? RIDE_FP.wide : 0);
 }
 
 /** Azimut voulu de la caméra montée (rad, depuis l'arrière, positif à droite du cheval) pour un cheval de taille sc. */
@@ -1308,11 +1315,11 @@ export class CameraRig {
       if (mount) {
         // Vue de la selle : l'œil de la cavalière assise (RIDE_FP), le regard baissé vers les oreilles (réglable).
         const y = p.y + seatOf(player) + RIDE_FP.eye;
-        cam.position.set(p.x + Math.sin(player.heading) * RIDE_FP.ahead * sc, y, p.z + Math.cos(player.heading) * RIDE_FP.ahead * sc);
+        cam.position.set(p.x + Math.sin(player.heading) * rideEyeAhead(sc), y, p.z + Math.cos(player.heading) * rideEyeAhead(sc));
       } else {
         cam.position.copy(eye).add(_rv.set(Math.sin(player.heading), 0, Math.cos(player.heading)).multiplyScalar(0.12));
       }
-      const fp = THREE.MathUtils.clamp(this.fpPitch + (mount ? rideLookDown(sc) : 0), -1.35, 1.2);
+      const fp = THREE.MathUtils.clamp(this.fpPitch + (mount ? rideLookDown(sc, cam.aspect) : 0), -1.35, 1.2);
       const dir = _rv.set(Math.sin(this.yaw) * Math.cos(fp), Math.sin(fp), Math.cos(this.yaw) * Math.cos(fp));
       cam.lookAt(_lv.copy(cam.position).add(dir));
       return;

@@ -304,3 +304,11 @@ describe('📸 photo souvenir à cheval (placeRidePhotoCamera)', () => {
     expect(P.placeRidePhotoCamera(cam, { mount: null, position: V() }, world)).toBeNull();
   });
 });
+
+describe('👀 vue de la selle : petits poneys et écran en largeur', () => {
+  it('sur un très petit poney, l\'œil recule (la crinière, tout près, couvrait l\'écran) ; en largeur, le regard baisse un peu plus', () => {
+    expect(P.rideEyeAhead(0.5)).toBeLessThan(P.rideEyeAhead(1) - 0.2);
+    expect(P.rideEyeAhead(1)).toBeCloseTo(P.RIDE_FP.ahead, 5);
+    expect(P.rideLookDown(1, 844 / 390)).toBeLessThan(P.rideLookDown(1, 390 / 844) - 0.05);
+  });
+});

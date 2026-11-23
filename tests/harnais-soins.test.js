@@ -175,6 +175,9 @@ describe('vermifuge en 3D : la seringue au coin des lèvres, la grimace', () => 
         const p = game.peek();
         if (p.tongueShown) {
           tongue += 0.1;
+          // (la grimace : les oreilles dans l'image, et l'étiquette du poids enlevée, elle passait sur les oreilles)
+          if (tongue > 1) for (const e of p.ears) expect(inView(e, ctx.view, 2), `les oreilles pendant la grimace ${breed} ${JSON.stringify(e)} ${JSON.stringify(ctx.view)}`).toBe(true);
+          expect(p.weightShown, 'pas d\'étiquette du poids pendant la grimace').toBe(false);
           expect(inView(p.tongueTip, ctx.view), 'la langue dans l\'image').toBe(true);
           // elle sort d'ENTRE les lèvres : sa racine est sur le pli des lèvres (la lèvre du haut déborde au-dessus,
           // la lèvre du bas est en retrait dessous), elle pend vers le bas, hors de la peau, assez grande pour se voir

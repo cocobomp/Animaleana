@@ -202,6 +202,7 @@ export function deworm3dGame(ctx) {
   let dragRing = false;
   const sy = { placed: false, pushing: false, left: 1, drag: false, out: false };
   let grimace = 0;
+  let lickGuard = 0;
   let annoyed = 0;
   let pause = 0;
   let licked = false;
@@ -273,7 +274,16 @@ export function deworm3dGame(ctx) {
       // (la grimace : sa tête telle qu'elle est, de trois quarts, avec de la place pour la relever ; on voit la langue
       // sortir au coin des lèvres)
       sc.setFocus(null);
-      sc.frame([sc.live('muzzle'), sc.live('poll'), W(v3(0, hr * 0.5, snout * 1.15)), W(teethLocal.clone().add(v3(0, -hr * 0.9, 0))), W(v3(0, -hr * 1.4, 0))], { dir: [0.45, 0.02, 1], pad: 1.2, now });
+      // (et les oreilles en entier, avec de la place au-dessus : il relève la tête en faisant la grimace)
+      // (couchées, elles partent en arrière : on garde aussi la place où elles seront)
+      const ears = (md.ears ?? []).flatMap((e) => {
+        const base = e.getWorldPosition(v3());
+        const tip = e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0));
+        const len = tip.distanceTo(base);
+        const back = W(v3(0, 0, -1)).sub(W(v3())).normalize();
+        return [tip.add(v3(0, 0.08 * S, 0)), base.clone().addScaledVector(back, len * 1.1).add(v3(0, len * 0.6, 0))];
+      });
+      sc.frame([sc.live('muzzle'), sc.live('poll'), ...ears, W(v3(0, hr * 0.5, snout * 1.15)), W(teethLocal.clone().add(v3(0, -hr * 0.9, 0))), W(v3(0, -hr * 1.4, 0))], { dir: [0.45, 0.02, 1], pad: 1.45, now });
     } else if (st === 'placed') {
       // (la seringue au coin des lèvres : la tête et toute la seringue, plus près — on voit le geste)
       sc.setFocus(null);
@@ -398,7 +408,8 @@ export function deworm3dGame(ctx) {
         bar: sc.project(W(barLocal)), teeth: sc.project(W(teethLocal)), out: sy.out,
         /** (tests) l'embout de la seringue et la base de la langue, dans le repère de la tête */
         tipInHead: head.worldToLocal(holder.getWorldPosition(v3())), barLocal: barLocal.clone(), tongueBase: tonguePivot.position.clone(),
-        tongueShown: tongue.visible, pasteShown: paste.visible,
+        tongueShown: tongue.visible, pasteShown: paste.visible, weightShown: !sy.out,
+        ears: (md.ears ?? []).map((e) => sc.project(e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0)))),
         /** (tests) la seringue (repère monde) : l'embout, le milieu du corps, le bout du corps ; et à l'écran */
         bodyWorld: [holder.localToWorld(v3()), holder.localToWorld(syr.at(0.5)), holder.localToWorld(syr.at(1))],
         bodyScreen: [sc.project(holder.localToWorld(v3())), sc.project(holder.localToWorld(syr.at(1)))],
@@ -455,7 +466,7 @@ export function deworm3dGame(ctx) {
         annoyed = 1;
         m.annoyed = 1.2;
         const h = sc.project(L.poll);
-        fx.float(h.x, h.y - 20, '💢', 22);
+        fx.float(h.x, Math.max(ctx.view.y0 + 34, h.y - 20), '💢', 22);
         ctx.hint(t('mg_deworm_teeth', { name }), 'warn');
         snort(sc);
       }
@@ -473,6 +484,17 @@ export function deworm3dGame(ctx) {
     update(dt) {
       annoyed = Math.max(0, annoyed - dt);
       grimace = Math.max(0, grimace - dt * (sy.out ? 0.3 : 0.5));
+      // (la grimace : il secoue et relève la tête ; si une oreille ou le nez touche le bord, on recadre)
+      lickGuard -= dt;
+      if (sy.out && lickGuard <= 0 && sc.settled(0.05)) {
+        lickGuard = 0.8;
+        const v = ctx.view;
+        const out = [sc.live('muzzle'), ...(md.ears ?? []).map((e) => e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0)))].some((p) => {
+          const q = sc.project(p);
+          return q.behind || q.x < v.x0 + 14 || q.x > v.x1 - 14 || q.y < v.y0 + 14 || q.y > v.y1 - 14;
+        });
+        if (out) frameFor('lick');
+      }
       if (pause > 0) pause = Math.max(0, pause - dt);
       // la seringue : au repos (devant nous), tenue (sous le doigt) ou dans sa bouche
       syr.setDose(kOf(dose));
@@ -547,13 +569,15 @@ export function deworm3dGame(ctx) {
     draw(g) {
       if (!sc.ready) return;
       const v = ctx.view;
-      // le poids du cheval
-      g.save();
-      g.fillStyle = 'rgba(255,255,255,0.9)';
-      rrect(g, v.x0 + 12, v.y0 + 12, 170, 40, 12);
-      g.fill();
-      label(g, `⚖️ ${t('mg_deworm_weight', { kg })}`, v.x0 + 97, v.y0 + 12 + 20, 16, '#23302a');
-      g.restore();
+      // le poids du cheval (pas pendant la grimace : l'étiquette passait sur ses oreilles, la dose est donnée)
+      if (!sy.out) {
+        g.save();
+        g.fillStyle = 'rgba(255,255,255,0.9)';
+        rrect(g, v.x0 + 12, v.y0 + 12, 170, 40, 12);
+        g.fill();
+        label(g, `⚖️ ${t('mg_deworm_weight', { kg })}`, v.x0 + 97, v.y0 + 12 + 20, 16, '#23302a');
+        g.restore();
+      }
       if (stage === 'dose') {
         // la dose réglée, au-dessus de la bague
         const q = sc.project(holder.localToWorld(syr.ringAt(kOf(dose)).add(v3(0, 0.03, 0))));

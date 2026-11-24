@@ -163,14 +163,18 @@ export function applyAmbience(stage, decor, amb) {
   // ---------------------------------------------------------------- le ciel, la brume
   const sc = stage.scene;
   if (out) {
-    decor.sky?.setColors?.(skyTop, skyLow);
+    // (le ciel : decor.skyMesh, ou decor.sky quand c'est lui — le pré de la balle et le rond de longe ont une méthode sky)
+    const skyM = decor.skyMesh ?? (decor.sky?.isMesh ? decor.sky : null);
+    skyM?.setColors?.(skyTop, skyLow);
     sc.background = skyLow.clone();
     const fogCol = skyLow.clone().lerp(skyTop, 0.3);
-    const near = amb.foggy ? 3 : amb.snowy ? 8 : amb.wet ? 9 : 14;
-    const far = amb.foggy ? 16 : amb.snowy || amb.wet ? 26 : 36;
+    // (un grand décor — le rond de longe, ses arbres tout autour — : la brume plus loin, decor.fogScale)
+    const k = Math.max(1, decor.fogScale ?? 1);
+    const near = (amb.foggy ? 3 : amb.snowy ? 8 : amb.wet ? 9 : 14) * k;
+    const far = (amb.foggy ? 16 : amb.snowy || amb.wet ? 26 : 36) * k;
     sc.fog = new THREE.Fog(fogCol, near, far);
     // (le brouillard, la nuit : le ciel se voit à peine)
-    if (decor.sky && (amb.foggy || night)) decor.sky.material.fog = false;
+    if (skyM && (amb.foggy || night)) skyM.material.fog = false;
   }
   sc.environmentIntensity = (sc.environmentIntensity ?? 0.45) * Math.max(0.35, Math.min(1, (amb.sun + amb.sky) / 2));
 
@@ -200,6 +204,7 @@ export function applyAmbience(stage, decor, amb) {
     }
   });
 
+  const WB0 = decor.weatherBox ?? null;
   // ---------------------------------------------------------------- le sol : mouillé, ou blanc de neige
   const grounds = (decor.ground ?? []).filter(Boolean);
   const saved = grounds.map((m) => ({ m, color: m.color.clone(), rough: m.roughness, map: m.map }));
@@ -228,9 +233,11 @@ export function applyAmbience(stage, decor, amb) {
   if (out && amb.snowy) {
     const st = keep(snowTexture());
     st.repeat.set(6, 6);
-    const cover = new THREE.Mesh(keep(new THREE.PlaneGeometry(30, 30)), keep(new THREE.MeshStandardMaterial({ map: st, transparent: true, depthWrite: false, roughness: 0.9, color: 0xffffff })));
+    const cs = WB0 ? Math.max(30, (WB0.x1 - WB0.x0) * 2, (WB0.z1 - WB0.z0) * 2) : 30;
+    const cover = new THREE.Mesh(keep(new THREE.PlaneGeometry(cs, cs)), keep(new THREE.MeshStandardMaterial({ map: st, transparent: true, depthWrite: false, roughness: 0.9, color: 0xffffff })));
     cover.rotation.x = -Math.PI / 2;
-    cover.position.set(center.x, 0.006, center.z - 4);
+    if (WB0) cover.position.set((WB0.x0 + WB0.x1) / 2, 0.006, (WB0.z0 + WB0.z1) / 2);
+    else cover.position.set(center.x, 0.006, center.z - 4);
     cover.receiveShadow = true;
     cover.renderOrder = 1;
     g.add(cover);
@@ -254,20 +261,25 @@ export function applyAmbience(stage, decor, amb) {
   }
 
   // ---------------------------------------------------------------- la pluie, la neige qui tombent (dehors)
-  const spanX = Math.max(5, size.x * 3);
-  const zMin = center.z - Math.max(2.5, size.z * 3);
-  const zMax = center.z + Math.max(4, u * 4);
-  const top = Math.max(3, u * 3);
+  // (là où elle tombe : autour de lui ; ou toute la zone du jeu quand il s'y promène, decor.weatherBox)
+  const WB = decor.weatherBox ?? null;
+  const cx = WB ? (WB.x0 + WB.x1) / 2 : center.x;
+  const spanX = WB ? WB.x1 - WB.x0 : Math.max(5, size.x * 3);
+  const zMin = WB ? WB.z0 : center.z - Math.max(2.5, size.z * 3);
+  const zMax = WB ? WB.z1 : center.z + Math.max(4, u * 4);
+  const top = WB?.top ?? Math.max(3, u * 3);
+  // (une grande zone : plus de gouttes et de flocons, pour la même pluie à l'image ; au plus le double)
+  const dense = WB ? Math.min(2, Math.max(1, (spanX * (zMax - zMin)) / 60)) : 1;
   let rain = null;
   let snow = null;
   const high = stage.high;
   if (out && amb.wet) {
-    const n = (amb.weather === 'storm' ? 1.5 : 1) * (high ? 520 : 320);
+    const n = Math.round((amb.weather === 'storm' ? 1.5 : 1) * (high ? 520 : 320) * dense);
     const pos = new Float32Array(n * 6);
     const seeds = new Float32Array(n * 3);
     const r = rng(5);
     for (let i = 0; i < n; i++) {
-      seeds[i * 3] = center.x + (r() - 0.5) * spanX;
+      seeds[i * 3] = cx + (r() - 0.5) * spanX;
       seeds[i * 3 + 1] = r() * top;
       seeds[i * 3 + 2] = zMin + r() * (zMax - zMin);
     }
@@ -295,11 +307,11 @@ export function applyAmbience(stage, decor, amb) {
     rain.userData.step(0);
   }
   if (out && amb.snowy) {
-    const n = high ? 420 : 260;
+    const n = Math.round((high ? 420 : 260) * dense);
     const pos = new Float32Array(n * 3);
     const seeds = [];
     const r = rng(6);
-    for (let i = 0; i < n; i++) seeds.push({ x: center.x + (r() - 0.5) * spanX, y: r() * top, z: zMin + r() * (zMax - zMin), a: r() * 6.28, s: 0.35 + r() * 0.4 });
+    for (let i = 0; i < n; i++) seeds.push({ x: cx + (r() - 0.5) * spanX, y: r() * top, z: zMin + r() * (zMax - zMin), a: r() * 6.28, s: 0.35 + r() * 0.4 });
     const geo = keep(new THREE.BufferGeometry());
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const dot = keep(softDot('255,255,255', 32));
@@ -330,11 +342,17 @@ export function applyAmbience(stage, decor, amb) {
     const light = new THREE.PointLight(0xffb866, 1, 0, 2);
     let at;
     if (out) {
-      // un réverbère au fond, à gauche de lui (il éclaire son flanc et le coin repas)
+      // un réverbère au fond, à gauche de lui (il éclaire son flanc et le coin repas) ; ou à la place que le décor
+      // lui garde (decor.lampSpot : hors du terrain de jeu)
       const h = Math.max(1.1, Math.min(2.3, u * 1.5 + 0.3));
       const post = lampPost(keep, h);
       const back = decor.dims?.back ?? decor.room?.back ?? box.min.z - 0.6;
       post.position.set(box.min.x + size.x * 0.15, 0, Math.min(back + 0.15, box.min.z - 0.2));
+      if (decor.lampSpot) {
+        post.position.copy(decor.lampSpot);
+        post.rotation.y = decor.lampFace ?? 0;
+      }
+      post.updateMatrixWorld(true);
       g.add(post);
       at = post.localToWorld(post.userData.light.clone());
     } else {

@@ -6,6 +6,7 @@
 
 import { enclosure, inside } from '../nav.js';
 import { STRUCTURES, footprintOf } from '../../sim/construction.js';
+import { PLACES } from '../../sim/places.js';
 
 /** Les lieux possibles d'un soin. */
 export const SETTINGS = ['box', 'pre', 'etable', 'maison', 'jardin', 'clapier', 'enclos', 'ailleurs'];
@@ -47,6 +48,7 @@ export function whereFacts(game, a) {
   // (en voyage, en sortie : le jeu est dans un autre lieu que la ferme ; l'animal qui n'est pas là ne se soigne pas)
   f.here = !a.location || !p.place || a.location === p.place;
   f.away = !!p.home && !!p.place && p.place !== p.home;
+  f.placeId = p.place ?? null;
   f.stalled = !!a.stalled;
   const e = game.entities?.get?.(a.id) ?? null;
   f.housed = !!a.housed && (e ? !!e.inside : true);
@@ -124,6 +126,59 @@ export function settingFrom(species, facts, action = null) {
     return facts.away ? 'ailleurs' : 'enclos';
   }
   return facts.away ? 'ailleurs' : outdoor;
+}
+
+// ---------------------------------------------------------------- en voyage : le décor du lieu
+
+/**
+ * Les familles de lieux de voyage (src/sim/places.js : biome) et ce qui les montre dans le décor d'un soin dehors
+ * (src/game/care/away.js) : le sol, les arbres, ce qu'on voit au loin, une construction du pays, et les objets du jour.
+ */
+export const AWAY_LOOKS = {
+  // (la Bretagne : le sable, la mer au loin, une cabane de plage rayée, un voilier)
+  plage: { ground: 'sable', trees: 'pin', far: ['mer', 'dunes'], landmark: 'cabane', extras: ['coquillage', 'crabe', 'mouette', 'seau', 'botte'] },
+  // (les Alpes : les sommets enneigés, les sapins, un chalet)
+  montagne: { ground: 'alpage', trees: 'sapin', far: ['sommets'], landmark: 'chalet', extras: ['sapin', 'rocher', 'fleurs', 'oiseau', 'botte', 'papillon'] },
+  // (l'Islande : la mousse, les rochers noirs, un volcan qui fume, une maison au toit d'herbe)
+  volcan: { ground: 'mousse', trees: 'bouleau', far: ['volcan', 'collines'], landmark: 'tourbe', extras: ['rocher', 'oiseau', 'botte', 'seau', 'mouette'] },
+  // (l'Alberta : la grande prairie, les Rocheuses, une grange rouge)
+  rocheuses: { ground: 'prairie', trees: 'pin', far: ['sommets', 'collines'], landmark: 'grange', extras: ['botte', 'oiseau', 'seau', 'brouette', 'fleurs', 'papillon'] },
+  // (la Pampa : l'herbe à perte de vue, un grand arbre seul, une éolienne, l'estancia blanche)
+  pampa: { ground: 'prairie', trees: 'ombu', far: ['plaine'], landmark: 'estancia', extras: ['botte', 'oiseau', 'seau', 'fleurs', 'papillon', 'poule'] },
+  // (Kyoto : les cerisiers, un portail rouge, une lanterne de pierre)
+  japon: { ground: 'herbe', trees: 'cerisier', far: ['collines'], landmark: 'torii', extras: ['lanterne', 'fleurs', 'oiseau', 'papillon', 'pot'] },
+  // (l'Andalousie : la terre sèche, les oliviers, les cyprès, l'hacienda blanche au toit de tuiles)
+  mediterranee: { ground: 'sec', trees: 'olivier', far: ['collines'], landmark: 'hacienda', extras: ['amphore', 'pot', 'fleurs', 'oiseau', 'papillon', 'seau'] },
+  // (l'Australie : la terre rouge, les eucalyptus, l'éolienne, un grand rocher rouge, un kangourou au loin)
+  bush: { ground: 'rouge', trees: 'eucalyptus', far: ['rocher', 'collines'], landmark: 'eolienne', extras: ['rocher', 'oiseau', 'botte', 'seau'] },
+  // (les Cotswolds : les murets de pierre, les haies, un cottage de pierre blonde)
+  cottage: { ground: 'herbe', trees: 'feuillu', far: ['collines'], landmark: 'cottage', extras: ['oiseau', 'fleurs', 'botte', 'seau', 'papillon', 'poule'] },
+  // (le Kentucky : les clôtures blanches, une grande écurie à clocheton)
+  haras: { ground: 'herbe', trees: 'feuillu', far: ['collines'], landmark: 'haras', extras: ['botte', 'brouette', 'seau', 'oiseau', 'fleurs', 'papillon'] },
+};
+
+/** La famille de décor d'un lieu de voyage (AWAY_LOOKS), ou null (lieu inconnu : le décor dehors habituel). */
+export function awayLook(placeId) {
+  const P = PLACES[placeId];
+  if (!P) return null;
+  if (placeId === 'angleterre') return 'cottage';
+  if (placeId === 'kentucky') return 'haras';
+  switch (P.biome) {
+    case 'beach': return 'plage';
+    case 'mountain': return 'montagne';
+    case 'tundra': return 'volcan';
+    case 'prairie': return P.mountains ? 'rocheuses' : 'pampa';
+    case 'garden': return 'japon';
+    case 'mediterranean': return 'mediterranee';
+    case 'outback': return 'bush';
+    case 'countryside': return 'cottage';
+    default: return null;
+  }
+}
+
+/** La liste des objets du jour d'un lieu (place : SETTINGS ; look : la famille du voyage, pour « ailleurs »). */
+export function extrasPlace(place, look = null) {
+  return place === 'ailleurs' && look && AWAY_LOOKS[look] ? `ailleurs-${look}` : place;
 }
 
 /** Le lieu du soin de cet animal dans le jeu (voir settingFrom). */
@@ -227,6 +282,24 @@ export const EXTRAS = {
   balle: 'floor',
   papillon: 'air',
   pot: 'floor',
+  // (en voyage)
+  coquillage: 'floor',
+  crabe: 'floor',
+  mouette: 'perch',
+  rocher: 'floor',
+  sapin: 'floor',
+  lanterne: 'floor',
+  amphore: 'floor',
+  // (accrochés au mur, à un poteau ou à une planche : ils ne prennent pas de place au sol, on les voit même en gros plan)
+  fer: 'hang',
+  licol: 'hang',
+  nichoir: 'hang',
+  cadre: 'hang',
+  cloche: 'hang',
+  // (au loin, derrière l'animal : un vol d'oiseaux dans le ciel, une poule dans le pré, une hirondelle sous le toit)
+  vol: 'far',
+  poulailler: 'far',
+  hirondelle: 'far',
 };
 
 /** Les objets possibles de chaque lieu. */
@@ -240,6 +313,47 @@ export const EXTRAS_OF = {
   clapier: ['arrosoir', 'fleurs', 'oiseau', 'poule', 'seau'],
   enclos: ['arrosoir', 'fleurs', 'oiseau', 'papillon', 'poule', 'chat'],
 };
+for (const [look, L] of Object.entries(AWAY_LOOKS)) EXTRAS_OF[`ailleurs-${look}`] = L.extras;
+
+/**
+ * Le petit plus de chaque lieu, en plus des objets du jour : des choses accrochées (on les voit même en gros plan,
+ * quand le sol n'est pas dans l'image) et un peu de vie au loin. Toujours dans cet ordre (le premier qui trouve sa
+ * place est pris) ; le jour choisit lequel commence (pickLife).
+ */
+export const LIFE_OF = {
+  box: ['fer', 'licol', 'hirondelle'],
+  etable: ['cloche', 'fer', 'hirondelle'],
+  pre: ['vol', 'poulailler', 'fer', 'nichoir'],
+  ailleurs: ['vol', 'nichoir', 'fer'],
+  maison: ['cadre', 'cadre'],
+  jardin: ['nichoir', 'vol', 'poulailler'],
+  clapier: ['vol', 'poulailler'],
+  enclos: ['vol', 'poulailler'],
+};
+
+/** Ce qui ne bouge pas la nuit (pas de vol d'oiseaux, pas de poule dehors, pas d'hirondelle) ; sous la pluie, pas de vol. */
+export function lifeOff(amb) {
+  const off = new Set();
+  if (!amb) return off;
+  if (amb.time === 'nuit') off.add('vol').add('poulailler').add('hirondelle');
+  if (amb.wet || amb.foggy || amb.snowy) off.add('vol');
+  if (amb.wet || amb.snowy) off.add('poulailler');
+  return off;
+}
+
+/**
+ * Les choses en plus (LIFE_OF) de ce lieu, dans l'ordre où on les essaie : le jour fait tourner la liste (stable le
+ * même jour). Pas celles de l'ambiance (lifeOff), ni celles déjà dans les objets du jour.
+ */
+export function pickLife({ day = 1, id = '', place = 'pre', amb = null, species = '', taken = [] } = {}) {
+  const base = place.startsWith('ailleurs') ? LIFE_OF.ailleurs : LIFE_OF[place] ?? LIFE_OF.pre;
+  const off = lifeOff(amb);
+  // (le licol, le fer à cheval : l'écurie d'un cheval ; ailleurs, au bétail, la cloche)
+  const list = [...new Set(base)].filter((k) => !off.has(k) && !taken.includes(k) && !(k === 'licol' && species !== 'horse'));
+  if (!list.length) return [];
+  const k = (hashSeed(`${id}|${place}|vie`) + Math.max(1, Math.floor(day))) % list.length;
+  return [...list.slice(k), ...list.slice(0, k)];
+}
 
 /** Les objets qui n'ont pas leur place avec cette ambiance (careAmbience). */
 export function extrasOff(amb) {
@@ -247,7 +361,7 @@ export function extrasOff(amb) {
   if (!amb) return off;
   if (amb.snowy || amb.season === 'winter') off.add('fleurs').add('papillon');
   if (amb.wet || amb.foggy) off.add('papillon');
-  if (amb.time === 'nuit') off.add('papillon').add('oiseau').add('poule');
+  if (amb.time === 'nuit') off.add('papillon').add('oiseau').add('poule').add('mouette').add('crabe');
   return off;
 }
 

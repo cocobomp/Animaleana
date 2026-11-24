@@ -12,10 +12,11 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { canvasTex, rng } from './textures.js';
+import { canvasTex, rng, noiseTexture } from './textures.js';
 import { parquetTexture, plasterTexture, wainscotTexture, fabricTexture, braidedRugTexture, terracottaTexture, leafTexture, gardenTexture, sunPatchTexture, paw } from './petTextures.js';
 import { petBowl, FOODS, shadowed } from './petProps.js';
 import { avatarHand } from './props.js';
+import { grassField, fenceMats, fenceLine, farAway, skySphere, outdoorLights, stoneTexture } from './outdoor.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -27,8 +28,11 @@ const STYLE = {
 
 /**
  * Le coin de la maison. stage : la scène (marks, double). Renvoie { group, props, layout, update, restore, dispose }.
+ * opts.outdoor : le jardin, au pied de la maison (l'animal est dehors) — la pelouse, la façade avec sa porte-fenêtre
+ * (allumée le soir), une clôture et une haie, le ciel ; ses gamelles au même endroit. opts.season : la saison.
  */
-export function homeSet(stage) {
+export function homeSet(stage, opts = {}) {
+  const out = !!opts.outdoor;
   const g = new THREE.Group();
   const own = [];
   const keep = (x) => {
@@ -76,8 +80,23 @@ export function homeSet(stage) {
   };
 
   // ---------------------------------------------------------------- sol
+  let field = null;
+  if (out) {
+    field = grassField(keep, { x0: -4, x1: R.side + 2.5, z0: R.back - 4, z1: 3, season: opts.season ?? 'summer', high, flowers: 40, size: 30, keepOut: { x0: L.tail.x - 0.2, x1: R.side, z0: R.back, z1: 0.6 } });
+    g.add(field.group);
+    // (des dalles devant la façade : on y pose les gamelles)
+    const slab = keep(new THREE.MeshStandardMaterial({ map: keep(noiseTexture('#c8bca8', 0.08, 3)), roughness: 0.85 }));
+    const rs = rng(8);
+    for (let x = R.left + 0.4; x < R.side; x += 0.62) {
+      for (const z of [R.back + 0.32, R.back + 0.95]) {
+        const m = mesh(new THREE.BoxGeometry(0.56 + rs() * 0.04, 0.03, 0.56), slab, [x + rs() * 0.03, 0.006, z + rs() * 0.03], [0, (rs() - 0.5) * 0.05, 0], false);
+        m.receiveShadow = true;
+      }
+    }
+  } else {
   const floor = mesh(new THREE.PlaneGeometry(10, 10), floorMat, [0, 0, 0], [-Math.PI / 2, 0, 0], false);
   floor.receiveShadow = true;
+  }
 
   // ---------------------------------------------------------------- murs : lambris, cimaise, enduit, plinthe
   const wallLen = 8;
@@ -91,6 +110,13 @@ export function homeSet(stage) {
   const wx1 = winX + winW / 2 + 0.06;
   into = walls.back;
   const wainMat = keep(new THREE.MeshStandardMaterial({ map: wains, roughness: 0.6 }));
+  if (out) {
+    // (dehors : un soubassement en pierre et un crépi clair)
+    wainMat.map = keep(stoneTexture('#a89c8a', 5));
+    wainMat.map.repeat.set(1, 1);
+    wainMat.roughness = 0.95;
+    wallMat.color.set(0xf4e6cc);
+  }
   const wallPiece = (x0, x1, y0, y1, mat, z = R.back, depth = 0.04, uvScale = null) => {
     if (x1 - x0 < 0.005 || y1 - y0 < 0.005) return null;
     const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, depth);
@@ -113,6 +139,13 @@ export function homeSet(stage) {
   const garden = keep(gardenTexture());
   const glass = mesh(new THREE.PlaneGeometry(winW, winH), keep(new THREE.MeshBasicMaterial({ map: garden, color: 0xffffff, toneMapped: false })), [winX, winH / 2 + 0.03, R.back - 0.03], null, false);
   glass.material.color.setScalar(1.05);
+  glass.userData.window = { w: winW, h: winH, bright: 1.05 }; // (le jardin dehors : l'heure, la météo, ambience.js)
+  if (out) {
+    // (vue du jardin : la pièce derrière la vitre, sombre le jour, allumée le soir : ambience.js)
+    glass.material.map = null;
+    glass.material.color.set(0x4a3a2c);
+    glass.userData.window = { w: winW, h: winH, bright: 1, inside: true };
+  }
   const fr = (w, h, x, y, d = 0.06) => mesh(new THREE.BoxGeometry(w, h, d), white, [x, y, R.back - 0.01]);
   fr(winW + 0.14, 0.07, winX, winH + 0.065);
   fr(0.07, winH + 0.06, winX - winW / 2 - 0.035, winH / 2 + 0.03);
@@ -138,9 +171,23 @@ export function homeSet(stage) {
   // tringle
   mesh(new THREE.CylinderGeometry(0.01, 0.01, winW + 0.9, 10), brass, [winX + 0.2, winH + 0.17, R.back + 0.09], [0, 0, Math.PI / 2]);
 
-  // Mur de côté (le coin de la pièce, derrière ses gamelles).
+  // Mur de côté (le coin de la pièce, derrière ses gamelles). Dehors : une clôture en bois et une haie.
   into = walls.side;
-  {
+  let sideFence = null;
+  if (out) {
+    const fm = fenceMats(keep);
+    sideFence = fenceLine(keep, walls.side, fm, v3(R.side + 0.05, 0, R.back), v3(R.side + 0.05, 0, 2.4), { h: 0.95, seed: 9, postEvery: 1.2 });
+    const hedgeMat = keep(new THREE.MeshStandardMaterial({ color: opts.season === 'autumn' ? 0x6a7a34 : 0x3f6a32, roughness: 1, flatShading: true }));
+    const bush = keep(new THREE.IcosahedronGeometry(0.45, 1));
+    const rh = rng(4);
+    for (let z = R.back - 0.2; z < 2.6; z += 0.55) {
+      const b = new THREE.Mesh(bush, hedgeMat);
+      b.position.set(R.side + 0.65 + rh() * 0.1, 0.55 + rh() * 0.15, z);
+      b.scale.set(1, 1.3 + rh() * 0.3, 1.1);
+      b.castShadow = true;
+      walls.side.add(b);
+    }
+  } else {
     const z0 = R.back;
     const z1 = 2.2;
     const d = z1 - z0;
@@ -156,14 +203,25 @@ export function homeSet(stage) {
     mesh(new THREE.BoxGeometry(0.022, 0.09, d), white, [R.side - 0.022, 0.045, (z0 + z1) / 2]);
   }
   into = g;
+  // Dehors : le ciel, les arbres au loin (au-delà de la haie), la gouttière en haut de la façade.
+  let sky = null;
+  let far = null;
+  if (out) {
+    sky = skySphere(keep);
+    g.add(sky);
+    far = farAway(keep, { xC: R.side + 6, zFar: -1, season: opts.season ?? 'summer', n: 5 });
+    g.add(far.group);
+  }
 
   // ---------------------------------------------------------------- le tapis tressé (sous lui)
   const rugR = Math.max(0.3, len * 0.7 + 0.1);
+  if (out) into = new THREE.Group(); // (pas de tapis dans le jardin : construit, jamais montré)
   const rug = mesh(new THREE.CircleGeometry(rugR, 48), keep(new THREE.MeshStandardMaterial({ map: keep(braidedRugTexture()), roughness: 1, color: 0xbdb2a0 })), [L.body.x - len * 0.15, 0.004, 0.02], [-Math.PI / 2, 0, 0], false);
   rug.scale.set(1.25, 0.9, 1);
   // (son épaisseur : un bord arrondi)
   const rugEdge = mesh(new THREE.TorusGeometry(rugR, 0.006, 4, 64), keep(new THREE.MeshStandardMaterial({ color: 0xb98f6c, roughness: 1 })), [L.body.x - len * 0.15, 0.004, 0.02], [Math.PI / 2, 0, 0], false);
   rugEdge.scale.set(1.25, 0.9, 1);
+  into = g;
 
   // ---------------------------------------------------------------- son panier (chien) ou son coussin et son arbre (chat)
   const bedR = Math.max(0.16, len * 0.62);
@@ -172,6 +230,13 @@ export function homeSet(stage) {
   const bed = new THREE.Group();
   bed.position.set(bedX, 0, bedZ);
   g.add(bed);
+  // Dehors : son panier (et l'arbre à chat) restent dans la maison ; le chien a sa niche.
+  bed.visible = !out;
+  if (out && sp === 'dog') {
+    const niche = kennelModel(keep, Math.max(0.5, bedR * 2.4));
+    niche.position.set(bedX - bedR * 0.4, 0, R.back + Math.max(0.5, bedR * 2.4) * 0.55 + 0.05);
+    g.add(niche);
+  }
   {
     const fab = keep(fabricTexture(sp === 'cat' ? 'velvet' : 'plaid', ST.bed, sp === 'cat' ? 4 : 6));
     fab.repeat.set(4, 1);
@@ -217,7 +282,7 @@ export function homeSet(stage) {
     }
   }
   // Chat : un arbre à chat à côté de son coussin (poteau en corde de sisal, plateformes moquettées).
-  if (sp === 'cat') {
+  if (sp === 'cat' && !out) {
     const tree = new THREE.Group();
     tree.position.set(bedX + bedR + 0.32, 0, R.back + 0.3);
     g.add(tree);
@@ -336,8 +401,10 @@ export function homeSet(stage) {
   }, { key: 'watercolor', repeat: false }));
   const fw = 0.44;
   const fh = 0.33;
+  if (out) into = new THREE.Group(); // (le cadre reste dans la maison)
   mesh(new THREE.BoxGeometry(fw + 0.05, fh + 0.05, 0.025), keep(new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.5 })), [frameX, 1.45, R.back + 0.012]);
   mesh(new THREE.PlaneGeometry(fw - 0.03, fh - 0.03), keep(new THREE.MeshStandardMaterial({ map: art, roughness: 0.8 })), [frameX, 1.45, R.back + 0.026], null, false);
+  into = walls.back;
   // la plaque à son nom, au-dessus de son panier, accrochée par une cordelette
   const plateTex = keep(namePlateTexture(stage.a?.name ?? ''));
   const plateY = Math.max(0.55, Math.min(1.25, bedR * 2.2 + 0.35));
@@ -390,6 +457,10 @@ export function homeSet(stage) {
   layout('rest');
 
   // ---------------------------------------------------------------- lumière
+  let shaft = null;
+  let motes = null;
+  if (out) outdoorLights(stage, g, { center: v3(L.body.x, H * 0.4, 0), span: Math.max(1.6, len * 2.2 + 1) });
+  else {
   const hemi = new THREE.HemisphereLight(0xfff1dc, 0x8a6a4c, high ? 0.7 : 0.8);
   g.add(hemi);
   // Lumière principale : douce et chaude, de notre côté (une fenêtre derrière nous) ; elle dessine le flanc.
@@ -423,17 +494,27 @@ export function homeSet(stage) {
   const patch = mesh(new THREE.PlaneGeometry(1, 1), keep(new THREE.MeshBasicMaterial({ map: keep(sunPatchTexture(2, 3)), color: 0xffd9a0, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false })), [winX + 0.35, 0.006, R.back + 0.75], [-Math.PI / 2, 0, -0.35], false);
   patch.scale.set(winW * 0.95, 1.25, 1);
   patch.renderOrder = 1;
-  const shaft = sunShaft(keep, winX, winW, winH, R.back);
+  shaft = sunShaft(keep, winX, winW, winH, R.back);
   g.add(shaft);
-  const motes = dustMotes(keep, winX, winW, winH, R.back, high ? 60 : 36);
+  motes = dustMotes(keep, winX, winW, winH, R.back, high ? 60 : 36);
   g.add(motes.points);
+  }
 
   // Environnement (reflets doux du poil, des gamelles, du parquet) : une pièce chaude « photographiée » une fois.
   let env = stage.headless ? null : stage.track(() => roomEnvironment(stage.renderer, high));
   stage.scene.environment = env?.texture ?? null;
-  stage.scene.environmentIntensity = 0.45;
-  stage.scene.background = new THREE.Color(0x3a2a1c);
-  stage.scene.fog = new THREE.Fog(0x3a2a1c, 6, 14);
+  stage.scene.environmentIntensity = out ? 0.5 : 0.45;
+  stage.scene.background = new THREE.Color(out ? 0xbcd8ee : 0x3a2a1c);
+  stage.scene.fog = out ? new THREE.Fog(0xd9e6ee, 12, 34) : new THREE.Fog(0x3a2a1c, 6, 14);
+
+  // Les places des objets du jour (extras.js) : au sol le long du mur, dans le coin avant gauche ; sur la lisse de
+  // la clôture (dehors) ; contre le mur.
+  const spots = [];
+  for (let x = R.left + 0.5; x <= R.side - 0.35; x += 0.3) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.3] });
+  for (let z = 0.4; z <= 1.6; z += 0.3) spots.push({ kind: 'floor', p: [L.tail.x - 0.5 - 0.3 * len, 0, z] });
+  for (let x = R.left + 0.5; x <= R.side - 0.4; x += 0.4) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.06] });
+  if (sideFence) for (let z = R.back + 0.3; z < 1.6; z += 0.35) spots.push({ kind: 'perch', p: [R.side + 0.05, sideFence.top + 0.02, z], face: -Math.PI / 2 });
+  else spots.push({ kind: 'perch', p: [winX, 0.05, R.back + 0.12], face: 0 });
 
   return {
     group: g,
@@ -442,6 +523,12 @@ export function homeSet(stage) {
     plate: plateMesh,
     room: R,
     bed,
+    kind: out ? 'jardin' : 'maison',
+    outdoor: out,
+    sky,
+    ground: field ? [...field.mats, ...(far?.mats ?? [])] : [],
+    spots,
+    area: { x0: R.left + 0.4, x1: R.side - 0.25, z0: R.back + 0.25, z1: 1.8, y: out ? 0.02 : 0 },
     anchors: { eat, drink },
     layout,
     restore(st) {
@@ -455,8 +542,8 @@ export function homeSet(stage) {
       const c = st.camera.position;
       walls.back.visible = c.z > R.back + 0.02;
       walls.side.visible = c.x < R.side - 0.02;
-      motes.update(dt);
-      shaft.material.uniforms.uTime.value += dt;
+      motes?.update(dt);
+      if (shaft) shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);
     },
     dispose() {
@@ -468,6 +555,50 @@ export function homeSet(stage) {
       });
     },
   };
+}
+
+/** La niche du chien (dehors) : planches peintes, toit à deux pentes, porte ronde. size : sa hauteur au faîte. */
+function kennelModel(keep, size = 0.8) {
+  const g = new THREE.Group();
+  const wood = keep(new THREE.MeshStandardMaterial({ color: 0xb8875a, roughness: 0.85 }));
+  const roofM = keep(new THREE.MeshStandardMaterial({ color: 0x9a3f32, roughness: 0.8 }));
+  const dark = keep(new THREE.MeshStandardMaterial({ color: 0x1e1610, roughness: 1 }));
+  const w = size * 0.95;
+  const d = size * 1.1;
+  const h = size * 0.62;
+  const body = new THREE.Mesh(keep(new THREE.BoxGeometry(w, h, d)), wood);
+  body.position.y = h / 2;
+  g.add(body);
+  // le pignon (un prisme) et le toit
+  const gable = new THREE.Shape();
+  gable.moveTo(-w / 2, 0);
+  gable.lineTo(w / 2, 0);
+  gable.lineTo(0, size - h);
+  gable.closePath();
+  const gg = keep(new THREE.ExtrudeGeometry(gable, { depth: d, bevelEnabled: false }));
+  gg.translate(0, 0, -d / 2);
+  const gm = new THREE.Mesh(gg, wood);
+  gm.position.y = h;
+  g.add(gm);
+  const slope = Math.hypot(w / 2, size - h) + 0.06;
+  for (const s of [-1, 1]) {
+    const r = new THREE.Mesh(keep(new THREE.BoxGeometry(slope, 0.035, d + 0.12)), roofM);
+    r.position.set(s * w / 4, h + (size - h) / 2 + 0.02, 0);
+    r.rotation.z = -s * Math.atan2(size - h, w / 2);
+    g.add(r);
+  }
+  // la porte ronde, sur le côté qui nous regarde (+z)
+  const door = new THREE.Mesh(keep(new THREE.CircleGeometry(w * 0.26, 24)), dark);
+  door.position.set(0, h * 0.5, d / 2 + 0.002);
+  door.scale.y = 1.25;
+  g.add(door);
+  g.traverse((o) => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+  return g;
 }
 
 /** Plaque en bois peint à son nom, une patte de chaque côté. */

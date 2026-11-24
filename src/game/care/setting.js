@@ -156,7 +156,7 @@ export function careAmbience({ hour = 12, weather = 'clear', season = 'summer' }
     matin: { sun: 0.85, sky: 0.85, tint: 0xffe2b8, skyTop: 0x8db8e6, skyLow: 0xffd9b0 },
     jour: { sun: 1, sky: 1, tint: 0xfff2dc, skyTop: 0x6fa6dc, skyLow: 0xe6eef2 },
     soir: { sun: 0.72, sky: 0.62, tint: 0xffa860, skyTop: 0x6b78b8, skyLow: 0xffa66a },
-    nuit: { sun: 0.14, sky: 0.3, tint: 0x8fa4d8, skyTop: 0x0f1a38, skyLow: 0x2c3a62 },
+    nuit: { sun: 0.12, sky: 0.22, tint: 0x8fa4d8, skyTop: 0x0c1430, skyLow: 0x243258 },
   }[time];
   const W = {
     clear: { sun: 1, sky: 1, grey: 0 },

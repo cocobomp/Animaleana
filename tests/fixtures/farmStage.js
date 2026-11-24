@@ -25,13 +25,14 @@ export async function loadFarm() {
 }
 
 /** Une scène : l'animal (espèce, race, âge, sexe) dans son bâtiment, toile de téléphone en portrait. */
-export function farmStage({ species = 'goat', breed = null, young = false, sex = 'f', w = 390, h = 600, name = 'Biquette', needs = 25 } = {}) {
+export function farmStage({ species = 'goat', breed = null, young = false, sex = 'f', w = 390, h = 600, name = 'Biquette', needs = 25, set = null } = {}) {
   const a = M.animal.createAnimal({ species, breed, colorIndex: 0, ageDays: young ? 5 : 900, seed: 77, sex });
   a.name = name;
   a.sex = sex;
   for (const k in a.needs) a.needs[k] = needs;
   const model = M.ruminant.buildRuminantModel(a, M.gltf[species]);
-  const sc = new M.stage.CareStage({ a, renderer: M.stage.headlessRenderer(), model, set: M.barn.barnSet, fit: M.ruminant.RUMINANT_FIT });
+  // (set : un autre décor — le pré : tests/decors-*.test.js)
+  const sc = new M.stage.CareStage({ a, renderer: M.stage.headlessRenderer(), model, set: set ?? M.barn.barnSet, fit: M.ruminant.RUMINANT_FIT });
   sc.resize(w, h, M.frame.fitView(w, h, 400, 360));
   sc.ready = true;
   for (const act of Object.values(model.anim?.actions ?? {})) act.time = 0;

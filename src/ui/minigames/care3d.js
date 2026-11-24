@@ -36,6 +36,9 @@ import { hoofTrim3dGame } from './hoofTrim3d.js';
 import { goatPlay3dGame } from './goatPlay3d.js';
 import { barnClean3dGame } from './barnClean3d.js';
 import { lunge3dGame, liberty3dGame } from './lunge3d.js'; // (longe et liberté dans le rond de longe)
+import { careSetting, gameAmbience, pickExtras, hashSeed } from '../../game/care/setting.js'; // (le vrai lieu, l'heure, la météo)
+import { applyAmbience } from '../../game/care/ambience.js';
+import { placeExtras } from '../../game/care/extras.js';
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
 export const CARE3D_GAMES = {
@@ -63,6 +66,65 @@ export function care3dGameFor(a, action) {
 /** Décor de chaque espèce. */
 const SETS = { horse: stallSet, sheep: barnSet, goat: barnSet, cow: barnSet };
 Object.assign(SETS, { dog: homeSet, cat: homeSet, rabbit: hutchSet }); // (le coin de la maison, le clapier)
+/** Les lieux dehors de chaque décor : le pré (cheval, bétail), le jardin (chien, chat), l'enclos sur l'herbe (lapin). */
+const OUTSIDE = { pre: true, jardin: true, enclos: true, ailleurs: true };
+
+/**
+ * Le décor d'un soin : celui de l'espèce, dans le vrai lieu de l'animal (place : careSetting), à l'heure et sous le
+ * temps du jeu (amb : careAmbience), avec les objets du jour (kinds : pickExtras). Renvoie set(stage) → décor.
+ */
+export function decorFor(species, place, { amb = null, kinds = [], seed = 1 } = {}) {
+  const base = SETS[species] ?? stallSet;
+  const opts = { season: amb?.season ?? 'summer' };
+  if (OUTSIDE[place]) {
+    if (species === 'rabbit') opts.grass = true;
+    else opts.outdoor = true;
+  }
+  return (stage) => {
+    const d = base(stage, opts);
+    d.place = place;
+    if (!amb) return d;
+    let A = null;
+    let X = null;
+    try {
+      A = applyAmbience(stage, d, amb);
+      X = kinds.length ? placeExtras(stage, d, kinds, { seed }) : null;
+    } catch (e) {
+      console.warn('[decor] ambiance ou objets impossibles', e?.message ?? e);
+    }
+    d.ambience = { time: amb.time, weather: amb.weather, season: amb.season, lamp: !!A?.lamp };
+    d.extrasPicked = kinds;
+    d.extras = X;
+    d.ambienceParts = A;
+    const update = d.update;
+    const dispose = d.dispose;
+    d.update = (dt, st) => {
+      update.call(d, dt, st);
+      A?.update(dt, st);
+      X?.update(dt, st);
+    };
+    d.dispose = () => {
+      X?.dispose();
+      A?.dispose();
+      dispose.call(d);
+    };
+    return d;
+  };
+}
+
+/** Le décor de ce soin pour cet animal, dans le jeu (lieu, heure, météo, objets du jour). */
+export function careDecor(game, a, action = null) {
+  const place = careSetting(game, a, action);
+  const amb = gameAmbience(game);
+  let day = 1;
+  try {
+    day = game?.day ?? 1;
+  } catch {
+    day = 1;
+  }
+  const kinds = pickExtras({ day, id: a?.id ?? '', place, species: a?.species, n: 3, amb });
+  return { place, amb, kinds, set: decorFor(a?.species, place, { amb, kinds, seed: hashSeed(`${day}|${a?.id ?? ''}`) % 100000 }) };
+}
 
 /** Scène de chaque espèce (celle du cheval par défaut ; chien, chat, lapin : PetStage, leurs repères et leur vie). */
 const STAGES = { dog: PetStage, cat: PetStage, rabbit: PetStage };
@@ -73,7 +135,7 @@ const FITS = { sheep: RUMINANT_FIT, goat: RUMINANT_FIT, cow: RUMINANT_FIT };
  * Ouvre la scène 3D dans la scène du cadre (host), sous la toile 2D (above). Renvoie la scène, ou null (WebGL
  * absent, modèle pas chargé, réglage ?care3d=off, erreur) : le cadre garde alors le jeu dessiné.
  */
-export function openCareScene(ui, a, host, above) {
+export function openCareScene(ui, a, host, above, action = null) {
   if (!care3dPossible(a, { setting: care3dSetting() })) return null;
   const game = ui.game ?? null;
   let scene = null;
@@ -81,7 +143,9 @@ export function openCareScene(ui, a, host, above) {
   let model = null;
   try {
     model = fit?.model?.(a) ?? null;
-    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: SETS[a.species], fit, model });
+    // (le décor du vrai lieu de l'animal, à l'heure et sous le temps du jeu : careDecor)
+    const decor = careDecor(game, a, action);
+    scene = new (STAGES[a.species] ?? CareStage)({ game, a, entity: game?.entities?.get?.(a.id) ?? null, set: decor.set, fit, model });
   } catch (e) {
     console.warn('[care3d] scène 3D impossible, jeu dessiné', e?.message ?? e);
     try {

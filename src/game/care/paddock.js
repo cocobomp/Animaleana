@@ -15,7 +15,7 @@ import { limeWallTexture } from './farmBarn.js';
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 /** L'herbe du pré : vert tendre, des brins plus clairs et plus sombres, quelques taches jaunies. */
-function grassTexture(seed = 3) {
+export function grassTexture(seed = 3) {
   return canvasTex(256, 256, (c) => {
     const r = rng(seed);
     c.fillStyle = '#76a052';
@@ -41,7 +41,7 @@ function grassTexture(seed = 3) {
 }
 
 /** Terre battue devant la porte (là où les chèvres passent). */
-function dirtTexture() {
+export function dirtTexture() {
   return canvasTex(128, 128, (c) => {
     const r = rng(8);
     const gr = c.createRadialGradient(64, 64, 10, 64, 64, 64);
@@ -58,7 +58,7 @@ function dirtTexture() {
 }
 
 /** Une touffe d'herbe (brins effilés, alpha découpé) : la toile d'une carte. */
-function tuftTexture() {
+export function tuftTexture() {
   return canvasTex(64, 64, (c) => {
     const r = rng(5);
     c.clearRect(0, 0, 64, 64);
@@ -77,7 +77,7 @@ function tuftTexture() {
 }
 
 /** Le ciel : bleu en haut, pâle et un peu doré vers l'horizon (une grande sphère vue de dedans). */
-function skyDome(keep, r = 40) {
+export function skyDome(keep, r = 40) {
   const geo = keep(new THREE.SphereGeometry(r, 24, 12));
   const col = new Float32Array(geo.attributes.position.count * 3);
   const top = new THREE.Color(0x6fa6dc);

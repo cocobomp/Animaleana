@@ -16,11 +16,15 @@ import { wireMeshTexture, gardenTexture } from './petTextures.js';
 import { petBowl, FOODS, shadowed } from './petProps.js';
 import { avatarHand } from './props.js';
 import { roomEnvironment, namePlateTexture } from './home.js';
+import { grassField, skySphere } from './outdoor.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
-/** Le clapier et son enclos. stage : la scène. Renvoie { group, props, layout, update, restore, dispose }. */
-export function hutchSet(stage) {
+/**
+ * Le clapier et son enclos. stage : la scène. Renvoie { group, props, layout, update, restore, dispose }.
+ * opts.grass : dans son enclos dehors, sur l'herbe (pas la litière de paille du clapier) ; opts.season : la saison.
+ */
+export function hutchSet(stage, opts = {}) {
   const g = new THREE.Group();
   const own = [];
   const keep = (x) => {
@@ -77,8 +81,18 @@ export function hutchSet(stage) {
     bp.setZ(i, 0.012 + 0.008 * Math.sin(x * 9.1 + y * 4.3) * Math.cos(y * 7.7 - x * 2.1) + 0.004 * Math.sin(x * 31 + y * 27));
   }
   bed.computeVertexNormals();
+  let field = null;
+  if (opts.grass) {
+    // dans son enclos : l'herbe courte (il la broute), quelques fleurs
+    field = grassField(keep, { x0: R.left - 1, x1: R.side + 1, z0: R.back - 1, z1: 2.4, season: opts.season ?? 'summer', high, flowers: 30, size: 16, keepOut: { x0: L.tail.x - 0.1, x1: L.nose.x + 0.3, z0: -0.25, z1: 0.25 } });
+    g.add(field.group);
+    bed.dispose();
+  } else {
   mesh(bed, keep(new THREE.MeshStandardMaterial({ map: straw, roughness: 1, color: 0xf4e6c0 })), [(R.side + R.left) / 2, 0, (R.back + 2.2) / 2], [-Math.PI / 2, 0, 0], false);
   g.add(strands(keep, high ? 1400 : 900, R, H));
+  }
+  const sky = skySphere(keep);
+  g.add(sky);
 
   // ---------------------------------------------------------------- le clapier au fond : planches, toit, plaque
   const hutch = new THREE.Group();
@@ -308,11 +322,22 @@ export function hutchSet(stage) {
   stage.scene.background = new THREE.Color(0xbfd8e8);
   stage.scene.fog = new THREE.Fog(0xcfe0e8, 5, 12);
 
+  // Les places des objets du jour (extras.js) : au sol devant le clapier, sur son toit, contre ses planches.
+  const spots = [];
+  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.25) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.22] });
+  for (let x = hx - hW / 2 + 0.3; x <= hx + hW / 2 - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, hH + 0.2, R.back + 0.1], face: 0 });
+  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.04] });
   return {
     group: g,
     props,
     plate,
     room: R,
+    kind: opts.grass ? 'enclos' : 'clapier',
+    outdoor: true,
+    sky,
+    ground: field ? field.mats : [],
+    spots,
+    area: { x0: R.left + 0.3, x1: R.side - 0.25, z0: R.back + 0.2, z1: 1.4, y: 0.02 },
     anchors: { eat },
     layout,
     restore(st) {

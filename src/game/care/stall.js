@@ -11,13 +11,19 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { plateTexture } from '../models/interiorKit.js';
 import { hayNet, feeder, bucket, waterTap, BUCKET, FEEDER, NET_DEPTH, avatarHand } from './props.js';
 import { canvasTex, woodTexture, strawFloorTexture, noiseTexture } from './textures.js';
+import { waterTrough } from './barnProps.js';
+import { grassField, fenceMats, fenceLine, farAway, skySphere, outdoorLights, plankPanel } from './outdoor.js';
 
 export const STALL = { halfW: 1.85, back: -1.45, front: 2.2, low: 1.3, high: 2.6, roof: 3.05 };
 
 /**
  * Le box. stage : la scène (marks, double). Renvoie { group, props, anchors, update, dispose }.
+ * opts.outdoor : le pré (le cheval est dehors) — l'herbe, la clôture, le ciel ; la mangeoire et le filet accrochés au
+ * panneau en planches de la clôture, à la même place qu'au mur du box ; l'abreuvoir galvanisé à la place du seau.
+ * opts.season : la saison (l'herbe, les arbres au loin).
  */
-export function stallSet(stage) {
+export function stallSet(stage, opts = {}) {
+  const out = !!opts.outdoor;
   const g = new THREE.Group();
   const own = []; // à libérer
   const keep = (x) => {
@@ -83,6 +89,10 @@ export function stallSet(stage) {
   };
 
   // ---------------------------------------------------------------- sol : terre battue et litière épaisse
+  const win = { x: -0.55, y: 1.95, w: 1.05, h: 0.75 };
+  let plateMesh = null;
+  let outside = null;
+  if (!out) {
   mesh(new THREE.PlaneGeometry(12, 12), dirtMat, [0, -0.002, 0], [-Math.PI / 2, 0, 0], false);
   // Litière : un tapis bosselé (relief doux) et des brins de paille posés dessus.
   const bed = new THREE.PlaneGeometry(S.halfW * 2 + 0.1, S.front - S.back + 0.2, 48, 36);
@@ -103,7 +113,6 @@ export function stallSet(stage) {
   const wallT = 0.08;
   // Fond : planches jusqu'en haut, avec une fenêtre.
   const backW = S.halfW * 2 + 0.2;
-  const win = { x: -0.55, y: 1.95, w: 1.05, h: 0.75 };
   // (planches autour de la fenêtre : quatre morceaux)
   const backMat = plankMat;
   into = walls.back;
@@ -136,6 +145,7 @@ export function stallSet(stage) {
   }, { key: 'sky' }));
   const pane = mesh(new THREE.PlaneGeometry(win.w, win.h), keep(new THREE.MeshBasicMaterial({ map: sky, color: 0xffffff, toneMapped: false })), [win.x, win.y, S.back - wallT - 0.01], null, false);
   pane.material.color.setScalar(1.6);
+  pane.userData.window = { w: win.w, h: win.h, bright: 1.6 }; // (le ciel dehors : l'heure, la météo, ambience.js)
   const frameMat = keep(new THREE.MeshStandardMaterial({ color: 0xf1ead8, roughness: 0.7 }));
   const fr = (w, h, x, y) => mesh(new THREE.BoxGeometry(w, h, 0.1), frameMat, [x, y, S.back - 0.03]);
   fr(win.w + 0.12, 0.07, win.x, win.y + win.h / 2 + 0.02);
@@ -210,7 +220,7 @@ export function stallSet(stage) {
   into = walls.back;
   const plate = keep(plateTexture(stage.a?.name ?? ''));
   const plateMat = keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 }));
-  const plateMesh = mesh(new THREE.BoxGeometry(0.62, 0.2, 0.025), plateMat, [win.x + win.w / 2 + 0.75, 2.2, S.back + 0.012]);
+  plateMesh = mesh(new THREE.BoxGeometry(0.62, 0.2, 0.025), plateMat, [win.x + win.w / 2 + 0.75, 2.2, S.back + 0.012]);
   // (deux clous)
   for (const dx of [-0.26, 0.26]) mesh(new THREE.SphereGeometry(0.012, 8, 6), metal, [win.x + win.w / 2 + 0.75 + dx, 2.2, S.back + 0.03], null, false);
   // Une bride accrochée et un licol (taches de couleur sur le mur, comme dans un vrai box).
@@ -224,6 +234,7 @@ export function stallSet(stage) {
   coil.castShadow = true;
   walls.left.add(coil);
   into = g;
+  }
 
   // ---------------------------------------------------------------- accessoires (posés à hauteur de sa bouche)
   const props = {};
@@ -245,9 +256,11 @@ export function stallSet(stage) {
   props.net.group.scale.setScalar(ps);
   props.net.group.position.set(S.halfW - 0.25 * ps, Math.max(feedAt.y + (NET_DEPTH + 0.2) * ps, muzzle.y + 0.62 * ps), feedAt.z + (0.42 + 0.43 * big) * Math.max(0.85, ps));
   g.add(props.net.group);
-  // Seau d'eau : posé dans la litière, à l'angle avant droit (pour boire, il prend la place de la mangeoire).
-  props.bucket = bucket({ high });
-  props.bucket.group.scale.setScalar(ps);
+  // Seau d'eau : posé dans la litière, à l'angle avant droit (pour boire, il prend la place de la mangeoire). Au pré :
+  // l'abreuvoir galvanisé sur ses pieds (même façon de se remplir et de se boire que le seau).
+  const TR = { r: 0.2 * ps, len: 0.8 * ps };
+  props.bucket = out ? waterTrough({ ...TR, high }) : bucket({ high });
+  if (!out) props.bucket.group.scale.setScalar(ps);
   g.add(props.bucket.group);
   props.tap = waterTap();
   g.add(props.tap.group);
@@ -258,8 +271,9 @@ export function stallSet(stage) {
   const netAt = props.net.group.position.clone();
   const layout = (which) => {
     props.tap.group.visible = which === 'water';
-    props.net.group.visible = which !== 'water';
-    props.feeder.group.visible = which !== 'water';
+    // (au pré, au repos : le filet et la mangeoire sont rangés, il ne reste que le poteau et la planche)
+    props.net.group.visible = which !== 'water' && !(out && which === 'rest');
+    props.feeder.group.visible = which !== 'water' && !(out && which === 'rest');
     if (which === 'rest') {
       props.net.group.position.set(netAt.x, netAt.y, S.back + 0.4);
       props.feeder.group.position.set(feedAt.x, feedAt.y, S.back + 0.42);
@@ -267,7 +281,18 @@ export function stallSet(stage) {
       props.net.group.position.copy(netAt);
       props.feeder.group.position.copy(feedAt);
     }
-    if (which === 'water') {
+    if (which === 'water' && out) {
+      // Au pré : l'abreuvoir sous sa bouche, le long de la clôture (le rebord à hauteur de sa bouche tête baissée,
+      // sur ses pieds ; un poulain boit dans l'abreuvoir posé à même l'herbe), le robinet sur le poteau, vers nous.
+      const bx = S.halfW - (TR.r + 0.07);
+      const rimY = onFloor ? TR.r + 0.05 : Math.max(TR.r + 0.06, eat.y + 0.04);
+      const b = props.bucket.group.position.set(onFloor ? eat.x + 0.03 : bx, rimY, eat.z);
+      props.bucket.group.rotation.y = 0;
+      props.bucket.setFloor(-rimY + 0.03);
+      const tap = props.tap.group.position.set(S.halfW, rimY + 0.36 + 0.16 * big, b.z + TR.len * 0.5 + 0.14);
+      const rim = new THREE.Vector3(TR.r * 0.8, 0.03, TR.len * 0.3).add(b);
+      props.tap.hookUp(rim.clone().sub(tap), new THREE.Vector3(-1, 0, -0.1), 0.04 - tap.y);
+    } else if (which === 'water') {
       // Seau accroché au mur sous sa bouche, ou posé dans la paille sous sa bouche (poulain : voir la mangeoire).
       const bx = S.halfW - (BUCKET.r * ps + 0.07);
       const b = onFloor
@@ -279,13 +304,27 @@ export function stallSet(stage) {
       const tap = props.tap.group.position.set(S.halfW, b.y + (onFloor ? 0.45 : 0.36 + 0.16 * big), b.z + 0.36 + 0.19 * big);
       const rim = new THREE.Vector3(BUCKET.r * 0.45, 0.035, BUCKET.r * 0.88).multiplyScalar(ps).add(b);
       props.tap.hookUp(rim.clone().sub(tap), b.clone().sub(rim), onFloor ? 0.04 - tap.y : null);
+    } else if (out) {
+      // (au repos, l'abreuvoir est le long de la clôture du fond, à droite : derrière lui)
+      props.bucket.group.position.set(Math.min(S.halfW - TR.len / 2 - 0.35, L.body.x - 0.4), TR.r + 0.12, S.back + TR.r + 0.15);
+      props.bucket.group.rotation.y = Math.PI / 2;
+      props.bucket.setFloor(-(TR.r + 0.12) + 0.03);
     } else {
       props.bucket.group.position.set(S.halfW - 0.3, BUCKET.depth * ps + 0.03, S.front - 0.75);
     }
   };
   layout('none');
+  if (out) {
+    props.bucket.setLevel(0.75);
+    outside = buildPre();
+  }
 
   // ---------------------------------------------------------------- lumière
+  let shaft = null;
+  let motes = null;
+  if (out) {
+    outdoorLights(stage, g, { center: new THREE.Vector3(L.body.x + 0.3, 0.8, 0), span: 3.4 });
+  } else {
   const hemi = new THREE.HemisphereLight(0xfff0d6, 0x8b6a3c, high ? 0.75 : 0.85);
   g.add(hemi);
   // Lumière principale : par la porte du box, haute et chaude, de notre côté (le flanc qu'on voit est éclairé).
@@ -316,22 +355,90 @@ export function stallSet(stage) {
   fill.position.set(2.5, 1.5, 4);
   g.add(fill);
   // Rai de soleil : un volume lumineux de la fenêtre vers la litière, et des poussières qui y flottent.
-  const shaft = sunShaft(keep, win, S);
+  shaft = sunShaft(keep, win, S);
   g.add(shaft);
-  const motes = dustMotes(keep, win, S, high ? 70 : 40);
+  motes = dustMotes(keep, win, S, high ? 70 : 40);
   g.add(motes.points);
+  }
 
   // Environnement (reflets doux du pelage, du seau, du métal) : un petit box chaud « photographié » une fois.
   // (sans WebGL, dans les tests : pas d'environnement)
   let env = stage.headless ? null : stage.track(() => roomEnvironment(stage.renderer, high));
   stage.scene.environment = env?.texture ?? null;
-  stage.scene.environmentIntensity = 0.42;
-  stage.scene.background = new THREE.Color(0x2a1e14);
-  stage.scene.fog = new THREE.Fog(0x2a1e14, 7, 16);
+  stage.scene.environmentIntensity = out ? 0.5 : 0.42;
+  stage.scene.background = new THREE.Color(out ? 0xbcd8ee : 0x2a1e14);
+  stage.scene.fog = out ? new THREE.Fog(0xd9e6ee, 14, 36) : new THREE.Fog(0x2a1e14, 7, 16);
+
+  /**
+   * Le pré : l'herbe, la clôture à droite (le panneau en planches du coin repas, où la mangeoire et le filet sont
+   * accrochés comme au mur du box) et au fond, les arbres au loin, le ciel, la plaque à son nom sur la clôture.
+   */
+  function buildPre() {
+    const season = opts.season ?? 'summer';
+    const fm = fenceMats(keep);
+    fm.plank = plankSideMat;
+    const field = grassField(keep, { x0: -7, x1: 7, z0: S.back - 6, z1: S.front + 3, season, high, keepOut: { x0: L.tailTip.x - 0.3, x1: S.halfW, z0: -0.6, z1: 0.4 } });
+    g.add(field.group);
+    // (la clôture de droite : le long de x = halfW, comme le mur du box)
+    const fh = 1.25;
+    const right = fenceLine(keep, walls.right, fm, new THREE.Vector3(S.halfW + 0.06, 0, S.back - 1.4), new THREE.Vector3(S.halfW + 0.06, 0, S.front + 2.2), { h: fh, seed: 4 });
+    // (la mangeoire accrochée à une planche de la clôture ; le filet pendu à un grand poteau et sa potence)
+    const fa = feedAt;
+    const fr = FEEDER.r * ps;
+    plankPanel(keep, walls.right, fm, { x: S.halfW, z0: fa.z - fr - 0.18, z1: fa.z + fr + 0.18, y0: Math.max(0.05, fa.y - 0.45), y1: fa.y + 0.12 });
+    const na = netAt;
+    const postH = na.y + 0.16;
+    const tall = new THREE.Mesh(keep(new THREE.BoxGeometry(0.12, postH, 0.12)), fm.post);
+    tall.position.set(S.halfW + 0.12, postH / 2, na.z);
+    tall.castShadow = true;
+    tall.receiveShadow = true;
+    walls.right.add(tall);
+    const arm = new THREE.Mesh(keep(new THREE.BoxGeometry(0.34, 0.07, 0.07)), fm.post);
+    arm.position.set(S.halfW - 0.05, na.y + 0.09, na.z);
+    arm.castShadow = true;
+    walls.right.add(arm);
+    // (la clôture du fond, derrière lui)
+    const backZ = S.back - 0.25;
+    const back = fenceLine(keep, walls.back, fm, new THREE.Vector3(-7, 0, backZ), new THREE.Vector3(S.halfW + 0.06, 0, backZ), { h: fh, seed: 5 });
+    // (au loin à gauche, une autre clôture du pré)
+    fenceLine(keep, walls.left, fm, new THREE.Vector3(-6.5, 0, backZ), new THREE.Vector3(-6.5, 0, S.front + 2.5), { h: fh, seed: 6 });
+    const far = farAway(keep, { xC: 0, zFar: S.back - 17, season, n: 13, spread: 4.2 });
+    g.add(far.group);
+    const sky = skySphere(keep);
+    g.add(sky);
+    // la plaque à son nom, vissée sur la lisse du haut de la clôture du fond
+    const plate = keep(plateTexture(stage.a?.name ?? ''));
+    plateMesh = new THREE.Mesh(keep(new THREE.BoxGeometry(0.62, 0.2, 0.025)), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })));
+    plateMesh.position.set(win.x + win.w / 2 + 0.75, back.top - 0.08, backZ + 0.05);
+    plateMesh.castShadow = true;
+    walls.back.add(plateMesh);
+    // Les places des objets du jour : au sol devant la clôture du fond, sur sa lisse du haut, contre un poteau.
+    const spots = [];
+    for (let x = -3.2; x <= S.halfW - 0.6; x += 0.4) {
+      spots.push({ kind: 'floor', p: [x, 0, backZ + 0.45] });
+      spots.push({ kind: 'perch', p: [x, back.top + 0.02, backZ], face: 0 });
+    }
+    for (const p of back.posts) if (p.x < S.halfW - 0.4) spots.push({ kind: 'lean', p: [p.x + 0.15, 0, backZ + 0.08] });
+    for (let z = 0.6; z <= S.front - 0.2; z += 0.4) spots.push({ kind: 'floor', p: [-S.halfW - 0.3, 0, z] });
+    // (sur la lisse du haut de la clôture de droite, loin du coin repas : on la voit derrière sa tête)
+    for (let z = S.back - 1.2; z <= S.front + 1.8; z += 0.3) {
+      if (Math.abs(z - feedAt.z) < 0.7 || Math.abs(z - netAt.z) < 0.5) continue;
+      spots.push({ kind: 'perch', p: [S.halfW + 0.06, right.top + 0.02, z], face: -Math.PI / 2 });
+    }
+    return { sky, ground: [...field.mats, ...far.mats], spots };
+  }
 
   return {
     group: g,
     props,
+    kind: out ? 'pre' : 'box',
+    outdoor: out,
+    sky: outside?.sky ?? null,
+    ground: outside?.ground ?? [],
+    dims: S,
+    spots: out ? outside.spots : boxSpots(S),
+    // (le sol où l'on peut poser un objet du jour : dans le box, ou dans le pré devant la clôture du fond)
+    area: out ? { x0: -5.5, x1: S.halfW - 0.3, z0: S.back + 0.2, z1: S.front + 1.5, y: 0 } : { x0: -S.halfW + 0.3, x1: S.halfW - 0.3, z0: S.back + 0.3, z1: S.front - 0.3, y: 0.06 },
     win,
     anchors: { muzzle, eat },
     walls,
@@ -352,8 +459,8 @@ export function stallSet(stage) {
       walls.back.visible = c.z > S.back + 0.02;
       walls.roof.visible = c.y < S.roof - 0.02;
       walls.front.visible = c.z < S.front - 0.02;
-      motes.update(dt);
-      shaft.material.uniforms.uTime.value += dt;
+      motes?.update(dt);
+      if (shaft) shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);
     },
     dispose() {
@@ -365,6 +472,20 @@ export function stallSet(stage) {
       });
     },
   };
+}
+
+/**
+ * Les places des objets du jour dans le box (extras.js) : au sol le long du mur du fond, dans le coin avant gauche ;
+ * sur l'appui de la fenêtre et la lisse de la cloison de gauche ; contre le mur du fond.
+ */
+function boxSpots(S) {
+  const spots = [];
+  for (let x = -S.halfW + 0.4; x <= S.halfW - 0.5; x += 0.35) spots.push({ kind: 'floor', p: [x, 0.06, S.back + 0.32] });
+  for (let z = 0.5; z <= S.front - 0.4; z += 0.35) spots.push({ kind: 'floor', p: [-S.halfW + 0.35, 0.06, z] });
+  for (const dx of [-0.3, 0, 0.3]) spots.push({ kind: 'perch', p: [-0.55 + dx, 1.95 - 0.375 - 0.045, S.back + 0.09], face: 0 });
+  for (let z = S.back + 0.3; z < 0.4; z += 0.3) spots.push({ kind: 'perch', p: [-S.halfW + 0.02, S.low + 0.09, z], face: Math.PI / 2 });
+  for (let x = -S.halfW + 0.3; x <= S.halfW - 0.6; x += 0.5) spots.push({ kind: 'lean', p: [x, 0.06, S.back + 0.06] });
+  return spots;
 }
 
 /** Environnement des reflets : un petit box chaud « photographié » une fois (PMREM). */

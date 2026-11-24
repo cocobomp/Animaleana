@@ -503,7 +503,7 @@ function openMinigame(ui, o) {
     };
     /** Le code des soins 3D est là : la scène, puis le jeu 3D de ce soin. */
     const start3d = (mod) => {
-      scene3d = o.chore ? mod.openChoreScene(ui, o.chore, stage, canvas) : mod.openCareScene(ui, a, stage, canvas);
+      scene3d = o.chore ? mod.openChoreScene(ui, o.chore, stage, canvas) : mod.openCareScene(ui, a, stage, canvas, action);
       if (!scene3d) return start2d();
       ctx.scene = scene3d;
       try {

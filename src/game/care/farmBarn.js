@@ -17,6 +17,7 @@ import { cowBrushModel } from './stableChores.js';
 import { waterTap, avatarHand } from './props.js';
 import { canvasTex, strawFloorTexture, noiseTexture, rng } from './textures.js';
 import { hayRack, waterTrough, strawBale, saltLick, pitchfork, lantern, barnWood, bag } from './barnProps.js';
+import { grassField, fenceMats, fenceLine, farAway, skySphere, outdoorLights, plankPanel } from './outdoor.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -28,14 +29,18 @@ export function barnKind(species) {
 
 /**
  * La case. stage : la scène (marks, double, holder). Renvoie { group, props, layout, walls, plate, dims, update,
- * restore, dispose } (comme stallSet).
+ * restore, dispose } (comme stallSet). opts.outdoor : le pré (l'animal est dehors) — l'herbe, la clôture, le ciel ;
+ * le râtelier et l'abreuvoir à la même place, le râtelier accroché au panneau en planches de la clôture.
+ * opts.season : la saison (l'herbe, les arbres au loin).
  */
-export function barnSet(stage) {
+export function barnSet(stage, opts = {}) {
+  const out = !!opts.outdoor;
   const g = new THREE.Group();
   const keep = bag();
   const high = stage.high;
-  const kind = barnKind(stage.a?.species);
-  const etable = kind === 'etable';
+  const kind = out ? 'pre' : barnKind(stage.a?.species);
+  // (la vache garde sa taille de case et sa façon de manger, dedans comme au pré)
+  const etable = barnKind(stage.a?.species) === 'etable';
 
   // ---------------------------------------------------------------- l'animal et la taille de la case
   stage.holder.position.set(0, 0, -0.15);
@@ -123,6 +128,15 @@ export function barnSet(stage) {
   };
 
   // ---------------------------------------------------------------- sol : terre battue et litière épaisse
+  const win = { x: -S.halfW * 0.38, y: Math.min(S.eave - 0.55, Math.max(1.55, u * 1.55)), w: 0.75, h: 0.55 };
+  let plateG = null;
+  let plateMesh = null;
+  let plateX = 0;
+  let plateY = 1;
+  let cowBrush = null;
+  let outside = null;
+  if (out) outside = buildPre();
+  else {
   mesh(new THREE.PlaneGeometry(14, 14), dirtMat, [0, -0.002, 0], [-Math.PI / 2, 0, 0], false);
   const bed = new THREE.PlaneGeometry(S.halfW * 2 + 0.1, S.front - S.back + 0.2, 52, 40);
   const bp = bed.attributes.position;
@@ -141,7 +155,6 @@ export function barnSet(stage) {
   // Fond : planches (bergerie) ou chaux sur un soubassement de planches (chèvrerie, étable), la lucarne en haut.
   into = walls.back;
   const backW = S.halfW * 2 + 0.3;
-  const win = { x: -S.halfW * 0.38, y: Math.min(S.eave - 0.55, Math.max(1.55, u * 1.55)), w: 0.75, h: 0.55 };
   const backMat = limeMat ?? plankMat;
   const piece = (x0, x1, y0, y1, mat = backMat) => {
     if (x1 - x0 < 0.01 || y1 - y0 < 0.01) return;
@@ -184,6 +197,7 @@ export function barnSet(stage) {
   }, { key: 'barnSky' }));
   const pane = mesh(new THREE.PlaneGeometry(win.w, win.h), keep(new THREE.MeshBasicMaterial({ map: sky, toneMapped: false })), [win.x, win.y, S.back - wallT - 0.01], null, false);
   pane.material.color.setScalar(1.55);
+  pane.userData.window = { w: win.w, h: win.h, bright: 1.55 }; // (le ciel dehors : l'heure, la météo, ambience.js)
   const fr = (w, h, x, y) => plankBox(w, h, 0.14, beamMat, [x, y, S.back - 0.02], 0.8);
   fr(win.w + 0.2, 0.1, win.x, win.y + win.h / 2 + 0.05);
   fr(win.w + 0.24, 0.1, win.x, win.y - win.h / 2 - 0.05);
@@ -273,15 +287,15 @@ export function barnSet(stage) {
 
   // ---------------------------------------------------------------- petit décor
   into = walls.back;
-  const plateX = clamp(win.x + win.w / 2 + 0.75, -S.halfW + 0.5, S.halfW - 0.5);
-  const plateY = clamp(Math.max(u * 1.35, 1.1), 0.9, win.y + 0.1);
+  plateX = clamp(win.x + win.w / 2 + 0.75, -S.halfW + 0.5, S.halfW - 0.5);
+  plateY = clamp(Math.max(u * 1.35, 1.1), 0.9, win.y + 0.1);
   const plate = keep(plateTexture(stage.a?.name ?? ''));
   // (la plaque et ses deux clous ensemble : elle se déplace le long du mur si un cadrage la coupe, voir fitPlate)
-  const plateG = new THREE.Group();
+  plateG = new THREE.Group();
   plateG.position.set(plateX, plateY, S.back);
   walls.back.add(plateG);
   into = plateG;
-  const plateMesh = mesh(new THREE.BoxGeometry(0.56, 0.18, 0.025), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })), [0, 0, 0.013]);
+  plateMesh = mesh(new THREE.BoxGeometry(0.56, 0.18, 0.025), keep(new THREE.MeshStandardMaterial({ map: plate, roughness: 0.6 })), [0, 0, 0.013]);
   for (const k of [-0.23, 0.23]) mesh(new THREE.SphereGeometry(0.011, 8, 6), iron, [k, 0, 0.03], null, false);
   into = walls.back;
   // pierre à sel au mur du fond, à hauteur de bouche
@@ -305,7 +319,6 @@ export function barnSet(stage) {
     plankBox(bw, 0.06, 0.42, railMat, [-S.halfW + 0.7, bh, S.back + 0.95], 0.9);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) plankBox(0.07, bh, 0.07, beamMat, [-S.halfW + 0.7 + sx * (bw / 2 - 0.08), bh / 2, S.back + 0.95 + sz * 0.15], 0.9);
   }
-  let cowBrush = null;
   if (etable) {
     into = walls.back;
     const by = clamp(u * 0.95, 0.9, 1.6);
@@ -316,6 +329,50 @@ export function barnSet(stage) {
     walls.back.add(cowBrush.group);
   }
   into = g;
+  }
+
+  /**
+   * Le pré : l'herbe, la clôture à droite (le panneau en planches où le râtelier est accroché, comme au mur de la
+   * case) et au fond, les arbres au loin, le ciel, la plaque à son nom sur la clôture du fond.
+   */
+  function buildPre() {
+    const season = opts.season ?? 'summer';
+    const fm = fenceMats(keep);
+    fm.plank = sideMat;
+    const field = grassField(keep, { x0: -8, x1: 8, z0: S.back - 6, z1: S.front + 3, season, high, keepOut: { x0: L.tailTip.x - 0.3, x1: S.halfW, z0: -0.15 - 0.6 * u, z1: -0.15 + 0.6 * u } });
+    g.add(field.group);
+    const fh = Math.max(1.1, u * 1.15 + 0.2);
+    const right = fenceLine(keep, walls.right, fm, V(S.halfW + 0.06, 0, S.back - 1.4), V(S.halfW + 0.06, 0, S.front + 2.2), { h: fh, seed: 4 });
+    plankPanel(keep, walls.right, fm, { x: S.halfW, z0: eat.z - rack.w / 2 - 0.25, z1: eat.z + rack.w / 2 + 0.25, y0: Math.max(0.05, rackY - rack.trough - 0.35), y1: rackY + rack.h + 0.12 });
+    const backZ = S.back - 0.2;
+    const back = fenceLine(keep, walls.back, fm, V(-8, 0, backZ), V(S.halfW + 0.06, 0, backZ), { h: fh, seed: 5 });
+    fenceLine(keep, walls.left, fm, V(-S.halfW - 3.5, 0, backZ), V(-S.halfW - 3.5, 0, S.front + 2.5), { h: fh, seed: 6 });
+    const far = farAway(keep, { xC: 0, zFar: S.back - 17, season, n: 13, spread: 4.2 });
+    g.add(far.group);
+    const sky = skySphere(keep);
+    g.add(sky);
+    plateX = clamp(win.x + win.w / 2 + 0.75, -S.halfW + 0.5, S.halfW - 0.5);
+    plateY = back.top - 0.08;
+    plateG = new THREE.Group();
+    plateG.position.set(plateX, plateY, backZ + 0.04);
+    walls.back.add(plateG);
+    plateMesh = new THREE.Mesh(keep(new THREE.BoxGeometry(0.56, 0.18, 0.025)), keep(new THREE.MeshStandardMaterial({ map: keep(plateTexture(stage.a?.name ?? '')), roughness: 0.6 })));
+    plateMesh.position.z = 0.013;
+    plateMesh.castShadow = true;
+    plateG.add(plateMesh);
+    const spots = [];
+    for (let x = -S.halfW - 1.5; x <= S.halfW - 0.6; x += 0.4) {
+      spots.push({ kind: 'floor', p: [x, 0, backZ + 0.45] });
+      spots.push({ kind: 'perch', p: [x, back.top + 0.02, backZ], face: 0 });
+    }
+    for (const p of back.posts) if (p.x < S.halfW - 0.4) spots.push({ kind: 'lean', p: [p.x + 0.15, 0, backZ + 0.08] });
+    for (let z = 0.4; z <= S.front - 0.2; z += 0.4) spots.push({ kind: 'floor', p: [-S.halfW + 0.2, 0, z] });
+    for (let z = S.back - 1.2; z <= S.front + 1.8; z += 0.3) {
+      if (Math.abs(z - eat.z) < rack.w / 2 + 0.4) continue;
+      spots.push({ kind: 'perch', p: [S.halfW + 0.06, right.top + 0.02, z], face: -Math.PI / 2 });
+    }
+    return { sky, ground: [...field.mats, ...far.mats], spots };
+  }
 
   // ---------------------------------------------------------------- accessoires
   const props = {};
@@ -368,6 +425,10 @@ export function barnSet(stage) {
   props.trough.setLevel(0.7);
 
   // ---------------------------------------------------------------- lumière
+  let shaft = null;
+  let motes = null;
+  if (out) outdoorLights(stage, g, { center: V(L.body.x + 0.2 * u, u * 0.6, 0), span: Math.max(3, S.halfW + 1.2) });
+  else {
   const hemi = new THREE.HemisphereLight(0xfff0d6, 0x8b6a3c, high ? 0.7 : 0.82);
   g.add(hemi);
   // Lumière principale : par l'allée (le grand portail ouvert), haute et chaude, de notre côté.
@@ -397,16 +458,17 @@ export function barnSet(stage) {
   const fill = new THREE.DirectionalLight(0xc9dcff, 0.32);
   fill.position.set(2.5, 1.5, 4);
   g.add(fill);
-  const shaft = sunShaft(keep, win, S);
+  shaft = sunShaft(keep, win, S);
   g.add(shaft);
-  const motes = dustMotes(keep, win, S, high ? 70 : 40);
+  motes = dustMotes(keep, win, S, high ? 70 : 40);
   g.add(motes.points);
+  }
 
   let env = stage.headless ? null : stage.track(() => roomEnvironment(stage.renderer, high));
   stage.scene.environment = env?.texture ?? null;
-  stage.scene.environmentIntensity = 0.4;
-  stage.scene.background = new THREE.Color(0x2a1e14);
-  stage.scene.fog = new THREE.Fog(0x2a1e14, 7, 17);
+  stage.scene.environmentIntensity = out ? 0.5 : 0.4;
+  stage.scene.background = new THREE.Color(out ? 0xbcd8ee : 0x2a1e14);
+  stage.scene.fog = out ? new THREE.Fog(0xd9e6ee, 14, 36) : new THREE.Fog(0x2a1e14, 7, 17);
 
   /**
    * La plaque à son nom, la touche personnelle : coupée par le bord de l'image, cachée par un poteau, par l'animal ou
@@ -418,7 +480,7 @@ export function barnSet(stage) {
   // poussières, ni la plaque elle-même)
   const blockers = [];
   const solid = (o) => {
-    if (!o.isMesh || o.isInstancedMesh || plateG.children.includes(o)) return false;
+    if (!o.isMesh || o.isInstancedMesh || plateG?.children.includes(o)) return false;
     // (ni le rai de soleil, ni ce qui est transparent ou découpé — les brins de foin —, ni la litière à plat)
     const mt = o.material;
     if (!mt || Array.isArray(mt) || mt.isShaderMaterial || mt.transparent || mt.depthWrite === false || mt.alphaTest > 0) return false;
@@ -486,7 +548,7 @@ export function barnSet(stage) {
   const lastCam = V(1e9, 0, 0);
   let lastKey = '';
   function fitPlate(st) {
-    if (!walls.back.visible) return;
+    if (!walls.back.visible || out) return;
     // (une fois par cadrage : ni la caméra ni le cadre — la zone libre au-dessus d'une réglette — n'ont bougé depuis,
     // rien à refaire)
     const key = `${Math.round(st.viewY ?? 0)}|${st.size?.w}|${st.size?.h}|${st.view?.y0}`;
@@ -525,8 +587,13 @@ export function barnSet(stage) {
     /** Ce qui gêne la lecture de la plaque à sa place du moment (0 : on la lit en entier ; why : les raisons ; tests). */
     plateBad: (st, why = null) => {
       g.updateMatrixWorld(true);
-      return plateBad(st, plateG.position.x, plateG.position.y, why);
+      return out ? 0 : plateBad(st, plateG.position.x, plateG.position.y, why);
     },
+    outdoor: out,
+    sky: outside?.sky ?? null,
+    ground: outside?.ground ?? [],
+    spots: out ? outside.spots : barnSpots(S, win, kind),
+    area: out ? { x0: -S.halfW - 3, x1: S.halfW - 0.3, z0: S.back + 0.2, z1: S.front + 1.5, y: 0 } : { x0: -S.halfW + 0.3, x1: S.halfW - 0.3, z0: S.back + 0.3, z1: S.front - 0.3, y: 0.06 },
     anchors: { eat },
     layout,
     restore(st) {
@@ -546,9 +613,9 @@ export function barnSet(stage) {
       // (la plaque à son nom : toujours lisible — refait seulement quand le cadrage a changé, et après avoir caché les
       // murs entre la caméra et l'animal, voir fitPlate)
       if (st.ready && st.settled?.(0.02)) fitPlate(st);
-      motes.update(dt);
+      motes?.update(dt);
       cowBrush?.spin(dt);
-      shaft.material.uniforms.uTime.value += dt;
+      if (shaft) shaft.material.uniforms.uTime.value += dt;
       for (const p of Object.values(props)) p.update?.(dt, st);
     },
     dispose() {
@@ -566,6 +633,20 @@ export function barnSet(stage) {
  * Hauteur de la litière (m) en (x, z) du monde : épaisse et bosselée, relevée contre les murs. S : dims du décor. (Les
  * jeux qui posent des choses sur la litière s'en servent : la corvée de l'étable, barnClean3d.js.)
  */
+/**
+ * Les places des objets du jour dans la case (extras.js) : au sol le long du mur du fond et dans le coin avant
+ * gauche ; sur l'appui de la lucarne et la lisse du haut de la barrière ; contre le mur du fond.
+ */
+function barnSpots(S, win, kind) {
+  const spots = [];
+  const lift = (x, z) => litterHeight(S, x, z) - 0.02;
+  for (let x = -S.halfW + 1.2; x <= S.halfW - 0.5; x += 0.35) spots.push({ kind: 'floor', p: [x, lift(x, S.back + 0.35), S.back + 0.35] });
+  for (let z = 0.6; z <= S.front - 0.4; z += 0.35) spots.push({ kind: 'floor', p: [-S.halfW + 0.35, lift(-S.halfW + 0.35, z), z] });
+  for (const dx of [-0.2, 0, 0.2]) spots.push({ kind: 'perch', p: [win.x + dx, win.y - win.h / 2 - 0.1, S.back + 0.1], face: 0 });
+  for (let x = -S.halfW + 1.4; x <= S.halfW - 0.6; x += 0.5) spots.push({ kind: 'lean', p: [x, lift(x, S.back + 0.08), S.back + 0.08] });
+  return spots;
+}
+
 export function litterHeight(S, x, z) {
   const y = (S.back + S.front) / 2 - z;
   const edge = Math.max(0, 1 - Math.min(S.halfW - Math.abs(x), z - S.back) / 0.55);

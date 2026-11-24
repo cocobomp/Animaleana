@@ -53,12 +53,13 @@ export function buildPetModel(a) {
 }
 
 /** Une scène : l'animal (espèce, race, âge en jours) dans son décor, toile de téléphone en portrait. */
-export function makePetStage({ species = 'dog', breed = 'labrador', ageDays = 900, w = 390, h = 600, name = 'Filou', needs = 30, colorIndex = 0 } = {}) {
+export function makePetStage({ species = 'dog', breed = 'labrador', ageDays = 900, w = 390, h = 600, name = 'Filou', needs = 30, colorIndex = 0, set: setFn = null } = {}) {
   const a = M.animal.createAnimal({ species, breed, colorIndex, ageDays, seed: 77, personality: 'calm', sex: 'm' });
   a.name = name;
   for (const k in a.needs) a.needs[k] = needs;
   const model = buildPetModel(a);
-  const set = species === 'rabbit' ? M.hutch.hutchSet : M.home.homeSet;
+  // (set : un autre décor — le jardin, l'enclos sur l'herbe : tests/decors-*.test.js)
+  const set = setFn ?? (species === 'rabbit' ? M.hutch.hutchSet : M.home.homeSet);
   const sc = new M.petStage.PetStage({ a, renderer: M.stage.headlessRenderer(), model, set });
   sc.resize(w, h, M.frame.fitView(w, h, 400, 360));
   sc.ready = true;

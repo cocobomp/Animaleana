@@ -352,6 +352,52 @@ export function earSkip(model) {
   };
 }
 
+const _tops = new WeakMap();
+/**
+ * La vraie pointe de chaque oreille (model.ears), prise sur la peau : le sommet du pelage lié à l'os de l'oreille le
+ * plus loin de sa base, au repos, gardé dans le repère de cet os (il suit l'oreille qui se couche, se plie, et la tête
+ * qui bouge). Le cadrage s'en sert : un point fixe sur l'oreille (0,1 · taille au-dessus de sa base) est sous la
+ * pointe, plus ou moins selon la race (oreilles longues de l'Appaloosa, du poulain). Renvoie (i) → point monde (un
+ * nouveau vecteur), ou null (pas de pelage lié aux os des oreilles).
+ */
+export function earTops(model) {
+  const mesh = model?.coatMesh;
+  const sk = mesh?.skeleton;
+  const geo = mesh?.geometry;
+  if (!mesh?.isSkinnedMesh || !sk || !geo?.attributes?.skinIndex || !model.ears?.length) return null;
+  const bones = model.ears.map((e) => e.children.find((c) => c.isBone) ?? null);
+  if (bones.some((b) => !b)) return null;
+  let local = _tops.get(geo);
+  if (!local) {
+    const P = geo.attributes.position;
+    const si = geo.attributes.skinIndex;
+    const sw = geo.attributes.skinWeight;
+    const v = new THREE.Vector3();
+    local = bones.map((b) => {
+      const bi = sk.bones.indexOf(b);
+      if (bi < 0) return null;
+      const toBone = sk.boneInverses[bi].clone().multiply(mesh.bindMatrix);
+      let best = null;
+      let far = -1;
+      for (let i = 0; i < P.count; i++) {
+        let w = 0;
+        for (let k = 0; k < 4; k++) if (si.getComponent(i, k) === bi) w += sw.getComponent(i, k);
+        if (w < 0.5) continue;
+        v.fromBufferAttribute(P, i).applyMatrix4(toBone);
+        const d = v.lengthSq();
+        if (d > far) {
+          far = d;
+          best = v.clone();
+        }
+      }
+      return best;
+    });
+    if (local.some((x) => !x)) return null;
+    _tops.set(geo, local);
+  }
+  return (i) => bones[i].localToWorld(local[i].clone());
+}
+
 /**
  * Une lanière de cuir plate (section rectangulaire, faces nettes) le long de points et de leurs normales (la peau) :
  * hw demi-largeur, th épaisseur. Renvoie { geo, set(pts, nrm) } : set refait les sommets sans rien réallouer (même

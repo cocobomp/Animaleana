@@ -3,8 +3,8 @@
 //
 //   1. le mors : son licol est déjà enlevé ; il baisse la tête vers nous ; le filet est sur sa tête, la têtière
 //      devant les oreilles, les montants un peu bas ; notre main tient l'anneau du mors sous ses lèvres. On touche le
-//      coin de ses lèvres (là où il n'a pas de dents) : le mors y glisse, les montants remontent, il mâchonne. Devant
-//      ses dents, il relève la tête et couche les oreilles ;
+//      coin de ses lèvres (là où il n'a pas de dents) : il ouvre la bouche (horseMouth.js), le mors y glisse, les
+//      montants remontent, il referme la bouche et mâchonne. Devant ses dents, il relève la tête et couche les oreilles ;
 //   2. les oreilles : on touche une oreille, elle se plie vers l'avant et la têtière passe derrière elle ; puis
 //      l'autre ; le frontal se pose ;
 //   3. la sous-gorge : elle pend sous la gorge ; on la serre (🪢, ou le doigt sur sa gorge) en laissant un poing de
@@ -20,9 +20,11 @@ import { BRIDLE, throatVerdict } from './bridle.js';
 import { freeBridle } from '../../sim/gear.js';
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { nicker, snort } from './feed3d.js';
-import { closeSleeve, v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2, pulseRing, updateRing, bakeSkin, skinPoint, earSkip, ribbon, gluePoint, skinNow, glueWeight } from './horse3dKit.js';
+import { mouthOpener } from '../../game/models/horseMouth.js';
+import { closeSleeve, v3, owner, rigidGear, impatience, stagePill, afterLife, smooth, dist2, pulseRing, updateRing, bakeSkin, skinPoint, earSkip, earTops, ribbon, gluePoint, skinNow, glueWeight } from './horse3dKit.js';
 
 const PAUSE = 0.9;
+const BIT_TIME = 0.8; // (s) le mors qui entre : il ouvre la bouche, le mors passe, il la referme dessus
 const EAR_TIME = 0.8; // (s) une oreille qui se plie, la têtière qui passe derrière
 const MARGIN = 0.007; // (m) les lanières au-dessus de la peau
 const MARGIN_CROWN = 0.011; // (la nuque se plie avec l'encolure : un peu plus de place)
@@ -110,17 +112,24 @@ export function bridle3dGame(ctx) {
     const mesh = new THREE.Mesh(r.geo, leather);
     mesh.name = nm;
     mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    // (le cuir ne reçoit pas l'ombre du cuir : sous l'oreille, quatre bouts de lanières se rejoignent, leurs ombres
+    // les unes sur les autres faisaient une tache sombre)
+    mesh.receiveShadow = false;
     mesh.visible = false;
     mesh.frustumCulled = false;
     root.add(mesh);
-    // (la ligne du milieu de la lanière, gardée pour les essais : angles, écart à la peau)
+    // (la ligne du milieu de la lanière et ses normales, gardées pour les boucles et pour les essais)
     const line = Array.from({ length: n }, () => v3());
+    const nline = Array.from({ length: n }, () => v3());
     const set = (pts, nrm) => {
-      for (let i = 0; i < n; i++) line[i].copy(pts[i]);
+      for (let i = 0; i < n; i++) {
+        line[i].copy(pts[i]);
+        nline[i].copy(nrm[i]);
+      }
       r.set(pts, nrm);
     };
     mesh.userData.line = line;
+    mesh.userData.nrm = nline;
     return { mesh, set, n };
   };
   const crownS = strapOf(ARC, false, 'bridle-crown');
@@ -128,6 +137,50 @@ export function bridle3dGame(ctx) {
   const browS = strapOf(9, false, 'bridle-brow');
   const noseS = hack ? null : strapOf(NOSE, true, 'bridle-nose');
   const cheekS = hack ? [] : [strapOf(CHEEK, false, 'bridle-cheek'), strapOf(CHEEK, false, 'bridle-cheek')];
+  // Les boucles sous les oreilles : là où la têtière, le montant et la sous-gorge se rejoignent, une petite pièce de
+  // cuir et sa boucle de métal couvrent les bouts des lanières (comme sur un vrai filet). Avant, quatre bouts carrés
+  // se croisaient au même point, en biais : des faces mêlées et une petite tache sombre.
+  const metal = rings[0]?.material ?? own(new THREE.MeshStandardMaterial({ color: 0xc8c8c4, metalness: 0.8, roughness: 0.35 }));
+  const padGeo = own(new THREE.BoxGeometry(0.03, 0.036, 0.006));
+  const buckleGeo = own(new THREE.TorusGeometry(0.0095, 0.0017, 6, 4));
+  const keepers = [0, 1].map((k) => {
+    const g = new THREE.Group();
+    g.name = 'bridle-keeper';
+    const pad = new THREE.Mesh(padGeo, leather);
+    pad.castShadow = true;
+    const buckle = new THREE.Mesh(buckleGeo, metal);
+    // (la boucle carrée, posée sur le cuir, un peu vers le bas)
+    buckle.rotation.z = Math.PI / 4;
+    buckle.position.set(0, -0.006, 0.004);
+    buckle.castShadow = true;
+    g.add(pad, buckle);
+    g.visible = false;
+    g.userData.side = k;
+    root.add(g);
+    return g;
+  });
+  const _kx = v3();
+  const _ky = v3();
+  const _kz = v3();
+  const _km = new THREE.Matrix4();
+  /** Les boucles sur les bouts de la têtière (repère de la tête), le long de la lanière qui descend sur la joue. */
+  function poseKeepers() {
+    const line = crownS.mesh.userData.line;
+    const nrm = crownS.mesh.userData.nrm;
+    for (const [k, end, prev] of [[0, 0, 1], [1, ARC - 1, ARC - 2]]) {
+      const g = keepers[k];
+      g.visible = crownS.mesh.visible;
+      if (!g.visible) continue;
+      _kz.copy(nrm[end]).normalize();
+      // (vers le bas : la têtière continue sur la joue)
+      _ky.copy(line[end]).sub(line[prev]);
+      _ky.addScaledVector(_kz, -_ky.dot(_kz)).normalize();
+      _kx.crossVectors(_ky, _kz).normalize();
+      _km.makeBasis(_kx, _ky, _kz);
+      g.quaternion.setFromRotationMatrix(_km);
+      g.position.copy(line[end]).addScaledVector(_kz, 0.004);
+    }
+  }
 
   // Le mors (les anneaux, côté nous : x < 0 dans le repère de la tête — on voit son côté droit) et ses dents.
   const ringOf = (side) => (rings.length ? rings.reduce((p, q) => (side * q.position.x > side * p.position.x ? q : p)) : null);
@@ -458,7 +511,25 @@ export function bridle3dGame(ctx) {
       }
       throatS.set(...relax(pts, nrm, 6, throatKeep));
     }
+    poseKeepers();
   }
+
+  // ---------------------------------------------------------------- sa bouche
+  // (le cheval réaliste n'a pas d'os de mâchoire : une forme ajoutée à son pelage ouvre le bas de la bouche, voir
+  // horseMouth.js ; les autres modèles gardent la bouche fermée)
+  let mouth = null;
+  try {
+    mouth = md.real ? mouthOpener(md) : null;
+  } catch (e) {
+    console.warn('[bridle3d] bouche qui s\'ouvre impossible', e?.message ?? e);
+    mouth = null;
+  }
+  /** Ouverture de la bouche (0 à 1) : quand le mors entre (bitK), puis quand il le mâchonne. */
+  const mouthOpen = () => {
+    if (bitIn && bitK < 1) return smooth(Math.min(1, bitK / 0.3)) * (1 - smooth(Math.max(0, (bitK - 0.6) / 0.4)));
+    if (bitIn && chew > 0) return 0.25 * (0.5 - 0.5 * Math.cos(sc.time * 9)) * Math.min(1, chew);
+    return 0;
+  };
 
   // ---------------------------------------------------------------- notre main
   // (la main tient l'anneau du mors par dessous, la paume vers le haut ; l'avant-bras et la manche montent vers nous
@@ -496,7 +567,7 @@ export function bridle3dGame(ctx) {
     ? ctx.button(t('mg_bridle_quick'), { onTap: () => { if (!ctx.done) { bitIn = true; earDone[0] = earDone[1] = true; throat = (T.lo + T.hi) / 2; ctx.finish(1, t('mg_bridle_end'), 'just'); } } })
     : null;
 
-  /** La consigne d'une étape (le mors : la bouche du modèle ne s'ouvre pas, on ne le promet pas). */
+  /** La consigne d'une étape (le mors : on montre où toucher ; la bouche s'ouvre quand le mors arrive). */
   const stepHint = (st) => t(st === 'bit' ? 'mg_bridle_bit3d' : `mg_bridle_${st}`, who);
   function startStep(i) {
     si = i;
@@ -577,6 +648,13 @@ export function bridle3dGame(ctx) {
     const e = md.ears?.[i === 0 ? 1 : 0]; // (model.ears : [gauche, droite] ; celle de notre côté est la droite)
     return e ? e.localToWorld(v3(0, 0.1 * Math.max(0.7, S), 0)) : W(v3(0, hr * 1.2, earZ));
   };
+  // (la VRAIE pointe des oreilles, prise sur la peau : earTip est un point sur l'oreille, pour la toucher ; la pointe
+  // est plus haut, et plus ou moins selon la race — l'Appaloosa, le poulain. C'est elle que le cadrage garde)
+  const tops = earTops(md);
+  const earTop = (i) => (tops ? tops(i === 0 ? 1 : 0) : earTip(i).add(v3(0, 0.05 * S, 0)));
+  /** Au-dessus de la pointe d'une oreille : la place qu'on lui laisse (h · taille, plus ce que la garde a ajouté). */
+  let room = 0;
+  const overEar = (i, h) => earTop(i).add(v3(0, h * S + room, 0));
 
   // ---------------------------------------------------------------- caméra
   // (toujours sur la tête telle qu'elle est, et une garde : si le bout du nez, une oreille ou la gorge sort de
@@ -590,16 +668,16 @@ export function bridle3dGame(ctx) {
     return p.clone().sub(o).applyAxisAngle(ax, -0.16 * smooth(lower)).add(o);
   };
   const keyPts = (st) => {
-    const pts = [nosePt(), W(v3(0, -hr * 0.3, snout * 0.95)), sc.live('poll') ?? L.poll, earTip(0), earTip(1), W(throatLocal)];
+    const pts = [nosePt(), W(v3(0, -hr * 0.3, snout * 0.95)), sc.live('poll') ?? L.poll, overEar(0, 0.03), overEar(1, 0.03), W(throatLocal)];
     if (st !== 'bit' && lower > 0.01) pts.push(...pts.map(risen));
     // (le mors, et sous lui la main, le poignet et le début de la manche : sur un petit cheval, on ne voyait qu'une
     // main posée en l'air)
     if (st === 'bit') pts.push(W(barLocal), W(teethLocal), W(barLocal.clone().add(BIT_DROP)).add(v3(0, -0.1 * S, 0)), W(barLocal).add(v3(0, -0.24 * handK, 0)));
-    if (st === 'ears') pts.push(earTip(0).add(v3(0, 0.12 * S, 0)), earTip(1).add(v3(0, 0.12 * S, 0)));
+    if (st === 'ears') pts.push(overEar(0, 0.08), overEar(1, 0.08));
     if (st === 'throat') {
       // (de la place sous le bout du nez et au-dessus des oreilles : il bouge la tête, la caméra ne recadre pas à
       // chaque fois)
-      pts.push(nosePt().add(v3(0, -0.06 * S, 0)), W(v3(0, -hr * 0.9, snout * 0.95)), earTip(0).add(v3(0, 0.09 * S, 0)), earTip(1).add(v3(0, 0.09 * S, 0)));
+      pts.push(nosePt().add(v3(0, -0.06 * S, 0)), W(v3(0, -hr * 0.9, snout * 0.95)), overEar(0, 0.06), overEar(1, 0.06));
       pts.push(W(throatAt()).add(v3(0, -0.06 * S, 0)));
       if (P.throat) pts.push(W(P.throat.p[Math.floor(THROAT / 2)]).add(v3(0, -0.07 * S, 0)), W(P.throat.p[2]));
     }
@@ -618,7 +696,27 @@ export function bridle3dGame(ctx) {
   }
   let guard = 0;
   /** Ce qui doit rester dans l'image : le bout du nez, les oreilles, (la gorge). */
-  const mustSee = (st) => [nosePt(), earTip(0), earTip(1), ...(st === 'throat' ? [W(throatAt())] : [])];
+  const mustSee = (st) => [nosePt(), earTop(0), earTop(1), ...(st === 'throat' ? [W(throatAt())] : [])];
+  let earGuardT = 0;
+  /**
+   * La garde des oreilles, à chaque image (aussi pendant que la caméra bouge, et quand il relève la tête d'un coup) :
+   * une pointe d'oreille près du haut de l'image, on laisse plus de place au-dessus des oreilles et on recadre. La place
+   * ajoutée reste (jusqu'à 0,3 · taille) : on ne recadre pas sans cesse.
+   */
+  function earGuard(dt) {
+    earGuardT -= dt;
+    if (earGuardT > 0 || !sc.ready || !measured) return;
+    const v = ctx.view;
+    for (const i of [0, 1]) {
+      const q = sc.project(earTop(i));
+      if (q.behind || q.y < v.y0 + 12) {
+        room = Math.min(0.3 * S, room + 0.05 * S);
+        earGuardT = 0.5;
+        frameFor(step());
+        return;
+      }
+    }
+  }
   function keepInView(dt) {
     guard -= dt;
     if (guard > 0 || !sc.settled(0.05)) return;
@@ -669,12 +767,14 @@ export function bridle3dGame(ctx) {
       /** (tests) le poignet et le début de la manche, à l'écran */
       wrist: hand.visible ? sc.project(hand.localToWorld(v3(-0.16, 0, 0))) : null, pillX: pillX(),
       throatSpot: sc.project(W(throatAt())), halterHidden: halter.every((x) => !x.visible),
-      sag: throatS.mesh.visible ? sagOf() : -1, measured, item: real.item,
+      sag: throatS.mesh.visible ? sagOf() : -1, measured, item: real.item, mouth: mouth ? mouth.k : -1, bitK,
+      /** (essais) la jonction têtière / montant / sous-gorge de notre côté, à l'écran */
+      joint: measured && P.back ? sc.project(W(P.back.p[0])) : null,
     }),
     /** Les chemins mesurés sur la peau, repère de la tête (pour les essais). */
     paths: () => P,
     /** Nos lanières (pour les essais) : { nom: mesh }. */
-    straps: () => ({ crown: crownS.mesh, throat: throatS.mesh, brow: browS.mesh, nose: noseS?.mesh ?? null, cheeks: cheekS.map((c) => c.mesh) }),
+    straps: () => ({ crown: crownS.mesh, throat: throatS.mesh, brow: browS.mesh, nose: noseS?.mesh ?? null, cheeks: cheekS.map((c) => c.mesh), keepers }),
     down(p) {
       if (ctx.done || pause > 0) return;
       busy.poke();
@@ -755,7 +855,8 @@ export function bridle3dGame(ctx) {
     update(dt) {
       annoyed = Math.max(0, annoyed - dt);
       for (let i = 0; i < 2; i++) if (earT[i] >= 0) earT[i] += dt;
-      if (bitIn) bitK = Math.min(1, bitK + dt / 0.55);
+      if (bitIn) bitK = Math.min(1, bitK + dt / BIT_TIME);
+      mouth?.set(mouthOpen());
       chew = Math.max(0, chew - dt);
       fuss = Math.max(0, fuss - dt * 1.5);
       // il mâchonne son mors, il regarde la main qui tient le filet ; impatient si on traîne
@@ -773,6 +874,7 @@ export function bridle3dGame(ctx) {
         frameFor('bit');
       }
       keepInView(dt);
+      earGuard(dt);
       // la main : elle tient l'anneau du mors (de notre côté) par dessous et l'accompagne quand il entre ; puis elle
       // s'en va (on touche les oreilles, on serre la sous-gorge)
       hand.visible = !ctx.done && st === 'bit' && bitK < 1 && measured;
@@ -824,6 +926,7 @@ export function bridle3dGame(ctx) {
     },
     destroy() {
       unhook();
+      mouth?.dispose();
       (md.ears ?? []).forEach((e, i) => {
         e.scale.y = earScale[i];
       });

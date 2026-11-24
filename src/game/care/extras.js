@@ -213,7 +213,8 @@ function tippedBucket(keep) {
 }
 
 /** Une poule rousse qui se promène et picore. ~0,4 m. */
-function hen(keep) {
+/** far : vue de loin, sans les détails qu'on ne verrait pas (yeux, barbillon) : moins de pièces à dessiner. */
+function hen(keep, { far = false } = {}) {
   const g = new THREE.Group();
   const body = new THREE.Group();
   g.add(body);
@@ -241,12 +242,13 @@ function hen(keep) {
   neck.add(comb);
   const wattle = new THREE.Mesh(keep(new THREE.SphereGeometry(0.014, 6, 4)), red);
   wattle.position.set(0.085, 0.04, 0);
-  neck.add(wattle);
+  if (!far) neck.add(wattle);
   const beak = new THREE.Mesh(keep(new THREE.ConeGeometry(0.013, 0.035, 6)), yel);
   beak.rotation.z = -Math.PI / 2;
   beak.position.set(0.105, 0.075, 0);
   neck.add(beak);
   for (const s of [-1, 1]) {
+    if (far) continue;
     const eye = new THREE.Mesh(keep(new THREE.SphereGeometry(0.008, 6, 4)), eyeM);
     eye.position.set(0.07, 0.095, s * 0.035);
     neck.add(eye);
@@ -648,8 +650,16 @@ function flyer(keep, color, span = 0.4) {
     g.add(p);
     wings.push({ p, s });
   }
+  // (une queue fourchue, en deux brins)
+  const tg = keep(new THREE.BoxGeometry(span * 0.28, span * 0.01, span * 0.04));
+  for (const s of [-1, 1]) {
+    const tl = new THREE.Mesh(tg, m);
+    tl.position.set(-span * 0.26, 0, s * span * 0.03);
+    tl.rotation.y = s * 0.35;
+    g.add(tl);
+  }
   g.userData.flap = (t) => {
-    for (const w of wings) w.p.rotation.x = w.s * Math.sin(t) * 0.7;
+    for (const w of wings) w.p.rotation.x = w.s * (0.15 + Math.sin(t) * 0.45);
   };
   return g;
 }
@@ -673,7 +683,7 @@ function flight(keep, { n = 3, color = 0x3a3a44, span = 0.45 } = {}) {
 function farHens(keep) {
   const g = new THREE.Group();
   for (const [x, z, s] of [[0, 0, 1.3], [0.8, 0.5, 1.2]]) {
-    const h = hen(keep);
+    const h = hen(keep, { far: true });
     h.position.set(x, 0, z);
     h.scale.setScalar(s);
     h.userData.range = 0.5;
@@ -724,6 +734,22 @@ export function extraModel(kind, keep, seed = 1, opts = {}) {
       const f = flight(keep, opts.gulls ? { color: 0xf4f4f0, span: 0.6 } : {});
       f.g.userData.flight = f;
       return f.g;
+    }
+    case 'papillons': {
+      // (deux papillons qui volettent ensemble d'un bord à l'autre, juste derrière lui)
+      const g = new THREE.Group();
+      const birds = [];
+      for (const [i, c] of [0xf4b23c, 0x6ab0f0].entries()) {
+        const b = butterfly(keep, c);
+        b.userData.range = 0.08;
+        b.userData.off = new THREE.Vector3(i * 0.18, i * 0.1, i * 0.12);
+        b.userData.ph = 0;
+        b.scale.setScalar(1.3);
+        g.add(b);
+        birds.push(b);
+      }
+      g.userData.flight = { g, birds };
+      return g;
     }
     case 'hirondelle': {
       const f = flight(keep, { n: 1, color: 0x22263a, span: 0.3 });
@@ -861,7 +887,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     // (ne cache jamais l'animal : entre la caméra et chacun de ses points, pas de peau plus loin derrière l'objet)
     if (st.proxy?.hit) {
       const cam = st.camera.position;
-      for (const q of pts) {
+      // (le contour de l'objet, à plusieurs hauteurs : un petit sapin ne déborde pas sur son poitrail)
+      const ring = [];
+      for (const k of [0.25, 0.6, 0.9]) for (const [dx, dz] of [[rad, 0], [-rad, 0], [0, rad], [0, -rad]]) ring.push(p.clone().add(V(dx * (1.1 - k * 0.5), h * k, dz * (1.1 - k * 0.5))));
+      for (const q of [...pts, ...ring]) {
         const dir = q.clone().sub(cam);
         const d = dir.length();
         const h2 = st.proxy.hit(new THREE.Ray(cam.clone(), dir.normalize()), -9, 1e9);
@@ -966,18 +995,21 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     }
     // un vol d'oiseaux (dehors), une hirondelle (dedans) : d'un bord de l'image à l'autre, loin derrière lui
     const out = !!decor.outdoor;
-    if (out !== (it.kind === 'vol')) return false;
-    const zP = out ? box.min.z - 9 : Math.min(box.min.z - 0.25, (decor.area?.z0 ?? box.min.z - 0.8) + 0.2);
+    const bfly = it.kind === 'papillons';
+    if (bfly ? !out : out !== (it.kind === 'vol')) return false;
+    // (les papillons : juste derrière lui, à hauteur de fleurs et de tête ; le vol d'oiseaux : loin, au-dessus des
+    // clôtures ; l'hirondelle : devant le mur du fond, sous le toit)
+    const zP = bfly ? box.min.z - 0.7 : out ? box.min.z - 8 : Math.min(box.min.z - 0.25, (decor.area?.z0 ?? box.min.z - 0.8) + 0.2);
     const roof = decor.dims?.roof ?? decor.dims?.eave ?? decor.room?.roof ?? 2.6;
-    const y0 = out ? 1.9 : Math.max(1.0, box.min.y + (box.max.y - box.min.y) * 0.75);
-    const y1 = out ? 8 : roof - 0.25;
+    const y0 = bfly ? 0.25 : out ? 1.3 : Math.max(1.0, box.min.y + (box.max.y - box.min.y) * 0.75);
+    const y1 = bfly ? Math.max(1, box.max.y + 0.4) : out ? 8 : roof - 0.25;
     const at = (sx, sy) => {
       const ray = st.rayAt(sx, sy);
       if (ray.direction.z > -1e-3) return null;
       return ray.origin.clone().addScaledVector(ray.direction, (zP - ray.origin.z) / ray.direction.z);
     };
     const best = [];
-    for (const fy of [0.04, 0.1, 0.17, 0.25, 0.33, 0.42]) {
+    for (const fy of bfly ? [0.12, 0.22, 0.32, 0.42, 0.52] : [0.04, 0.1, 0.17, 0.25, 0.33, 0.42]) {
       const sy = v.y0 + 44 + fy * (H - 44);
       const a = at(v.x0 - 0.12 * W, sy);
       const b = at(v.x1 + 0.12 * W, sy);
@@ -1058,11 +1090,12 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const f = it.m.userData.flight;
     const P = it.path;
     const swallow = it.kind === 'hirondelle';
-    const T = swallow ? 3.2 : 8;
-    const wait = swallow ? 4 : 6;
+    const bfly = it.kind === 'papillons';
+    const T = swallow ? 3.2 : bfly ? 11 : 8;
+    const wait = swallow ? 4 : bfly ? 3 : 6;
     it.t += dt;
     const k = it.t % (T + wait);
-    const back = swallow && Math.floor(it.t / (T + wait)) % 2 === 1;
+    const back = (swallow || bfly) && Math.floor(it.t / (T + wait)) % 2 === 1;
     if (k > T) {
       it.m.visible = false;
       return;
@@ -1073,11 +1106,12 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const b = back ? P.a : P.b;
     _d.subVectors(b, a);
     it.m.position.copy(a).addScaledVector(_d, u);
-    it.m.position.y += Math.sin(u * Math.PI * (swallow ? 3 : 1.5)) * (swallow ? 0.18 : 0.5);
-    it.m.rotation.y = Math.atan2(-_d.z, _d.x);
+    it.m.position.y += Math.sin(u * Math.PI * (swallow ? 3 : bfly ? 4 : 1.5)) * (swallow ? 0.18 : bfly ? 0.12 : 0.5);
+    it.m.rotation.y = bfly ? 0 : Math.atan2(-_d.z, _d.x);
     for (const bd of f.birds) {
       bd.position.copy(bd.userData.off);
       bd.userData.flap?.(it.t * (swallow ? 22 : 9) + bd.userData.ph);
+      bd.userData.step?.(dt);
     }
   }
 

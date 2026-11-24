@@ -365,7 +365,8 @@ export function applyAmbience(stage, decor, amb) {
     }
     light.position.copy(at);
     // (assez fort pour bien le voir : sa lumière à la distance de son flanc vaut un peu plus que le ciel de nuit)
-    const d = Math.max(0.8, at.distanceTo(center));
+    // (un réverbère que le décor a mis à l'écart — le pré de la balle — : pas plus fort pour autant, il éblouirait le mur)
+    const d = Math.max(0.8, Math.min(decor.lampSpot ? 1.6 : 99, at.distanceTo(center)));
     light.intensity = 1.9 * d * d;
     light.userData.role = 'lamp';
     light.userData.base = light.intensity;

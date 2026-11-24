@@ -29,9 +29,9 @@ describe('le petit plus de chaque lieu (pur)', () => {
   it('la nuit, rien ne vole ni ne se promène ; sous la pluie, pas de vol d\'oiseaux', () => {
     const night = careAmbience({ hour: 23 });
     const rain = careAmbience({ hour: 12, weather: 'rain' });
-    expect([...lifeOff(night)].sort()).toEqual(['hirondelle', 'poulailler', 'vol']);
+    expect([...lifeOff(night)].sort()).toEqual(['hirondelle', 'papillons', 'poulailler', 'vol']);
     for (const place of Object.keys(LIFE_OF)) {
-      for (const k of pickLife({ place, amb: night, species: 'horse' })) expect(['vol', 'poulailler', 'hirondelle']).not.toContain(k);
+      for (const k of pickLife({ place, amb: night, species: 'horse' })) expect(['vol', 'poulailler', 'hirondelle', 'papillons']).not.toContain(k);
       expect(pickLife({ place, amb: rain })).not.toContain('vol');
     }
     // (il reste toujours quelque chose d'accroché, dedans comme dehors)

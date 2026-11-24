@@ -298,6 +298,7 @@ export const EXTRAS = {
   cloche: 'hang',
   // (au loin, derrière l'animal : un vol d'oiseaux dans le ciel, une poule dans le pré, une hirondelle sous le toit)
   vol: 'far',
+  papillons: 'far',
   poulailler: 'far',
   hirondelle: 'far',
 };
@@ -323,20 +324,21 @@ for (const [look, L] of Object.entries(AWAY_LOOKS)) EXTRAS_OF[`ailleurs-${look}`
 export const LIFE_OF = {
   box: ['fer', 'licol', 'hirondelle'],
   etable: ['cloche', 'fer', 'hirondelle'],
-  pre: ['vol', 'poulailler', 'fer', 'nichoir'],
-  ailleurs: ['vol', 'nichoir', 'fer'],
+  pre: ['vol', 'poulailler', 'fer', 'nichoir', 'papillons'],
+  ailleurs: ['vol', 'nichoir', 'fer', 'papillons'],
   maison: ['cadre', 'cadre'],
-  jardin: ['nichoir', 'vol', 'poulailler'],
-  clapier: ['vol', 'poulailler'],
-  enclos: ['vol', 'poulailler'],
+  jardin: ['nichoir', 'vol', 'papillons', 'poulailler'],
+  clapier: ['papillons', 'vol', 'poulailler'],
+  enclos: ['papillons', 'vol', 'poulailler'],
 };
 
-/** Ce qui ne bouge pas la nuit (pas de vol d'oiseaux, pas de poule dehors, pas d'hirondelle) ; sous la pluie, pas de vol. */
+/** Ce qui ne bouge pas la nuit (ni vol d'oiseaux, ni papillons, ni poule dehors, ni hirondelle) ; sous la pluie, la neige, le brouillard : ni vol ni papillons (pas l'hiver non plus). */
 export function lifeOff(amb) {
   const off = new Set();
   if (!amb) return off;
-  if (amb.time === 'nuit') off.add('vol').add('poulailler').add('hirondelle');
-  if (amb.wet || amb.foggy || amb.snowy) off.add('vol');
+  if (amb.time === 'nuit') off.add('vol').add('poulailler').add('hirondelle').add('papillons');
+  if (amb.wet || amb.foggy || amb.snowy) off.add('vol').add('papillons');
+  if (amb.season === 'winter') off.add('papillons');
   if (amb.wet || amb.snowy) off.add('poulailler');
   return off;
 }

@@ -493,6 +493,9 @@ export function trainSkill(a, trainingId, rng = Math.random) {
   return { ok: true, gain, skill: tr.skill };
 }
 
+/** En dessous, on ne monte pas : il a trop faim, trop soif, ou il est en mauvaise santé (canRide). */
+export const RIDE_MIN = { hunger: 25, thirst: 25, health: 35 };
+
 export function canRide(a) {
   const sp = SPECIES[a.species];
   if (!sp.rideable) return { ok: false, reason: 'notRideable' };
@@ -500,6 +503,10 @@ export function canRide(a) {
   if (a.sick) return { ok: false, reason: 'sick' };
   if (a.pregnant) return { ok: false, reason: 'pregnant' };
   if (a.lame) return { ok: false, reason: 'lame' };
+  // Mal en point : on s'occupe d'abord de lui (src/sim/animal.js, RIDE_MIN), on ne le monte pas le ventre vide.
+  if ((a.health ?? 100) < RIDE_MIN.health) return { ok: false, reason: 'weak' };
+  if ((a.needs.hunger ?? 100) < RIDE_MIN.hunger) return { ok: false, reason: 'hungry' };
+  if ((a.needs.thirst ?? 100) < RIDE_MIN.thirst) return { ok: false, reason: 'thirsty' };
   if (a.needs.energy < 10) return { ok: false, reason: 'tired' };
   return { ok: true };
 }

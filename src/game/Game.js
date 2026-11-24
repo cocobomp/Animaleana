@@ -124,6 +124,16 @@ export const JOBS = [
   { id: 'stable', pay: 40, hours: 2 },
   { id: 'hay', pay: 35, hours: 2 },
 ];
+/** Les voisins n'ont besoin de nous qu'en journée (de 8 h à 18 h, fini avant le soir), une fois par jour chacun. */
+export const JOB_HOURS = { from: 8, to: 18 };
+
+/** Pourquoi on ne peut pas faire ce petit boulot maintenant : 'done' (déjà fait aujourd'hui), 'closed' (nuit), ou null. */
+export function jobBlock(profile, job, day, hour) {
+  const j = profile.jobsToday;
+  if (j && j.day === day && j.done.includes(job.id)) return 'done';
+  if (hour < JOB_HOURS.from || hour + job.hours > JOB_HOURS.to) return 'closed';
+  return null;
+}
 
 export const VET_COST = { clinic: 30, home: 50 };
 
@@ -2917,6 +2927,11 @@ export class Game {
   }
 
   doJob(job) {
+    const why = jobBlock(this.profile, job, this.day, this.hour);
+    if (why) return this.ui.toast(t(`job_why_${why}`, { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) }), 4000);
+    const day = this.day;
+    if (this.profile.jobsToday?.day !== day) this.profile.jobsToday = { day, done: [] };
+    this.profile.jobsToday.done.push(job.id);
     this.advanceTime(job.hours);
     earn(this.profile, job.pay);
     audio.ui('coin');

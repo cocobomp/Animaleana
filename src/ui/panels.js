@@ -4,7 +4,7 @@ import { checkForUpdate } from './updates.js';
 import { dogTrainerSection, trainingBadge } from './dogTrainer.js'; // éducateur canin : séances dans la fiche, badge
 import { isTrainingClient } from '../sim/dogTrainer.js';
 import { h, bar, hexColor, isDesk } from './dom.js';
-import { t, ta, L, getLang, setLang } from '../i18n.js';
+import { t, ta, L, getLang, setLang, fmtHour } from '../i18n.js';
 import { SPECIES, getBreed, allOffered, anyAvailable, LIVESTOCK_IDS } from '../sim/species.js';
 import { NEEDS, CARE, happiness, mood, lifeStage, ageYears, canRide, weightClass, bondStage, BOND_PERKS, isHurt } from '../sim/animal.js';
 import { DAYS_PER_YEAR } from '../sim/time.js';
@@ -13,7 +13,7 @@ import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
 import { OBJECTIVES, objectiveShown, objectiveParams } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
-import { JOBS } from '../game/Game.js';
+import { JOBS, JOB_HOURS, jobBlock } from '../game/Game.js';
 import { EQUIPMENT, HELPERS, canProduce, equipmentShown, helperShown } from '../sim/farm.js';
 import { speciesName, coatName, coatLabel, availableEmojis } from './names.js';
 import { GEAR, freeSaddle } from '../sim/gear.js';
@@ -618,10 +618,16 @@ export function openJobs(ui) {
     render: () => [
       isSandbox(g.profile) ? h('p', { class: 'note' }, t('jobsSandbox')) : null,
       // (needs : un petit boulot avec une espèce pas encore proposée n'est pas affiché)
-      h('div', { class: 'cards' }, JOBS.filter((j) => anyAvailable(g.profile, j.needs)).map((j) => h('button', { class: 'card', onClick: () => g.doJob(j) },
-        h('span', { class: 'card-emoji' }, { walk: '🐕', catsit: '🐈', stable: '🧹', hay: '🌾' }[j.id]),
-        h('span', { class: 'card-main' }, h('b', {}, t(`job_${j.id}`)), h('small', {}, t('hours', { n: j.hours }))),
-        h('span', { class: 'card-side' }, `+${j.pay} 🪙`)))),
+      h('p', { class: 'note' }, t('jobsRule', { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) })),
+      // (une fois par jour chacun, en journée : src/game/Game.js, jobBlock)
+      h('div', { class: 'cards' }, JOBS.filter((j) => anyAvailable(g.profile, j.needs)).map((j) => {
+        const why = jobBlock(g.profile, j, g.day, g.hour);
+        return h('button', { class: 'card', disabled: !!why, onClick: () => { g.doJob(j); ui.refreshPanel?.(); } },
+          h('span', { class: 'card-emoji' }, { walk: '🐕', catsit: '🐈', stable: '🧹', hay: '🌾' }[j.id]),
+          h('span', { class: 'card-main' }, h('b', {}, t(`job_${j.id}`)),
+            h('small', {}, why ? t(`job_why_${why}`, { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) }) : t('hours', { n: j.hours }))),
+          h('span', { class: 'card-side' }, why === 'done' ? '✅' : `+${j.pay} 🪙`));
+      })),
     ],
   });
 }

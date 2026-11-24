@@ -7,6 +7,7 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
+import { updateCoinChip } from './piggy.js'; // 🐷 tirelire : compteur de pièces, objectif, pièces qui volent
 import { openVet } from './vet.js';
 import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { openGalops, openFactAlbum } from './galops.js'; // 🎓 les Galops, 🃏 les cartes « Le savais-tu ? »
@@ -340,7 +341,9 @@ export class UI {
     // Carte d'infos : les nœuds sont créés une fois ici ; refresh() ne change que les textes.
     // (Recréer les boutons à chaque rafraîchissement faisait perdre le tap qu'on était en train de donner.)
     this.hudName = h('span', { class: 'hud-name' });
-    this.hudCoin = h('span', { class: 'coin' });
+    // 🪙 Le compteur de pièces et sa tirelire (src/ui/piggy.js) : on le touche pour les petits boulots.
+    this.hudCoin = h('span', { class: 'coin', role: 'button', tabindex: '0', onClick: () => this.openJobs(),
+      onKeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.openJobs(); } } });
     this.hudLevel = h('span', { class: 'hud-lv' });
     this.xpFill = h('span', { class: 'xp-fill' });
     this.hudClock = h('div', { class: 'hud-line clock' });
@@ -526,9 +529,8 @@ export class UI {
     const s = g.hud();
     const set = (el, text) => { if (el.textContent !== text) el.textContent = text; };
     const narrow = isPhone(); // téléphone : carte sur deux lignes + barre du temps
-    const money = s.money === null ? t('infinite') : s.money;
     set(this.hudName, `👤 ${s.name}`);
-    set(this.hudCoin, `🪙 ${money}`);
+    updateCoinChip(this, s); // 🪙 pièces, tirelire, pièces qui volent quand on en gagne
     set(this.hudLevel, `⭐ ${t(narrow ? 'levelShort' : 'level', { n: s.level })}`);
     const xp = `${Math.round(s.levelProgress * 100)}%`;
     if (this.xpFill.style.width !== xp) this.xpFill.style.width = xp;

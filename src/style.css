@@ -3049,3 +3049,51 @@ span.card-emoji.list-thumb { width: 64px; height: auto; border-radius: 0; }
   }
   body:has(.ride-card:not(.out)):not(.riding, .panel-open, .modal-open, .actv-running, .mgmt) #toasts .toast { font-size: 0.85rem; padding: 6px 10px; }
 }
+
+/* 🐷 La tirelire (src/ui/piggy.js) : le compteur de pièces se remplit vers l'objectif choisi ; on le touche pour
+   les petits boulots. Pièces qui volent jusqu'au compteur quand on en gagne. */
+.hud-info .coin { cursor: pointer; padding: 1px 7px; margin: -1px -4px; border-radius: 999px; transition: background-color 0.3s; }
+.hud-info .coin.goal {
+  background: linear-gradient(90deg, rgba(255, 211, 90, 0.55) var(--pct, 0%), rgba(255, 255, 255, 0.16) var(--pct, 0%));
+  box-shadow: inset 0 0 0 1px rgba(255, 211, 90, 0.7);
+}
+.hud-info .coin.ready { background: #ffd35a; color: #3b2a00; animation: coin-glow 1.6s ease-in-out infinite; }
+.hud-info .coin.bump { animation: coin-bump 0.45s ease-out; }
+.hud-info .coin.ready.bump { animation: coin-bump 0.45s ease-out, coin-glow 1.6s ease-in-out 0.45s infinite; }
+@keyframes coin-bump { 0% { transform: scale(1); } 40% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes coin-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 211, 90, 0.8); } 50% { box-shadow: 0 0 0 5px rgba(255, 211, 90, 0); } }
+.coin-fly { position: fixed; z-index: 60; font-size: 24px; line-height: 1; pointer-events: none; will-change: transform; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3)); }
+.coin-plus {
+  position: fixed; z-index: 60; pointer-events: none; font-weight: 800; font-size: 1.05rem; color: #ffd35a;
+  text-shadow: 0 1px 0 #6b4a00, 0 0 6px rgba(0, 0, 0, 0.5); animation: coin-plus 1.7s ease-out forwards;
+}
+@keyframes coin-plus { 0% { transform: translateY(6px) scale(0.7); opacity: 0; } 15% { transform: translateY(0) scale(1.15); opacity: 1; } 70% { opacity: 1; } 100% { transform: translateY(-14px) scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .hud-info .coin.ready, .hud-info .coin.bump { animation: none; }
+  .coin-plus { animation-duration: 2.2s; }
+}
+.piggy-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 8px 0; background: #fffaf0; border: 1px solid #f0dfae; border-radius: 14px; }
+.piggy-card.ready { background: #fff4cc; border-color: #e6b23a; }
+.piggy-card.streak { background: #fff5ef; border-color: #f4cdb4; }
+.piggy-icon { font-size: 1.8rem; width: 40px; text-align: center; flex-shrink: 0; }
+.piggy-main { flex: 1; display: grid; gap: 3px; min-width: 0; line-height: 1.25; }
+.piggy-main small { color: var(--muted); }
+.piggy-card > button { flex-shrink: 0; min-height: 44px; }
+.piggy-track { display: block; height: 10px; background: #efe5cc; border-radius: 999px; overflow: hidden; }
+.piggy-fill { display: block; height: 100%; background: linear-gradient(90deg, #f2c04a, #e6a020); border-radius: 999px; }
+.streak-dots { display: flex; gap: 5px; }
+.streak-dot { width: 18px; height: 8px; border-radius: 999px; background: #f0dccf; }
+.streak-dot.on { background: linear-gradient(90deg, #ff9f43, #e8590c); }
+.streak-full { font-weight: 600; }
+.piggy-main small.streak-full.done { color: var(--primary); }
+.job-pay { gap: 1px; }
+.job-pay > b { font-size: 1.15rem; white-space: nowrap; }
+.card-side.job-pay small.job-bonus { font-size: 0.8rem; font-weight: 700; color: #c25a00; white-space: nowrap; }
+.goal-btn { white-space: nowrap; }
+.goal-btn.on { background: #fff4cc; border-color: #e6b23a; color: #6b4a00; }
+.goal-btn.big-goal { min-height: 48px; width: 100%; }
+.goal-short { margin: 4px 0 0; }
+.tk-goal { display: grid; gap: 6px; padding: 10px; margin-top: 8px; background: #fffaf0; border: 1px dashed #e6b23a; border-radius: 12px; }
+.tk-goal small { color: var(--muted); }
+.tk-goal .goal-btn { min-height: 44px; justify-self: start; }
+.tk-tool-buy { display: grid; gap: 4px; justify-items: end; }

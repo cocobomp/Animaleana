@@ -123,7 +123,17 @@ function measure(sc) {
   ears.forEach((e, k) => {
     if (earBest[k]) points.push([e, earBest[k]]);
   });
-  return { points, tip: best.front.clone() };
+  return { points, tip: best.front.clone(), ears: earBest };
+}
+
+/**
+ * Le vrai bout de chaque oreille, dans le repère de son oreille (model.ears : [gauche, droite]), mesuré sur le pelage
+ * (le sommet lié à l'os de l'oreille le plus loin de sa base) : il suit l'oreille quand elle tourne ou se plie.
+ * null si le modèle n'a pas de squelette lisible.
+ */
+export function earTipsOf(sc) {
+  const f = sc?.model?.ears?.length ? measure(sc) : null;
+  return f?.ears?.every(Boolean) ? f.ears : null;
 }
 
 /**

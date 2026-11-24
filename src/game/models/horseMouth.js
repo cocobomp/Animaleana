@@ -22,7 +22,7 @@ export const MOUTH_HINGE = [0, -0.05, 0.7];
 /** De quoi à quoi (z) l'ouverture grandit : rien au coin, tout devant. */
 export const MOUTH_RAMP = [0.7, 0.8];
 /** L'angle (rad) de la bouche grande ouverte (influence 1). */
-export const MOUTH_ANGLE = 0.2;
+export const MOUTH_ANGLE = 0.36;
 const BAND = 0.004; // (épaisseur du passage entre le haut et le bas, autour de la ligne)
 
 const smooth = (a, b, x) => {

@@ -241,6 +241,16 @@ export const EXTRAS_OF = {
   enclos: ['arrosoir', 'fleurs', 'oiseau', 'papillon', 'poule', 'chat'],
 };
 
+/** Les objets qui n'ont pas leur place avec cette ambiance (careAmbience). */
+export function extrasOff(amb) {
+  const off = new Set();
+  if (!amb) return off;
+  if (amb.snowy || amb.season === 'winter') off.add('fleurs').add('papillon');
+  if (amb.wet || amb.foggy) off.add('papillon');
+  if (amb.time === 'nuit') off.add('papillon').add('oiseau').add('poule');
+  return off;
+}
+
 /** Petit hachage d'un texte (graine stable). */
 export function hashSeed(str) {
   let h = 2166136261;
@@ -269,9 +279,11 @@ export function seeded(seed) {
  * objets ; le lendemain, au moins un a changé). La liste du lieu est mélangée une fois pour cet animal ; chaque jour,
  * on avance d'un nombre de cases tiré au sort et on prend les n suivants. Renvoie une liste de kinds (EXTRAS).
  */
-export function pickExtras({ day = 1, id = '', place = 'pre', n = 3, species = '' } = {}) {
-  // (le chat sur le muret : pas pour le chat lui-même)
-  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !(k === 'chat' && species === 'cat'));
+export function pickExtras({ day = 1, id = '', place = 'pre', n = 3, species = '', amb = null } = {}) {
+  // (le chat sur le muret : pas pour le chat lui-même ; ni fleurs ni papillon sous la neige, pas de papillon sous la
+  // pluie, la nuit les bêtes dorment)
+  const banned = extrasOff(amb);
+  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !(k === 'chat' && species === 'cat') && !banned.has(k));
   const L = list.length;
   const m = Math.min(n, L);
   if (m <= 0) return [];

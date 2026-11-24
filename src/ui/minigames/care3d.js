@@ -122,7 +122,7 @@ export function careDecor(game, a, action = null) {
   } catch {
     day = 1;
   }
-  const kinds = pickExtras({ day, id: a?.id ?? '', place, species: a?.species, n: 3 });
+  const kinds = pickExtras({ day, id: a?.id ?? '', place, species: a?.species, n: 3, amb });
   return { place, amb, kinds, set: decorFor(a?.species, place, { amb, kinds, seed: hashSeed(`${day}|${a?.id ?? ''}`) % 100000 }) };
 }
 

@@ -34,6 +34,19 @@ describe('les objets du jour (pur)', () => {
     for (let day = 1; day <= 30; day++) expect(pickExtras({ day, id: 'c', place: 'jardin', species: 'cat' })).not.toContain('chat');
   });
 
+  it('ni fleurs ni papillon sous la neige ; la nuit, ni oiseau ni poule ; toujours trois objets', () => {
+    const snow = careAmbience({ hour: 12, weather: 'snow', season: 'winter' });
+    const night = careAmbience({ hour: 23 });
+    for (let day = 1; day <= 20; day++) {
+      const a = pickExtras({ day, id: 'q', place: 'pre', amb: snow });
+      expect(a).not.toContain('fleurs');
+      expect(a).not.toContain('papillon');
+      expect(a.length).toBe(3);
+      const b = pickExtras({ day, id: 'q', place: 'pre', amb: night });
+      for (const k of ['oiseau', 'poule', 'papillon']) expect(b).not.toContain(k);
+    }
+  });
+
   it('deux animaux le même jour n\'ont pas forcément les mêmes objets', () => {
     const lists = new Set(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => pickExtras({ day: 5, id, place: 'pre' }).join(',')));
     expect(lists.size).toBeGreaterThan(1);

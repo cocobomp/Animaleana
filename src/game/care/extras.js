@@ -730,6 +730,14 @@ export function extraModel(kind, keep, seed = 1, opts = {}) {
     case 'cadre': return picture(keep, seed);
     case 'cloche': return cowbell(keep);
     case 'poulailler': return farHens(keep);
+    case 'rougegorge': {
+      const b = bird(keep);
+      b.scale.setScalar(1.6);
+      const g = new THREE.Group();
+      g.add(b);
+      g.userData.step = (dt) => b.userData.step?.(dt);
+      return g;
+    }
     case 'vol': {
       const f = flight(keep, opts.gulls ? { color: 0xf4f4f0, span: 0.6 } : {});
       f.g.userData.flight = f;
@@ -960,15 +968,21 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const hc = hd ? st.project(hd) : null;
     const hr = hd ? st.projectRadius(hd, 0.3 * Math.max(0.25, box.max.y - box.min.y)) + 14 : 0;
     const r = seeded(hashSeed(`${seed}|${it.kind}|loin`));
-    if (it.kind === 'poulailler') {
+    if (it.kind === 'poulailler' || it.kind === 'rougegorge') {
       if (!decor.outdoor) return false;
+      // (les poules : loin dans le pré ; le rouge-gorge : sur l'herbe juste derrière lui, il sautille et picore)
+      const robin = it.kind === 'rougegorge';
+      const [zn, zf] = robin ? [0.3, 2.2] : [2.2, 7.5];
+      const ext = robin ? [V(0, 0.14, 0), V(0.1, 0.05, 0), V(-0.1, 0.05, 0)] : [V(0, 0.55, 0), V(0.9, 0.3, 0.5), V(-0.6, 0.3, 0)];
+      const gy0 = decor.area?.y ?? 0;
       const cands = [];
       for (let gy = 0.12; gy <= 0.8; gy += 0.05) {
         for (let gx = 0.08; gx <= 0.92; gx += 0.06) {
           const ray = st.rayAt(v.x0 + gx * W, v.y0 + gy * H);
           if (ray.direction.y > -1e-3) continue;
-          const p = ray.origin.clone().addScaledVector(ray.direction, -ray.origin.y / ray.direction.y);
-          if (p.z > box.min.z - 2.2 || p.z < box.min.z - 7.5) continue;
+          const p = ray.origin.clone().addScaledVector(ray.direction, (gy0 - ray.origin.y) / ray.direction.y);
+          if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
+          if (robin && Object.values(decor.props ?? {}).some((pr) => pr?.group?.visible && pr.group.parent && pr.group.getWorldPosition(V()).distanceTo(p) < 0.4)) continue;
           cands.push({ p, v: r() });
         }
       }
@@ -976,7 +990,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       let n = 0;
       for (const { p } of cands) {
         if (++n > 80) break;
-        const pts = [p, p.clone().add(V(0, 0.55, 0)), p.clone().add(V(0.9, 0.3, 0.5)), p.clone().add(V(-0.6, 0.3, 0))];
+        const pts = [p, ...ext.map((e) => p.clone().add(e))];
         let ok = true;
         for (const q of pts) {
           const s = st.project(q);
@@ -984,7 +998,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
           if (hc && Math.hypot(s.x - hc.x, s.y - hc.y) < hr) ok = false;
         }
         // (au moins une des deux poules se voit : entre les lisses de la clôture, à côté de lui)
-        if (!ok || !(seen(st, p.clone().add(V(0, 0.3, 0))) || seen(st, p.clone().add(V(0.8, 0.3, 0.5))))) continue;
+        if (!ok) continue;
+        if (robin ? !seen(st, p.clone().add(V(0, 0.06, 0))) : !(seen(st, p.clone().add(V(0, 0.3, 0))) || seen(st, p.clone().add(V(0.8, 0.3, 0.5))))) continue;
         it.at = p;
         it.m.position.copy(p);
         it.m.rotation.y = (r() - 0.5) * 1.5;

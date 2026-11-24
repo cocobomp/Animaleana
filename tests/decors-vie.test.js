@@ -29,9 +29,9 @@ describe('le petit plus de chaque lieu (pur)', () => {
   it('la nuit, rien ne vole ni ne se promène ; sous la pluie, pas de vol d\'oiseaux', () => {
     const night = careAmbience({ hour: 23 });
     const rain = careAmbience({ hour: 12, weather: 'rain' });
-    expect([...lifeOff(night)].sort()).toEqual(['hirondelle', 'papillons', 'poulailler', 'vol']);
+    expect([...lifeOff(night)].sort()).toEqual(['hirondelle', 'papillons', 'poulailler', 'rougegorge', 'vol']);
     for (const place of Object.keys(LIFE_OF)) {
-      for (const k of pickLife({ place, amb: night, species: 'horse' })) expect(['vol', 'poulailler', 'hirondelle', 'papillons']).not.toContain(k);
+      for (const k of pickLife({ place, amb: night, species: 'horse' })) expect(['vol', 'poulailler', 'hirondelle', 'papillons', 'rougegorge']).not.toContain(k);
       expect(pickLife({ place, amb: rain })).not.toContain('vol');
     }
     // (il reste toujours quelque chose d'accroché, dedans comme dehors)
@@ -166,4 +166,46 @@ describe('les gros plans du cheval : toujours un peu de vie à l\'image', () => 
     expect(X.group.parent).toBeNull();
     expect(freed).toBe(geos.size);
   }, 60000);
+});
+
+describe('les gros plans du lapin et du chien dehors, même l\'hiver', () => {
+  let P;
+  let care3d;
+  let pets3d;
+  beforeAll(async () => {
+    P = await import('./fixtures/petStage.js');
+    await P.loadPets();
+    care3d = await import('../src/ui/minigames/care3d.js');
+    pets3d = await import('../src/ui/minigames/pets3d.js');
+  }, 180000);
+  afterEach(() => new Promise((resolve) => setImmediate(resolve)));
+
+  for (const [species, breed, place, season] of [['rabbit', 'nain', 'enclos', 'winter'], ['rabbit', 'nain', 'enclos', 'summer'], ['dog', 'labrador', 'jardin', 'winter']]) {
+    it(`${species} (${place}, ${season}), nourrir : au moins une chose vivante ou posée à voir, jamais devant lui`, () => {
+      const amb = careAmbience({ hour: 11, weather: 'clear', season });
+      const id = `${species}-vie`;
+      const kinds = pickExtras({ day: 3, id, place, species, amb });
+      const life = pickLife({ day: 3, id, place, amb, species, taken: kinds });
+      const { a, sc } = P.makePetStage({ species, breed, set: care3d.decorFor(species, place, { amb, kinds, life, seed: 5 }) });
+      const ctx = P.ctxFor(a, sc);
+      const game = pets3d.PET_CARE3D_GAMES[species].feed(ctx);
+      P.run(ctx, game, sc, 2);
+      sc.decor.extras.placeNow(sc);
+      const list = sc.decor.extras.items.filter((i) => i.at);
+      expect(list.length, JSON.stringify(sc.decor.extras.items.map((i) => [i.kind, i.why]))).toBeGreaterThan(0);
+      if (season === 'winter') for (const it of list) expect(['papillons', 'papillon', 'fleurs']).not.toContain(it.kind);
+      const cam = sc.camera.position;
+      for (const it of list) {
+        if (it.path) continue;
+        it.m.updateWorldMatrix(true, true);
+        const c = new THREE.Box3().setFromObject(it.m).getCenter(new THREE.Vector3());
+        const dir = c.clone().sub(cam);
+        const d = dir.length();
+        const hit = sc.proxy?.hit?.(new THREE.Ray(cam.clone(), dir.normalize()), -9, 1e9);
+        if (hit) expect(hit.point.distanceTo(cam), `${it.kind} devant lui`).toBeLessThan(d + 0.05);
+      }
+      game.destroy();
+      sc.dispose();
+    }, 60000);
+  }
 });

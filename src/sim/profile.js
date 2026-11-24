@@ -77,6 +77,9 @@ export function createProfile(name, mode = 'sandbox', home = 'maison') {
     dogTrainer: defaultDogTrainer(), // éducateur canin : chiens en éducation, historique (src/sim/dogTrainer.js)
     groomer: defaultGroomerState(), // salon de toilettage : réputation, clients, carnet (src/sim/groomer.js)
     trailGuide: defaultTrailGuide(), // 🧭 guide de randonnée : réservations, réputation (src/sim/trailGuide.js)
+    // 🐷 La tirelire (src/sim/piggyBank.js) : l'objectif d'épargne choisi (null : aucun) et la série des petits boulots.
+    goal: null,
+    jobStreak: { day: 0, n: 0 },
   };
 }
 

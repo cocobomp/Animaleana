@@ -34,7 +34,8 @@ import {
   passiveEquipment, hireHelper, fireHelper, payHelpers, doHelperTask, tickProduce, collectProduct,
   socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn, HELPERS, equipmentShown, helperShown,
 } from '../sim/farm.js';
-import { SPECIES, isOffered, coreShown } from '../sim/species.js';
+import { SPECIES, isOffered, coreShown, anyAvailable } from '../sim/species.js';
+import { jobPayout, recordJob, goalBought } from '../sim/piggyBank.js'; // 🐷 tirelire : série des boulots, objectif d'épargne
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, careFull, bondStage, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
@@ -134,6 +135,9 @@ export function jobBlock(profile, job, day, hour) {
   if (hour < JOB_HOURS.from || hour + job.hours > JOB_HOURS.to) return 'closed';
   return null;
 }
+
+/** Les petits boulots proposés à ce profil (un boulot avec une espèce pas encore proposée n'apparaît pas). */
+export const availableJobs = (profile) => JOBS.filter((j) => anyAvailable(profile, j.needs));
 
 export const VET_COST = { clinic: 30, home: 50 };
 
@@ -2019,6 +2023,7 @@ export class Game {
     const r = buyGear(this.profile, item, size ?? undefined); // taille poney / cheval / trait (src/sim/gear.js)
     if (!r.ok) return this.ui.toast(t('r_money'));
     this.ui.toast(t('gearBought', { name: t(`gear_${item}`) }));
+    this.goalDone({ kind: 'gear', id: item }, t(`gear_${item}`));
     this.audio?.ui?.('coin');
     return r;
   }
@@ -2440,7 +2445,16 @@ export class Game {
     const r = buyTool(this.profile, tool);
     if (!r.ok) return this.ui.toast(t({ money: 'r_money', soon: 'moreSoon' }[r.reason] ?? 'alreadyOwned'));
     this.ui.toast(t('gearBought', { name: t(`tool_${tool}`) }));
+    this.goalDone({ kind: 'tool', id: tool }, t(`tool_${tool}`));
     return r;
+  }
+
+  /** 🎯 On vient d'acheter l'objectif de la tirelire (src/sim/piggyBank.js) : on le fête, il s'efface. */
+  goalDone(bought, label) {
+    if (!goalBought(this.profile, bought)) return;
+    addStat(this.profile, 'goalsReached');
+    audio.ui('levelUp');
+    this.ui.toast(t('goal_bought', { name: label }), 6000);
   }
 
   train(a, trainingId) {
@@ -2837,7 +2851,9 @@ export class Game {
       ageDays: stageAgeDays(cfg.species, cfg.stage), name: name?.trim() || undefined, location: this.profile.place, day: this.day,
       seed: cfg.seed, // (la graine de l'aperçu de l'animalerie : mêmes marques blanches)
     });
-    return this.adopt(a, name, price, this.isHome ? 'petshop' : 'refuge');
+    const out = this.adopt(a, name, price, this.isHome ? 'petshop' : 'refuge');
+    if (out) this.goalDone({ kind: 'animal', species: cfg.species, breed: cfg.breed }, L(SPECIES[cfg.species].breeds.find((b) => b.id === cfg.breed)?.name));
+    return out;
   }
 
   breedingPartners(a) {
@@ -2929,14 +2945,21 @@ export class Game {
   doJob(job) {
     const why = jobBlock(this.profile, job, this.day, this.hour);
     if (why) return this.ui.toast(t(`job_why_${why}`, { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) }), 4000);
+    const p = this.profile;
     const day = this.day;
-    if (this.profile.jobsToday?.day !== day) this.profile.jobsToday = { day, done: [] };
-    this.profile.jobsToday.done.push(job.id);
+    // 🐷 Ce qu'il rapporte : sa paie, le bonus de série (premier boulot du jour) et celui de la journée complète.
+    const pay = jobPayout(p, job, day, availableJobs(p));
+    if (p.jobsToday?.day !== day) p.jobsToday = { day, done: [] };
+    p.jobsToday.done.push(job.id);
+    recordJob(p, day);
     this.advanceTime(job.hours);
-    earn(this.profile, job.pay);
+    earn(p, pay.total);
     audio.ui('coin');
-    addStat(this.profile, 'jobs');
-    this.ui.toast(t('jobDone', { n: job.pay }));
+    addStat(p, 'jobs');
+    this.ui.refresh(); // (tout de suite : les pièces volent du boulot touché jusqu'au compteur, src/ui/piggy.js)
+    if (isSandbox(p)) return this.ui.toast(t('jobDone', { n: job.pay }));
+    this.ui.toast(t('jobDone', { n: pay.total }) + (pay.streak ? ` ${t('job_streakGain', { n: pay.streak, days: pay.n })}` : ''), 4500);
+    if (pay.full) this.ui.toast(t('job_fullGain', { n: pay.full }), 5000);
   }
 
   // ---------------------------------------------------------------- ferme

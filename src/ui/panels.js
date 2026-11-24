@@ -13,7 +13,9 @@ import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
 import { OBJECTIVES, objectiveShown, objectiveParams } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
-import { JOBS, JOB_HOURS, jobBlock } from '../game/Game.js';
+import { JOB_HOURS, jobBlock, availableJobs } from '../game/Game.js';
+import { jobPayout, goalStatus, streakOn, streakAlive, streakBonus, JOB_STREAK, FULL_DAY_BONUS } from '../sim/piggyBank.js'; // 🐷 tirelire
+import { goalCard, goalButton } from './piggy.js'; // 🐷 carte de la tirelire, bouton « 🎯 Mon objectif »
 import { EQUIPMENT, HELPERS, canProduce, equipmentShown, helperShown } from '../sim/farm.js';
 import { speciesName, coatName, coatLabel, availableEmojis } from './names.js';
 import { GEAR, freeSaddle } from '../sim/gear.js';
@@ -615,21 +617,64 @@ export function openJobs(ui) {
   const g = ui.game;
   ui.openPanel({
     title: `📋 ${t('jobsTitle')}`,
-    render: () => [
-      isSandbox(g.profile) ? h('p', { class: 'note' }, t('jobsSandbox')) : null,
+    render: () => {
+      const p = g.profile;
+      const sandbox = isSandbox(p);
+      const hours = { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) };
       // (needs : un petit boulot avec une espèce pas encore proposée n'est pas affiché)
-      h('p', { class: 'note' }, t('jobsRule', { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) })),
-      // (une fois par jour chacun, en journée : src/game/Game.js, jobBlock)
-      h('div', { class: 'cards' }, JOBS.filter((j) => anyAvailable(g.profile, j.needs)).map((j) => {
-        const why = jobBlock(g.profile, j, g.day, g.hour);
-        return h('button', { class: 'card', disabled: !!why, onClick: () => { g.doJob(j); ui.refreshPanel?.(); } },
-          h('span', { class: 'card-emoji' }, { walk: '🐕', catsit: '🐈', stable: '🧹', hay: '🌾' }[j.id]),
-          h('span', { class: 'card-main' }, h('b', {}, t(`job_${j.id}`)),
-            h('small', {}, why ? t(`job_why_${why}`, { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) }) : t('hours', { n: j.hours }))),
-          h('span', { class: 'card-side' }, why === 'done' ? '✅' : `+${j.pay} 🪙`));
-      })),
-    ],
+      const jobs = availableJobs(p);
+      return [
+        sandbox ? h('p', { class: 'note' }, t('jobsSandbox')) : null,
+        h('p', { class: 'note' }, t('jobsRule', hours)),
+        // 🐷 La tirelire et la série (src/ui/piggy.js, src/sim/piggyBank.js) : pourquoi gagner, et revenir chaque jour.
+        sandbox ? null : goalCard(ui),
+        sandbox ? null : jobStreakCard(p, g.day, jobs),
+        // (une fois par jour chacun, en journée : src/game/Game.js, jobBlock)
+        h('div', { class: 'cards' }, jobs.map((j) => {
+          const why = jobBlock(p, j, g.day, g.hour);
+          const pay = jobPayout(p, j, g.day, jobs);
+          // Ce que ce boulot change pour l'objectif : « 🎯 encore 95 🪙 » ou « 🎯 assez ! ».
+          const after = !why && !sandbox ? goalStatus(p, pay.total) : null;
+          const line = why ? t(`job_why_${why}`, hours)
+            : [t('hours', { n: j.hours }), after ? (after.ready ? `🎯 ${t('job_goalEnough')}` : `🎯 ${t('job_goalLeft', { n: after.missing })}`) : null].filter(Boolean).join(' · ');
+          const extra = !why && !sandbox ? [pay.streak ? `+${pay.streak} 🔥` : null, pay.full ? `+${pay.full} ⭐` : null].filter(Boolean) : [];
+          return h('button', { class: 'card job-card', disabled: !!why, onClick: () => { g.doJob(j); ui.refreshPanel?.(); } },
+            h('span', { class: 'card-emoji' }, { walk: '🐕', catsit: '🐈', stable: '🧹', hay: '🌾' }[j.id]),
+            h('span', { class: 'card-main' }, h('b', {}, t(`job_${j.id}`)), h('small', {}, line)),
+            h('span', { class: 'card-side job-pay' }, why === 'done' ? '✅' : h('b', {}, `+${j.pay} 🪙`),
+              ...extra.map((x) => h('small', { class: 'job-bonus' }, x))));
+        })),
+      ];
+    },
   });
+}
+
+/** 🔥 La série des petits boulots et ⭐ la journée complète (src/sim/piggyBank.js). */
+function jobStreakCard(p, day, jobs) {
+  const s = streakOn(p.jobStreak, day);
+  const alive = streakAlive(p.jobStreak, day);
+  const done = p.jobsToday?.day === day ? jobs.filter((j) => p.jobsToday.done.includes(j.id)).length : 0;
+  let title;
+  let help;
+  if (!s.first) { // déjà un boulot aujourd'hui
+    title = t('streak_days', { n: s.n });
+    help = t('streak_tomorrow', { n: streakBonus(s.n + 1) });
+  } else if (alive) { // série d'hier : le premier boulot d'aujourd'hui la continue
+    title = t('streak_days', { n: alive });
+    help = t('streak_today', { n: streakBonus(s.n) });
+  } else {
+    title = t('streak_start');
+    help = t('streak_help', { n: streakBonus(JOB_STREAK.max + 1) });
+  }
+  const flames = Math.min(s.first ? alive : s.n, JOB_STREAK.max + 1);
+  return h('div', { class: 'piggy-card streak' },
+    h('span', { class: 'piggy-icon' }, '🔥'),
+    h('span', { class: 'piggy-main' },
+      h('b', {}, title),
+      h('span', { class: 'streak-dots', 'aria-hidden': 'true' }, Array.from({ length: JOB_STREAK.max + 1 }, (_, i) => h('span', { class: `streak-dot ${i < flames ? 'on' : ''}` }))),
+      h('small', {}, help),
+      jobs.length > 1 ? h('small', { class: done >= jobs.length ? 'streak-full done' : 'streak-full' },
+        done >= jobs.length ? `✅ ${t('job_fullDone')}` : `⭐ ${t('job_fullHelp', { n: FULL_DAY_BONUS, done, total: jobs.length })}`) : null));
 }
 
 // ---------------------------------------------------------------- réglages
@@ -972,6 +1017,9 @@ export function openShop(ui) {
           if (g.buyAnimal({ ...st }, name)) ui.closePanel();
         },
       }, sandbox ? `🛒 ${t('buy')}` : `🛒 ${t('buy')} · ${price} 🪙`),
+      // 🐷 Pas assez de pièces : combien il manque, et en faire son objectif (la tirelire du HUD se remplit vers lui).
+      !canAfford(g.profile, price) ? h('p', { class: 'note goal-short' }, t('tk_missing', { n: price - (g.profile.money ?? 0) })) : null,
+      !canAfford(g.profile, price) ? goalButton(ui, { kind: 'animal', species: st.species, breed: st.breed, stage: st.stage }, { cls: 'big-goal' }) : null,
     ];
   };
   ui.openPanel({ title: `🛒 ${g.isHome ? t('bld_petshop') : t('breeder')}`, render });

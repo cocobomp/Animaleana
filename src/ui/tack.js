@@ -13,6 +13,7 @@ import { matchyOf, missingFor } from '../sim/matchy.js'; // 🎨 tout assorti
 import { SPECIES } from '../sim/species.js';
 import { ageYears } from '../sim/animal.js';
 import { isSandbox, canAfford } from '../sim/profile.js';
+import { goalButton } from './piggy.js'; // 🐷 « 🎯 Mon objectif » (tirelire)
 import { thumb, thumbsFor, photoDouble } from '../game/thumbScenes.js'; // vignettes 3D (src/game/thumbs.js)
 import { aboveGround } from '../game/thumbs.js';
 import * as THREE from 'three';
@@ -137,7 +138,10 @@ function toolsList(ui) {
       h('span', { class: 'card-emoji' }, def.emoji),
       h('span', { class: 'card-main' }, h('b', {}, t(`tool_${tool}`)), h('small', {}, t(`toold_${tool}`))),
       have ? h('span', { class: 'card-side' }, '✅')
-        : h('button', { class: 'primary', onClick: () => { g.buyTool(tool); ui.renderPanel(); } }, sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`));
+        : h('span', { class: 'card-side tk-tool-buy' },
+          h('button', { class: 'primary', onClick: () => { g.buyTool(tool); ui.renderPanel(); } }, sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`),
+          // 🐷 trop cher pour l'instant : en faire son objectif
+          !sandbox && !canAfford(p, def.price) ? goalButton(ui, { kind: 'tool', id: tool }) : null));
   }));
 }
 
@@ -292,6 +296,12 @@ function renderItem(ui, id) {
       : h('button', { class: `big-action ${shop.pick === 'equip' ? 'primary' : ''}`, disabled: !own, onClick: () => { shop.pick = shop.pick === 'equip' ? null : 'equip'; ui.renderPanel(); } },
         h('span', { class: 'ba-icon' }, '✅'), h('span', { class: 'ba-text' }, h('b', {}, t('tk_equip'))))));
 
+  // 🐷 Pas assez de pièces : en faire son objectif (la tirelire du HUD se remplit vers lui : src/ui/piggy.js).
+  if (missing && !sandbox) {
+    out.push(h('div', { class: 'tk-goal' },
+      h('small', {}, t('goal_pickHelp', { n: missing })),
+      goalButton(ui, { kind: 'gear', id, size: def.sizes ? size : undefined }, { cls: 'tk-goal-btn' })));
+  }
   // Pas assez de pièces : combien il manque, et où en gagner.
   if (shop.pick === 'money') {
     out.push(h('div', { class: 'tk-pick' },

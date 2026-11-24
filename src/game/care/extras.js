@@ -520,7 +520,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1 } = {}) {
         const p = ray.origin.clone().addScaledVector(ray.direction, t);
         if (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1) continue;
         if (box && p.x > box.min.x - 0.15 && p.x < box.max.x + 0.15 && p.z > box.min.z - 0.15 && p.z < box.max.z + 0.15) continue;
-        out.push({ kind: 'floor', p: p.toArray() });
+        // (sur une grille de 20 cm : la même place d'une fois à l'autre, même si la caméra bouge d'un rien)
+        out.push({ kind: 'floor', p: [Math.round(p.x * 5) / 5, A.y, Math.round(p.z * 5) / 5] });
       }
     }
     return out;

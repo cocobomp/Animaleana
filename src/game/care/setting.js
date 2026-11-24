@@ -264,26 +264,25 @@ export function seeded(seed) {
   };
 }
 
-function rawPick(day, id, place, n, species) {
-  // (le chat sur le muret : pas pour le chat lui-même)
-  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !(k === 'chat' && species === 'cat'));
-  const r = seeded(hashSeed(`${day}|${id}|${place}`));
-  const order = list.map((k) => ({ k, v: r() })).sort((a, b) => a.v - b.v).map((x) => x.k);
-  return order.slice(0, Math.min(n, order.length));
-}
-
 /**
  * Les objets du jour autour de cet animal, dans ce lieu : tirés au sort de façon stable (le même jour, les mêmes
- * objets ; le lendemain, pas tout à fait les mêmes). Renvoie une liste de kinds (EXTRAS), du plus important au moins.
+ * objets ; le lendemain, au moins un a changé). La liste du lieu est mélangée une fois pour cet animal ; chaque jour,
+ * on avance d'un nombre de cases tiré au sort et on prend les n suivants. Renvoie une liste de kinds (EXTRAS).
  */
 export function pickExtras({ day = 1, id = '', place = 'pre', n = 3, species = '' } = {}) {
-  const today = rawPick(day, id, place, n, species);
-  const before = rawPick(day - 1, id, place, n, species);
-  const same = today.length === before.length && today.every((k) => before.includes(k));
-  if (!same) return today;
-  // (pareil qu'hier : un autre objet prend la place du dernier)
-  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !today.includes(k) && !(k === 'chat' && species === 'cat'));
-  if (!list.length) return today;
-  const k = list[hashSeed(`${day}|${id}`) % list.length];
-  return [...today.slice(0, -1), k];
+  // (le chat sur le muret : pas pour le chat lui-même)
+  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !(k === 'chat' && species === 'cat'));
+  const L = list.length;
+  const m = Math.min(n, L);
+  if (m <= 0) return [];
+  const r = seeded(hashSeed(`${id}|${place}`));
+  const perm = list.map((k) => ({ k, v: r() })).sort((a, b) => a.v - b.v).map((x) => x.k);
+  if (m >= L) return perm;
+  const d = Math.max(1, Math.floor(day));
+  // (le décalage du jour : la somme des pas tirés de 1 à L - 1 ; une fenêtre qui avance change toujours)
+  let off = hashSeed(`${id}|${place}|0`) % L;
+  for (let k = 1; k <= Math.min(d, 5000); k++) off += 1 + (hashSeed(`${id}|${place}|${k}`) % (L - 1));
+  const out = [];
+  for (let i = 0; i < m; i++) out.push(perm[(off + i) % L]);
+  return out;
 }

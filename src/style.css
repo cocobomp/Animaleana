@@ -3072,11 +3072,11 @@ span.card-emoji.list-thumb { width: 64px; height: auto; border-radius: 0; }
   .hud-info .coin.ready, .hud-info .coin.bump { animation: none; }
   .coin-plus { animation-duration: 2.2s; }
 }
-.piggy-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 0 10px; background: #fffaf0; border: 1px solid #f0dfae; border-radius: 14px; }
+.piggy-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 8px 0; background: #fffaf0; border: 1px solid #f0dfae; border-radius: 14px; }
 .piggy-card.ready { background: #fff4cc; border-color: #e6b23a; }
 .piggy-card.streak { background: #fff5ef; border-color: #f4cdb4; }
 .piggy-icon { font-size: 1.8rem; width: 40px; text-align: center; flex-shrink: 0; }
-.piggy-main { flex: 1; display: grid; gap: 4px; min-width: 0; }
+.piggy-main { flex: 1; display: grid; gap: 3px; min-width: 0; line-height: 1.25; }
 .piggy-main small { color: var(--muted); }
 .piggy-card > button { flex-shrink: 0; min-height: 44px; }
 .piggy-track { display: block; height: 10px; background: #efe5cc; border-radius: 999px; overflow: hidden; }

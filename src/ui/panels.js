@@ -628,7 +628,6 @@ export function openJobs(ui) {
         h('p', { class: 'note' }, t('jobsRule', hours)),
         // 🐷 La tirelire et la série (src/ui/piggy.js, src/sim/piggyBank.js) : pourquoi gagner, et revenir chaque jour.
         sandbox ? null : goalCard(ui),
-        sandbox ? null : jobStreakCard(p, g.day, jobs),
         // (une fois par jour chacun, en journée : src/game/Game.js, jobBlock)
         h('div', { class: 'cards' }, jobs.map((j) => {
           const why = jobBlock(p, j, g.day, g.hour);
@@ -644,6 +643,8 @@ export function openJobs(ui) {
             h('span', { class: 'card-side job-pay' }, why === 'done' ? '✅' : h('b', {}, `+${j.pay} 🪙`),
               ...extra.map((x) => h('small', { class: 'job-bonus' }, x))));
         })),
+        // (sous les boulots : ils restent en haut, même en paysage ; leur bonus 🔥 est déjà écrit sur chacun)
+        sandbox ? null : jobStreakCard(p, g.day, jobs),
       ];
     },
   });

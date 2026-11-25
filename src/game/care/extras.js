@@ -2,8 +2,10 @@
 // sur le muret, un oiseau sur la clôture, des fleurs, un seau renversé, une poule qui passe, une botte de paille, un
 // arrosoir, une balle, un papillon, un pot de fleurs. Lesquels : pickExtras (setting.js, tirés au sort de façon stable
 // pour la journée). Où : aux places que le décor propose (decor.spots : au sol, en haut d'un muret ou d'une clôture,
-// contre un mur), choisies une fois la caméra posée — dans l'image, jamais devant l'animal ni sur ce qu'on lui tend.
-// Tout est fait en code, léger (quelques formes simples), et libéré à la fermeture.
+// contre un mur) et sur les pans de mur qu'on voit (decor.hangAreas), choisies pour l'image — dans l'image, jamais
+// devant l'animal ni sur ce qu'on lui tend — et revues à chaque fois que le jeu recadre. Les gros plans ont en plus un
+// rouge-gorge, une souris, un escargot, des choses accrochées (pickLife). Tout est fait en code, léger (quelques
+// formes simples), et libéré à la fermeture.
 
 import * as THREE from 'three';
 import { strawBale, pitchfork, bag, lumpy } from './barnProps.js';
@@ -23,6 +25,14 @@ function shade(o) {
 }
 
 const std = (keep, color, o = {}) => keep(new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o }));
+
+/** Les toutes petites choses (une souris, un escargot, des carottes au mur) : leur ombre ne se verrait pas, elle coûterait. */
+function lit(o) {
+  o.traverse((m) => {
+    if (m.isMesh) m.receiveShadow = true;
+  });
+  return o;
+}
 
 // ---------------------------------------------------------------- les modèles (origine au sol, ou sous les pattes)
 
@@ -267,7 +277,7 @@ function hen(keep, { far = false } = {}) {
     t += dt;
     const cycle = 9;
     const k = t % cycle;
-    const range = g.userData.range ?? 0.4;
+    const range = g.userData.range ?? 0.3;
     const walk = k < 3 || (k > 4.5 && k < 7.5);
     const dir = k < 4.5 ? 1 : -1;
     const ph = k < 4.5 ? Math.min(1, k / 3) : Math.max(0, 1 - (k - 4.5) / 3);
@@ -279,6 +289,119 @@ function hen(keep, { far = false } = {}) {
     neck.rotation.z = walk ? Math.sin(t * 9) * 0.12 : -1.0 * peck;
   };
   return shade(g);
+}
+
+/**
+ * Une petite souris grise qui trottine dans la paille, s'arrête, renifle, repart (de RANGE.souris de part et d'autre
+ * de sa place). ~0,05 m : on la voit même en gros plan sur un mouton ou un sabot, même la nuit.
+ */
+function mouse(keep) {
+  const g = new THREE.Group();
+  const b = new THREE.Group();
+  g.add(b);
+  const fur = std(keep, 0x8a8078, { roughness: 0.95 });
+  const pink = std(keep, 0xe8a8a0, { roughness: 0.7 });
+  const dark = std(keep, 0x111111, { roughness: 0.3 });
+  const body = new THREE.Mesh(keep(new THREE.SphereGeometry(0.022, 12, 8)), fur);
+  body.scale.set(1.6, 1, 1);
+  body.position.y = 0.022;
+  b.add(body);
+  const head = new THREE.Group();
+  head.position.set(0.035, 0.026, 0);
+  b.add(head);
+  const snout = new THREE.Mesh(keep(new THREE.ConeGeometry(0.014, 0.034, 10)), fur);
+  snout.rotation.z = -Math.PI / 2;
+  snout.position.x = 0.012;
+  head.add(snout);
+  const nose = new THREE.Mesh(keep(new THREE.SphereGeometry(0.004, 6, 4)), pink);
+  nose.position.x = 0.03;
+  head.add(nose);
+  const ear = keep(new THREE.SphereGeometry(0.009, 8, 6));
+  const eye = keep(new THREE.SphereGeometry(0.003, 6, 4));
+  for (const s of [-1, 1]) {
+    const e = new THREE.Mesh(ear, pink);
+    e.scale.set(0.4, 1, 1);
+    e.position.set(-0.004, 0.012, s * 0.011);
+    head.add(e);
+    const ey = new THREE.Mesh(eye, dark);
+    ey.position.set(0.012, 0.006, s * 0.008);
+    head.add(ey);
+  }
+  const tail = new THREE.Mesh(keep(new THREE.TorusGeometry(0.03, 0.002, 4, 12, Math.PI * 0.8)), pink);
+  tail.rotation.x = Math.PI / 2;
+  tail.position.set(-0.06, 0.008, -0.012);
+  b.add(tail);
+  // (elle trottine un peu, s'arrête, renifle, repart dans l'autre sens)
+  let t = Math.random() * 7;
+  g.userData.step = (dt) => {
+    t += dt;
+    const k = t % 7;
+    const R = g.userData.range ?? 0.06;
+    const run = k < 0.6 || (k > 3.5 && k < 4.1);
+    const ph = k < 3.5 ? Math.min(1, k / 0.6) : Math.max(0, 1 - (k - 3.5) / 0.6);
+    b.position.x = (ph - 0.5) * 2 * R;
+    b.rotation.y = k < 3.5 ? 0 : Math.PI;
+    b.position.y = run ? Math.abs(Math.sin(t * 30)) * 0.003 : 0;
+    head.rotation.z = run ? 0 : Math.sin(t * 9) * 0.12;
+  };
+  return lit(g);
+}
+
+/**
+ * Un escargot qui avance tout doucement (sa coquille rousse enroulée, ses cornes qui bougent) : il sort la nuit et
+ * sous la pluie. ~0,05 m : on le voit même en gros plan sur un lapin.
+ */
+function snail(keep) {
+  const g = new THREE.Group();
+  const b = new THREE.Group();
+  g.add(b);
+  const skin = std(keep, 0xb8a888, { roughness: 0.4 });
+  const shell = std(keep, 0xa8603a, { roughness: 0.5 });
+  const band = std(keep, 0xe0b878, { roughness: 0.5 });
+  const dark = std(keep, 0x2a2018, { roughness: 0.3 });
+  const foot = new THREE.Mesh(keep(new THREE.SphereGeometry(0.012, 10, 6)), skin);
+  foot.scale.set(3.2, 0.7, 1);
+  foot.position.y = 0.008;
+  b.add(foot);
+  const neck = new THREE.Mesh(keep(new THREE.SphereGeometry(0.008, 8, 6)), skin);
+  neck.scale.set(1.4, 1.2, 1);
+  neck.position.set(0.032, 0.016, 0);
+  b.add(neck);
+  const sh = new THREE.Mesh(keep(new THREE.SphereGeometry(0.018, 12, 10)), shell);
+  sh.scale.set(1, 1, 0.75);
+  sh.position.set(-0.006, 0.028, 0);
+  b.add(sh);
+  const sp = new THREE.Mesh(keep(new THREE.TorusGeometry(0.011, 0.0035, 6, 16, Math.PI * 1.6)), band);
+  sp.position.set(-0.006, 0.028, 0.0135);
+  b.add(sp);
+  const horn = keep(new THREE.CylinderGeometry(0.0012, 0.0015, 0.016, 4));
+  const tip = keep(new THREE.SphereGeometry(0.0025, 6, 4));
+  const horns = [];
+  for (const s of [-1, 1]) {
+    const h = new THREE.Group();
+    h.position.set(0.036, 0.022, s * 0.004);
+    h.rotation.set(s * 0.3, 0, -0.35);
+    b.add(h);
+    const c = new THREE.Mesh(horn, skin);
+    c.position.y = 0.008;
+    h.add(c);
+    const e = new THREE.Mesh(tip, dark);
+    e.position.y = 0.016;
+    h.add(e);
+    horns.push({ h, s });
+  }
+  // (il avance, s'arrête, fait demi-tour au bout de sa petite course)
+  let t = Math.random() * 20;
+  g.userData.step = (dt) => {
+    t += dt;
+    const k = t % 20;
+    const R = g.userData.range ?? 0.03;
+    const ph = k < 10 ? k / 10 : 1 - (k - 10) / 10;
+    b.position.x = (ph - 0.5) * 2 * R;
+    b.rotation.y = k < 10 ? 0 : Math.PI;
+    for (const { h, s } of horns) h.rotation.x = s * (0.3 + Math.sin(t * 1.7 + s) * 0.15);
+  };
+  return lit(g);
 }
 
 /** Un arrosoir en zinc (bec, anse). ~0,35 m. */
@@ -353,8 +476,9 @@ function butterfly(keep, color = 0xf4b23c) {
   g.userData.step = (dt) => {
     t += dt;
     for (const w of wings) w.pivot.rotation.x = w.s * (0.2 + Math.abs(Math.sin(t * 14)) * 1.1);
-    const R = g.userData.range ?? 0.3;
-    fly.position.set(Math.cos(t * 0.6) * R, Math.sin(t * 1.3) * 0.08 + 0.05, Math.sin(t * 0.6) * R * 0.5);
+    // (toujours au-dessus de sa place, ailes comprises : placeExtras vérifie de sa place à sa place + SIZE)
+    const R = g.userData.range ?? 0.24;
+    fly.position.set(Math.cos(t * 0.6) * R, Math.sin(t * 1.3) * 0.06 + 0.12, Math.sin(t * 0.6) * R * 0.5);
     fly.rotation.y = -t * 0.6;
   };
   return g;
@@ -614,6 +738,45 @@ function picture(keep, seed = 1) {
   return shade(g);
 }
 
+/** Une botte de carottes pendue à un clou par ses fanes, la ficelle autour (le lapin la regarde). */
+function carrots(keep, seed = 1) {
+  const g = new THREE.Group();
+  const r = seeded(seed);
+  const orange = std(keep, 0xf08a2a, { roughness: 0.7 });
+  const green = std(keep, 0x4f9a3a, { roughness: 0.8 });
+  const twine = std(keep, 0xc8b48a, { roughness: 1 });
+  const root = keep(new THREE.ConeGeometry(0.017, 0.11, 8));
+  const top = keep(new THREE.ConeGeometry(0.009, 0.06, 5));
+  // (en éventail sous la ficelle, la pointe en bas)
+  for (let i = 0; i < 4; i++) {
+    const a = (i - 1.5) * 0.24 + (r() - 0.5) * 0.08;
+    const pv = new THREE.Group();
+    pv.position.set(0, 0.135, 0.03);
+    pv.rotation.z = a;
+    g.add(pv);
+    const c = new THREE.Mesh(root, orange);
+    c.rotation.z = Math.PI;
+    c.position.y = -0.065;
+    pv.add(c);
+    const f = new THREE.Mesh(top, green);
+    f.position.set((r() - 0.5) * 0.01, 0.028, 0);
+    f.rotation.z = (r() - 0.5) * 0.5;
+    pv.add(f);
+  }
+  const knot = new THREE.Mesh(keep(new THREE.TorusGeometry(0.019, 0.004, 4, 12)), twine);
+  knot.rotation.x = Math.PI / 2;
+  knot.position.set(0, 0.145, 0.03);
+  g.add(knot);
+  const line = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.002, 0.002, 0.05, 4)), twine);
+  line.position.set(0, 0.18, 0.017);
+  line.rotation.x = 0.5;
+  g.add(line);
+  const nail = new THREE.Mesh(keep(new THREE.SphereGeometry(0.005, 6, 4)), std(keep, 0x3a3a3e));
+  nail.position.set(0, 0.203, 0.005);
+  g.add(nail);
+  return lit(g);
+}
+
 /** Une cloche de vache pendue à sa courroie de cuir. */
 function cowbell(keep) {
   const g = new THREE.Group();
@@ -729,6 +892,9 @@ export function extraModel(kind, keep, seed = 1, opts = {}) {
     case 'nichoir': return birdhouse(keep);
     case 'cadre': return picture(keep, seed);
     case 'cloche': return cowbell(keep);
+    case 'carottes': return carrots(keep, seed);
+    case 'souris': return mouse(keep);
+    case 'escargot': return snail(keep);
     case 'poulailler': return farHens(keep);
     case 'rougegorge': {
       const b = bird(keep);
@@ -786,18 +952,75 @@ export function animalBox(stage) {
   return stage.box?.clone?.() ?? new THREE.Box3(V(-1, 0, -0.4), V(1, 1.5, 0.4));
 }
 
-/** La taille de chaque objet (rayon au sol, hauteur), pour le placer. */
-const SIZE = {
-  brouette: [0.75, 0.7], fourche: [0.2, 1.5], chat: [0.12, 0.33], oiseau: [0.06, 0.11], fleurs: [0.14, 0.3], seau: [0.2, 0.3],
-  poule: [0.35, 0.4], botte: [0.5, 0.42], arrosoir: [0.2, 0.32], balle: [0.06, 0.1], papillon: [0.25, 0.2], pot: [0.13, 0.35],
-  coquillage: [0.12, 0.05], crabe: [0.18, 0.07], mouette: [0.12, 0.2], rocher: [0.3, 0.26], sapin: [0.33, 0.9], lanterne: [0.15, 0.7],
-  amphore: [0.17, 0.52], fer: [0.08, 0.17], licol: [0.12, 0.5], nichoir: [0.09, 0.23], cadre: [0.16, 0.25], cloche: [0.08, 0.33],
-};
 
 /**
- * Pose les objets du jour (kinds : pickExtras) aux places du décor. Renvoie { group, placed, update(dt, stage),
+ * La taille de chaque objet (rayon au sol, hauteur), pour le placer. Ce qui bouge compte toute sa course : la poule va
+ * et vient de RANGE.poule de part et d'autre de sa place, plus son bec et sa queue (0,23 m) ; le papillon volette en
+ * rond, plus ses ailes ; le crabe marche de côté.
+ */
+const SIZE = {
+  brouette: [0.75, 0.7], fourche: [0.2, 1.5], chat: [0.12, 0.33], oiseau: [0.06, 0.11], fleurs: [0.14, 0.3], seau: [0.2, 0.3],
+  poule: [0.6, 0.45], botte: [0.5, 0.42], arrosoir: [0.2, 0.32], balle: [0.06, 0.1], papillon: [0.33, 0.26], pot: [0.13, 0.35],
+  coquillage: [0.12, 0.05], crabe: [0.2, 0.07], mouette: [0.12, 0.2], rocher: [0.3, 0.26], sapin: [0.33, 0.9], lanterne: [0.15, 0.7],
+  amphore: [0.17, 0.52], fer: [0.08, 0.17], licol: [0.12, 0.5], nichoir: [0.09, 0.23], cadre: [0.16, 0.25], cloche: [0.08, 0.33],
+  carottes: [0.08, 0.21], souris: [0.15, 0.06], escargot: [0.08, 0.05],
+};
+/** La course de ce qui bouge autour de sa place (m), déjà comptée dans SIZE. */
+const RANGE = { poule: 0.3, papillon: 0.24, souris: 0.06, escargot: 0.03 };
+/** Ce qui se perche (EXTRAS : 'perch') mais peut aussi s'asseoir ou sautiller par terre. */
+const FLOOR_TOO = new Set(['chat', 'oiseau']);
+
+/** La taille d'un objet du jour pour le placer : [rayon, hauteur] (tests). */
+export function extraSize(kind) {
+  return SIZE[kind] ?? [0.2, 0.3];
+}
+
+/** La course que placeExtras donne à ce qui bouge (userData.range), ou null (tests). */
+export function extraRange(kind) {
+  return RANGE[kind] ?? null;
+}
+
+/**
+ * Sur un pan de mur (decor.hangAreas), la hauteur du bas de chaque chose accrochée (m) : un licol à hauteur d'homme, un
+ * cadre pas au ras du sol, la botte de carottes à hauteur de lapin.
+ */
+const HANG_Y = { fer: [0.6, 2.7], licol: [0.9, 2.3], cloche: [0.6, 2.5], nichoir: [0.5, 2.6], cadre: [0.4, 1.9], carottes: [0.04, 1.2] };
+
+const _bb = new THREE.Box3();
+/** La boîte (monde) de ce qu'on voit d'un objet : ses maillages visibles seulement (un accessoire range sa main cachée). */
+function shownBox(o, out = new THREE.Box3()) {
+  out.makeEmpty();
+  o.updateWorldMatrix(true, true);
+  o.traverseVisible((m) => {
+    if (!m.isMesh || !m.geometry) return;
+    if (m.isSkinnedMesh || m.isInstancedMesh) {
+      if (!m.boundingBox) m.computeBoundingBox();
+      out.union(_bb.copy(m.boundingBox).applyMatrix4(m.matrixWorld));
+      return;
+    }
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    out.union(_bb.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld));
+  });
+  return out;
+}
+
+/** L'objet et tous ses parents sont-ils visibles ? */
+function shown(o) {
+  for (let p = o; p; p = p.parent) if (p.visible === false) return false;
+  return true;
+}
+
+/** Deux rectangles de l'image ({ x0, x1, y0, y1 }) se touchent-ils (à m px près) ? */
+function overlap(a, b, m = 0) {
+  return a.x1 + m > b.x0 && a.x0 - m < b.x1 && a.y1 + m > b.y0 && a.y0 - m < b.y1;
+}
+
+/**
+ * Pose les objets du jour (kinds : pickExtras) aux places du décor. Renvoie { group, placed, items, update(dt, stage),
  * dispose() }. Les objets attendent la caméra posée pour choisir leur place (dans l'image, pas devant l'animal ni sur
- * ce qu'on lui tend), puis apparaissent doucement.
+ * ce qu'on lui tend), puis apparaissent doucement. Quand le jeu recadre, chacun est revu : ce qui n'aura plus sa place
+ * s'efface avant que la caméra arrive, ce qui passerait devant l'animal disparaît tout de suite, et une fois la caméra
+ * posée, ce qui manque reprend une place dans la nouvelle image (ce qui est bien placé ne bouge pas).
  *
  * life (pickLife) : le petit plus du lieu, essayé dans l'ordre tant qu'il y a moins de min choses à voir (un gros plan
  * laisse peu de sol dans l'image) : des choses accrochées au mur ou à un poteau, un vol d'oiseaux qui traverse le ciel
@@ -805,6 +1028,10 @@ const SIZE = {
  * des rochers rouges dans le bush). anywhere : pas de caméra fixe (la longe : la caméra tourne avec le cheval) — les
  * objets prennent leur place tout de suite, sans regarder l'image. avoid : des points du sol où rien ne se pose (le
  * pied du réverbère, la nuit : decor.avoid, ambience.js).
+ *
+ * Le décor propose ses places (decor.spots : { kind, p, face, wall }) et ses pans de mur où accrocher ce qu'on veut
+ * (decor.hangAreas : { axis 'z' ou 'x', at (la face du mur), u0, u1 (le long du mur), y0, y1, face, wall, holes }) ;
+ * wall : le groupe du mur, que le décor cache quand la caméra passe derrière.
  */
 export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3, look = null, anywhere = false, avoid = decor.avoid ?? [] } = {}) {
   const keep = bag();
@@ -817,87 +1044,313 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   const all = [...kinds.map((k) => ({ kind: k, life: false })), ...life.map((k) => ({ kind: k, life: true }))];
   for (const [i, { kind, life: extra }] of all.entries()) {
     const where = EXTRAS[kind];
+    const ground = where === 'floor' || where === 'air' || FLOOR_TOO.has(kind);
     const cands = where === 'far' ? [] : spots.filter((s) => (where === 'air' ? s.kind === 'floor' : s.kind === where));
-    if (where !== 'far' && !cands.length && !(decor.area && (where === 'floor' || where === 'air'))) continue;
+    // (un chat, un oiseau : perchés de préférence, sinon par terre)
+    if (FLOOR_TOO.has(kind)) cands.push(...spots.filter((s) => s.kind === 'floor'));
+    const areas = where === 'hang' && decor.hangAreas?.length;
+    if (where !== 'far' && !cands.length && !areas && !(decor.area && ground)) continue;
     if (where === 'far' && anywhere) continue;
     const m = extraModel(kind, keep, seed + i * 7, opts);
     if (!m) continue;
     m.visible = false;
+    if (RANGE[kind]) m.userData.range = RANGE[kind];
     g.add(m);
     // (l'ordre des places essayées : tiré de la graine du jour)
     const r = seeded(hashSeed(`${seed}|${kind}|${i}`));
     const order = cands.map((s) => ({ s, v: r() })).sort((a, b) => a.v - b.v).map((x) => x.s);
-    items.push({ kind, m, order, where, life: extra, grow: 0, at: null, why: {}, path: null });
+    items.push({ kind, i, m, order, where, ground, life: extra, grow: 0, fade: 0, at: null, spot: null, why: {}, path: null });
   }
   const placed = [];
   let tried = false;
+  let waited = 0;
   let frames = 0;
 
   let box = null;
   const tmp = V();
-  /** La place p convient-elle à cet objet (dans l'image, rien de gênant) ? */
-  function fits(st, it, p, taken) {
+  const rc = new THREE.Raycaster();
+
+  // ---------------------------------------------------------------- ce qui gêne : l'animal, ce qu'on lui tend
+
+  /** La boîte de l'animal dans sa pose du moment (la copie figée des rayons), sinon celle de son pelage. */
+  function freshBox(st) {
+    const b = st.proxy?.geo?.boundingBox;
+    if (b && !b.isEmpty() && b.max.x - b.min.x < 6) return b.clone();
+    return animalBox(st);
+  }
+
+  /**
+   * Le rectangle d'une boîte (monde) dans l'image : ses coins devant la caméra, gardé à ce qu'on voit de l'image (ce
+   * qui se recouvre au-dessus de l'image ne gêne personne) ; null s'il n'y en a rien dans l'image.
+   */
+  function rectOf(st, b) {
+    const r = rawRect(st, b);
+    const v = st.view;
+    if (!r || !v) return r;
+    const c = { x0: Math.max(r.x0, v.x0), x1: Math.min(r.x1, v.x1), y0: Math.max(r.y0, v.y0), y1: Math.min(r.y1, v.y1) };
+    return c.x0 <= c.x1 && c.y0 <= c.y1 ? c : null;
+  }
+
+  /** Le rectangle d'une boîte (monde) dans l'image, tout entier : ses coins devant la caméra ; null s'il n'y en a aucun. */
+  function rawRect(st, b) {
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const x of [b.min.x, b.max.x]) {
+      for (const y of [b.min.y, b.max.y]) {
+        for (const z of [b.min.z, b.max.z]) {
+          const q = st.project(tmp.set(x, y, z));
+          if (q.behind) continue;
+          x0 = Math.min(x0, q.x);
+          x1 = Math.max(x1, q.x);
+          y0 = Math.min(y0, q.y);
+          y1 = Math.max(y1, q.y);
+        }
+      }
+    }
+    return x0 <= x1 ? { x0, x1, y0, y1 } : null;
+  }
+
+  /**
+   * Ce qu'on ne doit jamais cacher, en plus de l'animal : ce qu'on lui tend (les accessoires du décor, notre main), la
+   * plaque à son nom. far : la distance de la caméra à son point le plus loin (ce qui est tout entier plus loin ne le
+   * cache pas, c'est lui qui le cache).
+   */
+  function obstacles(st) {
+    const out = [];
+    const cam = st.camera.position;
+    const farOf = (b) => {
+      let far = 0;
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) far = Math.max(far, cam.distanceTo(tmp.set(x, y, z)));
+      return far;
+    };
+    const add = (o, kind) => {
+      if (!o?.parent || !shown(o)) return;
+      const b = shownBox(o);
+      if (b.isEmpty()) return;
+      out.push({ box: b, rect: st.view && !anywhere ? rectOf(st, b) : null, kind, far: farOf(b) });
+    };
+    for (const pr of Object.values(decor.props ?? {})) add(pr?.group, 'accessoire');
+    // (et ce que le jeu a mis dans la scène : notre main, la seringue, la brosse, le mors — pas un décor entier, ni les
+    // petits effets de la scène, souffle ou brins)
+    // (elles sont souvent tout près de nous, le bras qui entre par le bord de l'image)
+    const fx = new Set((st.fx ?? []).map((f) => f.obj));
+    for (const c of st.scene?.children ?? []) {
+      if (c === st.holder || c === decor.group || c.isLight || c.isCamera || fx.has(c) || !shown(c)) continue;
+      const b = shownBox(c);
+      const sz = b.getSize(tmp);
+      if (b.isEmpty() || Math.max(sz.x, sz.y, sz.z) < 0.005 || sz.x > 1.6 || sz.y > 1.6 || sz.z > 1.6) continue;
+      out.push({ box: b, rect: st.view && !anywhere ? rectOf(st, b) : null, kind: 'accessoire', far: farOf(b) });
+    }
+    add(decor.plate, 'plaque');
+    return out;
+  }
+
+  /**
+   * Ce qui ne change pas pendant une série d'essais : la boîte de l'animal et son rectangle dans l'image, sa tête, ce
+   * qu'on lui tend. Refait la copie figée de l'animal pour les rayons (au plus deux fois par seconde : elle coûte).
+   */
+  function survey(st) {
+    st.camera.updateMatrixWorld?.();
+    decor.group.updateMatrixWorld(true);
+    const P = st.proxy;
+    if (P?.bake && (st.time ?? 0) - (P.at ?? -Infinity) > 0.5) {
+      P.at = st.time ?? 0;
+      P.bake();
+    }
+    box = freshBox(st);
+    const S = { obs: obstacles(st), arect: st.view && !anywhere ? rectOf(st, box) : null, hc: null, hr: 0, head: null, hm: 0 };
+    const hd = st.live?.('head');
+    if (hd && st.view && !anywhere) {
+      const H = Math.max(0.25, box.max.y - box.min.y);
+      S.hc = st.project(hd);
+      S.hr = st.projectRadius(hd, 0.26 * H) + 10;
+      // (le nez, le front, les oreilles : à moins d'un quart de sa hauteur du milieu de sa tête ; et quelques
+      // centimètres d'air autour)
+      S.head = headRect(st, hd, 0.22 * H);
+      S.hm = st.projectRadius(hd, 0.03 * H) + 8;
+    }
+    return S;
+  }
+
+  /**
+   * Sa tête dans l'image : le rectangle des points de l'animal (la copie figée des rayons, pose du moment) à moins de
+   * R de sa tête — le bout du nez, le front, les oreilles —, plus serré qu'un disque autour d'elle (en gros plan, un
+   * disque prenait toute l'image) ; null sans ces points (on garde alors le disque).
+   */
+  function headRect(st, hd, R) {
+    const P = st.proxy?.pos;
+    if (!P?.length) return null;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    const R2 = R * R;
+    for (let i = 0; i < P.length; i += 3) {
+      const dx = P[i] - hd.x;
+      const dy = P[i + 1] - hd.y;
+      const dz = P[i + 2] - hd.z;
+      if (dx * dx + dy * dy + dz * dz > R2) continue;
+      const q = st.project(tmp.set(P[i], P[i + 1], P[i + 2]));
+      if (q.behind) continue;
+      x0 = Math.min(x0, q.x);
+      x1 = Math.max(x1, q.x);
+      y0 = Math.min(y0, q.y);
+      y1 = Math.max(y1, q.y);
+    }
+    if (x0 > x1) return null;
+    // (sa tête hors de l'image : rien à garder autour)
+    const v = st.view;
+    if (x1 < v.x0 || x0 > v.x1 || y1 < v.y0 || y0 > v.y1) return { out: true };
+    return { x0, x1, y0, y1 };
+  }
+
+  /** Ce rectangle de l'image touche-t-il sa tête (m : la marge, px ; k : la part de la marge gardée) ? */
+  function onHead(S, r, k = 1) {
+    if (!r || !S.hc || S.head?.out) return false;
+    if (S.head) return overlap(r, S.head, S.hm * k);
+    const dx = Math.max(r.x0 - S.hc.x, 0, S.hc.x - r.x1);
+    const dy = Math.max(r.y0 - S.hc.y, 0, S.hc.y - r.y1);
+    return Math.hypot(dx, dy) < S.hr * (k < 1 ? 0.85 : k > 1 ? 1.15 : 1);
+  }
+
+  // ---------------------------------------------------------------- le mur, ce qu'on voit
+
+  let solids = null;
+  /** Les maillages pleins du décor (pas l'herbe, le ciel, la pluie, ni les objets du jour). */
+  function solidList() {
+    if (!solids) {
+      solids = [];
+      for (const c of decor.group.children) {
+        if (c === g) continue;
+        c.traverse((o) => {
+          if (o.isMesh && !o.isInstancedMesh && !o.userData?.grass && !o.userData?.sky && o.geometry && !o.material?.transparent) solids.push(o);
+        });
+      }
+    }
+    return solids;
+  }
+
+  /** Ce point se voit-il depuis la caméra (pas derrière l'animal ; walls : ni derrière un mur ou la clôture pleine) ? */
+  function seen(st, q, walls = true) {
+    const cam = st.camera.position;
+    const dir = q.clone().sub(cam);
+    const d = dir.length();
+    dir.normalize();
+    if (st.proxy?.hit) {
+      const h = st.proxy.hit(new THREE.Ray(cam.clone(), dir), -9, 1e9);
+      if (h && h.point.distanceTo(cam) < d - 0.05) return false;
+    }
+    if (!walls) return true;
+    rc.set(cam, dir);
+    rc.near = 0.05;
+    rc.far = d - 0.05;
+    for (const o of solidList()) {
+      if (!o.parent || !shown(o)) continue;
+      if (rc.intersectObject(o, false).length) return false;
+    }
+    return true;
+  }
+
+  const nearWall = new Map();
+  /** Les maillages du décor tout près de ce pan de mur (ce qui peut y être accroché ou en dépasser), calculés une fois. */
+  function wallList(A) {
+    let list = nearWall.get(A);
+    if (!list) {
+      list = [];
+      const k = A.axis === 'z' ? 'z' : 'x';
+      for (const o of solidList()) {
+        const b = shownBox(o);
+        if (!b.isEmpty() && b.min[k] < A.at + 0.4 && b.max[k] > A.at - 0.4) list.push(o);
+      }
+      nearWall.set(A, list);
+    }
+    return list;
+  }
+
+  /** Le pan de mur du décor (decor.hangAreas) où se trouve ce point, ou null. */
+  function areaOf(p) {
+    for (const A of decor.hangAreas ?? []) {
+      const k = A.axis === 'z' ? p.z : p.x;
+      const u = A.axis === 'z' ? p.x : p.z;
+      if (Math.abs(k - A.at) < 0.06 && u >= A.u0 && u <= A.u1 && p.y >= A.y0 - 0.05 && p.y <= A.y1) return A;
+    }
+    return null;
+  }
+
+  /** Derrière tout l'objet accroché, le mur est-il là, nu (ni fenêtre, ni poteau, ni plaque, ni rien d'autre dessus) ? */
+  function bare(st, p, rad, h, A) {
+    const cam = st.camera.position;
+    const list = wallList(A).filter((o) => o.parent && shown(o));
+    for (const [du, dy] of [[0, 0.5], [-1, 0.06], [1, 0.06], [-1, 0.94], [1, 0.94]]) {
+      const q = A.axis === 'z' ? tmp.set(p.x + du * rad, p.y + dy * h, A.at) : tmp.set(A.at, p.y + dy * h, p.z + du * rad);
+      const dir = q.clone().sub(cam);
+      const d = dir.length();
+      rc.set(cam, dir.normalize());
+      rc.near = 0.05;
+      rc.far = d + 0.2;
+      const hit = rc.intersectObjects(list, false)[0];
+      if (!hit || Math.abs(hit.distance - d) > 0.03) return false;
+    }
+    return true;
+  }
+
+  /**
+   * La place p convient-elle à cet objet ? s : la place du décor (son mur). mode : 'place' (une nouvelle place),
+   * 'keep' (un objet déjà posé, quand le cadrage change : un peu de marge, pour ne pas le faire clignoter), 'safe'
+   * (pendant que la caméra bouge : seulement ce qui ne doit jamais arriver, cacher l'animal ou ce qu'on lui tend).
+   */
+  function fits(st, it, p, taken, S, s = null, mode = 'place') {
     const no = (why) => {
       it.why[why] = (it.why[why] ?? 0) + 1;
       return false;
     };
+    const placing = mode === 'place';
     const [rad, h] = SIZE[it.kind] ?? [0.2, 0.3];
-    for (const q of taken) if (q.distanceTo(p) < rad + 0.25) return no('pris');
+    // (pas sur un autre objet du jour : la poule qui se promène ne passe pas dans le seau)
+    if (placing) for (const q of taken) if (q.p.distanceTo(p) < Math.max(rad + 0.25, rad + q.r)) return no('pris');
     // (ni dans le réverbère : son poteau, sa lanterne)
     for (const q of avoid) if (Math.hypot(p.x - q.x, p.z - q.z) < rad + 0.25) return no('réverbère');
-    // (ni sur ce qu'on lui tend : mangeoire, seau, gamelles, filet…)
-    for (const pr of Object.values(decor.props ?? {})) {
-      const o = pr?.group;
-      if (!o || !o.visible || !o.parent) continue;
-      const w = o.getWorldPosition(V());
-      if (w.distanceTo(p) < rad + 0.45) return no('accessoire');
-      if (anywhere || !st.view) continue;
-      const a = st.project(w);
-      const b = st.project(p.clone().add(V(0, h * 0.5, 0)));
-      if (Math.hypot(a.x - b.x, a.y - b.y) < 70) return no('accessoire (image)');
+    // (accroché, perché, appuyé : à un mur, une clôture qu'on voit — le décor cache ceux qui passent devant la caméra)
+    if (s?.wall && !shown(s.wall)) return no('mur caché');
+    // (ni sur ce qu'on lui tend — mangeoire, seau, gamelles, filet, notre main — ni sur la plaque à son nom : leur
+    // boîte, dans le monde et dans l'image, pas seulement leur centre)
+    const ib = new THREE.Box3(V(p.x - rad, p.y, p.z - rad), V(p.x + rad, p.y + h, p.z + rad));
+    const view = !anywhere && st.view;
+    const orect = view ? rectOf(st, ib) : null;
+    const near = ib.distanceToPoint(st.camera.position);
+    for (const ob of S.obs) {
+      if (_bb.copy(ob.box).expandByScalar(0.12).intersectsBox(ib)) return no(ob.kind);
+      if (orect && ob.rect && overlap(orect, ob.rect, 10) && !(ob.far && near > ob.far + 0.05)) return no(`${ob.kind} (image)`);
     }
+    if (!view) return true;
     const v = st.view;
-    if (!v || anywhere) return true;
     const pts = [p.clone(), p.clone().add(V(0, h, 0)), p.clone().add(V(rad, h * 0.5, 0)), p.clone().add(V(-rad, h * 0.5, 0))];
-    const top = v.y0 + 40;
-    for (const [i, q] of pts.entries()) {
-      const s = st.project(q);
-      // (au bord du cadre, un objet au sol peut dépasser un peu sur le côté : son pied et son haut restent dans l'image)
-      const side = i >= 2 && it.where === 'floor' ? 30 : -8;
-      if (s.behind || s.x < v.x0 - side || s.x > v.x1 + side || s.y < top || s.y > v.y1 - 8) return no('hors image');
-    }
-    // (pas sur sa tête, même derrière lui : on la voit toujours en entier)
-    const hd = st.live?.('head');
-    if (hd) {
-      const hc = st.project(hd);
-      const hr = st.projectRadius(hd, 0.26 * Math.max(0.25, box ? box.max.y - box.min.y : 1)) + 10;
-      for (const q of pts) {
-        const s = st.project(q);
-        if (Math.hypot(s.x - hc.x, s.y - hc.y) < hr) return no('tête');
+    if (mode !== 'safe') {
+      const slack = mode === 'keep' ? 16 : 0;
+      const top = v.y0 + 40;
+      for (const [i, q] of pts.entries()) {
+        const s2 = st.project(q);
+        // (au bord du cadre, un objet au sol peut dépasser un peu sur le côté : son pied et son haut restent dans l'image)
+        const side = (i >= 2 && it.where === 'floor' ? 30 : -8) + slack;
+        if (s2.behind || s2.x < v.x0 - side || s2.x > v.x1 + side || s2.y < top - slack || s2.y > v.y1 - 8 + slack) return no('hors image');
       }
+      // (pas sur sa tête, même derrière lui : on la voit toujours en entier, avec un peu d'air autour — tout le
+      // rectangle de l'objet, pas seulement ses bords)
+      if (onHead(S, orect, mode === 'keep' ? 0.5 : 1)) return no('tête');
     }
-    // (jamais devant l'animal : s'il est plus près de nous que l'animal et qu'il le recouvre dans l'image ; ni trop
-    // près de nous)
+    // (jamais devant l'animal : ni trop près de nous ; ni, dans sa moitié avant, sur lui dans l'image)
     if (box && p.z > box.max.z + 0.45 * (box.max.y - box.min.y) + 0.2) return no('trop près');
-    // (devant lui : pas du tout sur lui dans l'image — sa boîte, celle de son pelage)
-    if (box && p.z + rad > box.min.z + 0.1 * (box.max.z - box.min.z)) {
-      const c = [];
-      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) c.push(st.project(tmp.set(x, y, z)));
-      const ax0 = Math.min(...c.map((q) => q.x));
-      const ax1 = Math.max(...c.map((q) => q.x));
-      const ay0 = Math.min(...c.map((q) => q.y));
-      const ay1 = Math.max(...c.map((q) => q.y));
-      const o = [];
-      for (const dx of [-rad, rad]) for (const dz of [-rad, rad]) for (const y of [0, h]) o.push(st.project(tmp.set(p.x + dx, p.y + y, p.z + dz)));
-      const ox0 = Math.min(...o.map((q) => q.x));
-      const ox1 = Math.max(...o.map((q) => q.x));
-      const oy0 = Math.min(...o.map((q) => q.y));
-      const oy1 = Math.max(...o.map((q) => q.y));
-      if (ox1 > ax0 && ox0 < ax1 && oy1 > ay0 && oy0 < ay1) return no('devant');
-    }
-    // (ne cache jamais l'animal : entre la caméra et chacun de ses points, pas de peau plus loin derrière l'objet)
-    if (st.proxy?.hit) {
-      const cam = st.camera.position;
+    const over = orect && S.arect && overlap(orect, S.arect, 4);
+    if (box && over && p.z + rad > box.min.z + 0.1 * (box.max.z - box.min.z)) return no('devant');
+    // (ne cache jamais l'animal : entre la caméra et chacun de ses points, pas de peau plus loin derrière l'objet ;
+    // inutile s'il n'est pas sur lui dans l'image, ou tout entier derrière lui)
+    // (les rayons coûtent : un nombre d'essais compté à chaque fois qu'on pose, le reste attend son tour — place())
+    if (placing) budget--;
+    const cam = st.camera.position;
+    const behind = box && cam.z > box.max.z && p.z + rad < box.min.z;
+    if (st.proxy?.hit && over && !behind) {
       // (le contour de l'objet, à plusieurs hauteurs : un petit sapin ne déborde pas sur son poitrail)
       const ring = [];
       for (const k of [0.25, 0.6, 0.9]) for (const [dx, dz] of [[rad, 0], [-rad, 0], [0, rad], [0, -rad]]) ring.push(p.clone().add(V(dx * (1.1 - k * 0.5), h * k, dz * (1.1 - k * 0.5))));
@@ -908,8 +1361,17 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
         if (h2 && h2.point.distanceTo(cam) > d - 0.02) return no('devant');
       }
     }
+    if (mode === 'safe') return true;
+    // (accroché à un pan de mur : le mur est là, nu, derrière lui — aussi aux places fixes du décor sur ce mur : un
+    // tableau ne chevauche pas celui qui y est déjà)
+    const wall = s?.area ?? (it.where === 'hang' ? areaOf(p) : null);
+    if (placing && wall && !bare(st, p, rad, h, wall)) return no('mur');
+    // (on le voit : ni tout entier derrière l'animal, ni derrière un mur — les murs, seulement pour une nouvelle place)
+    if ((over || placing) && !seen(st, p.clone().add(V(0, h * 0.5, 0)), placing) && !seen(st, p.clone().add(V(0, h * 0.9, 0)), placing)) return no('caché');
     return true;
   }
+
+  // ---------------------------------------------------------------- les places dans l'image
 
   /** Des places au sol dans l'image : sous des points de l'image, dans la zone du décor (decor.area), pas sous lui. */
   function floorInView(st) {
@@ -917,66 +1379,139 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const v = st.view;
     if (!A || !v || !st.rayAt) return [];
     const out = [];
-    for (let gy = 0.42; gy <= 0.96; gy += 0.06) {
+    const keys = new Set();
+    // (autour d'un petit animal, une grille plus fine et un écart plus court : en gros plan sur un lapin, le sol qu'on
+    // voit ne fait que quelques dizaines de centimètres)
+    const Hb = box ? box.max.y - box.min.y : 1;
+    const cell = Math.min(0.2, Math.max(0.05, Hb * 0.2));
+    const gap = Math.min(0.15, Hb * 0.25);
+    // (toute la hauteur de l'image : en gros plan sur un sabot, le sol derrière lui est en haut)
+    for (let gy = 0.08; gy <= 0.96; gy += 0.06) {
       for (let gx = 0.03; gx <= 0.98; gx += 0.07) {
         const ray = st.rayAt(v.x0 + gx * (v.x1 - v.x0), v.y0 + gy * (v.y1 - v.y0));
         if (ray.direction.y > -1e-3) continue;
         const t = (A.y - ray.origin.y) / ray.direction.y;
         const p = ray.origin.clone().addScaledVector(ray.direction, t);
         if (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1) continue;
-        if (box && p.x > box.min.x - 0.15 && p.x < box.max.x + 0.15 && p.z > box.min.z - 0.15 && p.z < box.max.z + 0.15) continue;
-        // (sur une grille de 20 cm : la même place d'une fois à l'autre, même si la caméra bouge d'un rien)
-        out.push({ kind: 'floor', p: [Math.round(p.x * 5) / 5, A.y, Math.round(p.z * 5) / 5] });
+        if (box && p.x > box.min.x - gap && p.x < box.max.x + gap && p.z > box.min.z - gap && p.z < box.max.z + gap) continue;
+        // (sur une grille : la même place d'une fois à l'autre, même si la caméra bouge d'un rien)
+        const q = [Math.round(p.x / cell) * cell, A.y, Math.round(p.z / cell) * cell];
+        const key = q.join(',');
+        if (keys.has(key)) continue;
+        keys.add(key);
+        out.push({ kind: 'floor', p: q });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Des places au mur dans l'image : sous des points de l'image, sur les pans de mur que le décor propose
+   * (decor.hangAreas). En gros plan, il reste presque toujours un bout de mur à côté ou au-dessus de sa tête.
+   */
+  function wallInView(st) {
+    const v = st.view;
+    if (!v || !st.rayAt || !decor.hangAreas?.length) return [];
+    const out = [];
+    const keys = new Set();
+    for (const A of decor.hangAreas) {
+      if (A.wall && !shown(A.wall)) continue;
+      for (let gy = 0.04; gy <= 0.96; gy += 0.05) {
+        for (let gx = 0.04; gx <= 0.96; gx += 0.05) {
+          const ray = st.rayAt(v.x0 + gx * (v.x1 - v.x0), v.y0 + gy * (v.y1 - v.y0));
+          const dk = A.axis === 'z' ? ray.direction.z : ray.direction.x;
+          const ok = A.axis === 'z' ? ray.origin.z : ray.origin.x;
+          if (Math.abs(dk) < 1e-4) continue;
+          const t = (A.at - ok) / dk;
+          if (t <= 0) continue;
+          const p = ray.origin.clone().addScaledVector(ray.direction, t);
+          const u = A.axis === 'z' ? p.x : p.z;
+          if (u < A.u0 || u > A.u1 || p.y < A.y0 || p.y > A.y1) continue;
+          if (A.holes?.some(([a, b, c, e]) => u > a && u < b && p.y > c && p.y < e)) continue;
+          // (sur une grille de 10 cm : la même place d'une fois à l'autre)
+          const us = Math.round(u * 10) / 10;
+          const ys = Math.round(p.y * 10) / 10;
+          const key = `${decor.hangAreas.indexOf(A)}|${us}|${ys}`;
+          if (keys.has(key)) continue;
+          keys.add(key);
+          // (p : le milieu de l'objet ; placeExtras le descend de sa demi-hauteur, à la bonne hauteur pour lui)
+          const q = A.axis === 'z' ? [us, ys, A.at + 0.004] : [A.at + 0.004 * Math.sign(Math.sin(A.face ?? 0)), ys, us];
+          out.push({ kind: 'hang', p: q, face: A.face ?? 0, wall: A.wall ?? null, area: A });
+        }
       }
     }
     return out;
   }
 
   // ---------------------------------------------------------------- au loin : derrière lui, rien ne le cache
-  let walls = null;
-  /** Ce point se voit-il depuis la caméra (ni derrière un mur ou la clôture pleine, ni derrière l'animal) ? */
-  function seen(st, q) {
-    const cam = st.camera.position;
-    const dir = q.clone().sub(cam);
-    const d = dir.length();
-    dir.normalize();
-    if (st.proxy?.hit) {
-      const h = st.proxy.hit(new THREE.Ray(cam.clone(), dir), -9, 1e9);
-      if (h && h.point.distanceTo(cam) < d - 0.05) return false;
+
+  /** Ce que la course de ce qui vole ajoute en haut et en bas de son trajet (m) : l'ondulation, puis le vol lui-même. */
+  const SWING = { hirondelle: [0.18, 0.1], papillons: [0.12, 0.25], vol: [0.5, 0.45] };
+
+  /** Le trajet de ce qui vole est-il bon pour l'image du moment : d'un bord à l'autre, loin de sa tête, ondulation comprise ? */
+  function pathOk(st, it, P, S) {
+    const v = st.view;
+    if (!v) return false;
+    const qa = st.project(P.a);
+    const qb = st.project(P.b);
+    if (qa.behind || qb.behind) return false;
+    if (!((qa.x < v.x0 && qb.x > v.x1) || (qb.x < v.x0 && qa.x > v.x1))) return false;
+    const mid = P.a.clone().lerp(P.b, 0.5);
+    const [amp, ext] = SWING[it.kind] ?? [0.3, 0.3];
+    const sw = st.projectRadius(mid, amp + ext);
+    // (pas en travers de son visage, même loin derrière : la bande de sa tête, ondulation comprise, est refusée)
+    for (const q of [qa, qb, st.project(mid)]) {
+      if (q.y < v.y0 + 20 || q.y > v.y1) return false;
+      if (onHead(S, { x0: v.x0 - 1e4, x1: v.x1 + 1e4, y0: q.y - sw, y1: q.y + sw }, 1.5)) return false;
     }
-    if (!walls) {
-      walls = [];
-      for (const c of decor.group.children) {
-        if (c === g) continue;
-        c.traverse((o) => {
-          if (o.isMesh && !o.isInstancedMesh && o.visible && !o.userData?.grass && !o.userData?.sky && o.geometry) walls.push(o);
-        });
-      }
-    }
-    const rc = new THREE.Raycaster(cam.clone(), dir, 0.05, d - 0.05);
-    for (const o of walls) {
-      // (le ciel, l'herbe, la pluie : transparents pour ça)
-      if (o.material?.transparent || !o.parent) continue;
-      if (rc.intersectObject(o, false).length) return false;
-    }
+    // (ni devant ce qu'on lui tend, rangé au fond : le filet, la mangeoire — l'hirondelle vole devant le mur du fond)
+    const d = mid.distanceTo(st.camera.position);
+    const ym = st.project(mid).y;
+    const band = { x0: v.x0, x1: v.x1, y0: ym - sw, y1: ym + sw };
+    if (S.obs.some((ob) => ob.rect && ob.far > d - 0.3 && overlap(band, ob.rect, 6))) return false;
     return true;
   }
 
-  function farPlace(st, it) {
+  /** Les poules au loin, le rouge-gorge derrière lui : cette place se voit-elle, loin de sa tête ? */
+  function farSpotOk(st, it, p, S, ext, mode = 'place') {
+    const v = st.view;
+    const pts = [p, ...ext.map((e) => p.clone().add(e))];
+    // (derrière lui, mais pas forcément derrière ce qu'on lui tend, l'abreuvoir rangé au fond : ni dessus, ni devant)
+    const ib = new THREE.Box3().setFromPoints(pts).expandByScalar(0.08);
+    const r = rectOf(st, ib);
+    const near = ib.distanceToPoint(st.camera.position);
+    for (const ob of S.obs) {
+      if (_bb.copy(ob.box).expandByScalar(0.2).intersectsBox(ib)) return false;
+      if (r && ob.rect && overlap(r, ob.rect, 10) && !(ob.far && near > ob.far + 0.05)) return false;
+    }
+    if (mode === 'safe') return true;
+    for (const q of pts) {
+      const s = st.project(q);
+      if (s.behind || s.x < v.x0 + 10 || s.x > v.x1 - 10 || s.y < v.y0 + 40 || s.y > v.y1 - 10) return false;
+      if (onHead(S, { x0: s.x, x1: s.x, y0: s.y, y1: s.y }, 1.5)) return false;
+    }
+    // (au moins une des deux poules se voit : entre les lisses de la clôture, à côté de lui)
+    return it.kind === 'rougegorge' ? seen(st, p.clone().add(V(0, 0.06, 0))) : seen(st, p.clone().add(V(0, 0.3, 0))) || seen(st, p.clone().add(V(0.8, 0.3, 0.5)));
+  }
+  const FAR_EXT = {
+    // (le rouge-gorge : sa tête, sa queue, ses petits sauts, dans tous les sens)
+    rougegorge: [V(0, 0.25, 0), V(0.17, 0.05, 0.17), V(-0.17, 0.05, -0.17)],
+    poulailler: [V(0, 0.55, 0), V(0.9, 0.3, 0.5), V(-0.6, 0.3, 0)],
+  };
+
+  function farPlace(st, it, S) {
     const v = st.view;
     if (!v || !st.rayAt || !box) return false;
     const W = v.x1 - v.x0;
     const H = v.y1 - v.y0;
-    const hd = st.live?.('head');
-    const hc = hd ? st.project(hd) : null;
-    const hr = hd ? st.projectRadius(hd, 0.3 * Math.max(0.25, box.max.y - box.min.y)) + 14 : 0;
-    const r = seeded(hashSeed(`${seed}|${it.kind}|loin`));
+    const r = seeded(hashSeed(`${seed}|${it.kind}|loin|${it.tries = (it.tries ?? 0) + 1}`));
     if (it.kind === 'poulailler' || it.kind === 'rougegorge') {
-      if (!decor.outdoor) return false;
-      // (les poules : loin dans le pré ; le rouge-gorge : sur l'herbe juste derrière lui, il sautille et picore)
+      // (les poules : loin dans le pré ; le rouge-gorge : sur l'herbe juste derrière lui, il sautille et picore — ou
+      // dans la paille du box, de l'étable : l'hiver, il y entre)
       const robin = it.kind === 'rougegorge';
+      if (!decor.outdoor && !robin) return false;
+      const A = decor.outdoor ? null : decor.area;
       const [zn, zf] = robin ? [0.3, 2.2] : [2.2, 7.5];
-      const ext = robin ? [V(0, 0.14, 0), V(0.1, 0.05, 0), V(-0.1, 0.05, 0)] : [V(0, 0.55, 0), V(0.9, 0.3, 0.5), V(-0.6, 0.3, 0)];
       const gy0 = decor.area?.y ?? 0;
       const cands = [];
       for (let gy = 0.12; gy <= 0.8; gy += 0.05) {
@@ -985,7 +1520,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
           if (ray.direction.y > -1e-3) continue;
           const p = ray.origin.clone().addScaledVector(ray.direction, (gy0 - ray.origin.y) / ray.direction.y);
           if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
-          if (robin && Object.values(decor.props ?? {}).some((pr) => pr?.group?.visible && pr.group.parent && pr.group.getWorldPosition(V()).distanceTo(p) < 0.4)) continue;
+          if (A && (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1)) continue;
           cands.push({ p, v: r() });
         }
       }
@@ -993,16 +1528,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       let n = 0;
       for (const { p } of cands) {
         if (++n > 80) break;
-        const pts = [p, ...ext.map((e) => p.clone().add(e))];
-        let ok = true;
-        for (const q of pts) {
-          const s = st.project(q);
-          if (s.behind || s.x < v.x0 + 10 || s.x > v.x1 - 10 || s.y < v.y0 + 40 || s.y > v.y1 - 10) ok = false;
-          if (hc && Math.hypot(s.x - hc.x, s.y - hc.y) < hr) ok = false;
-        }
-        // (au moins une des deux poules se voit : entre les lisses de la clôture, à côté de lui)
-        if (!ok) continue;
-        if (robin ? !seen(st, p.clone().add(V(0, 0.06, 0))) : !(seen(st, p.clone().add(V(0, 0.3, 0))) || seen(st, p.clone().add(V(0.8, 0.3, 0.5))))) continue;
+        if (!farSpotOk(st, it, p, S, FAR_EXT[it.kind])) continue;
         it.at = p;
         it.m.position.copy(p);
         it.m.rotation.y = (r() - 0.5) * 1.5;
@@ -1019,112 +1545,288 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     // clôtures ; l'hirondelle : devant le mur du fond, sous le toit)
     const zP = bfly ? box.min.z - 0.7 : out ? box.min.z - 8 : Math.min(box.min.z - 0.25, (decor.area?.z0 ?? box.min.z - 0.8) + 0.2);
     const roof = decor.dims?.roof ?? decor.dims?.eave ?? decor.room?.roof ?? 2.6;
-    const y0 = bfly ? 0.25 : out ? 1.3 : Math.max(1.0, box.min.y + (box.max.y - box.min.y) * 0.75);
-    const y1 = bfly ? Math.max(1, box.max.y + 0.4) : out ? 8 : roof - 0.25;
+    const [amp] = SWING[it.kind] ?? [0.3];
+    const y0 = (bfly ? 0.25 : out ? 1.3 : Math.max(1.0, box.min.y + (box.max.y - box.min.y) * 0.75)) + amp;
+    const y1 = (bfly ? Math.max(1, box.max.y + 0.4) : out ? 8 : roof - 0.25) - amp;
     const at = (sx, sy) => {
       const ray = st.rayAt(sx, sy);
       if (ray.direction.z > -1e-3) return null;
       return ray.origin.clone().addScaledVector(ray.direction, (zP - ray.origin.z) / ray.direction.z);
     };
     const best = [];
-    for (const fy of bfly ? [0.12, 0.22, 0.32, 0.42, 0.52] : [0.04, 0.1, 0.17, 0.25, 0.33, 0.42]) {
+    for (const fy of bfly ? [0.12, 0.22, 0.32, 0.42, 0.52] : [0.03, 0.06, 0.1, 0.17, 0.25, 0.33, 0.42]) {
       const sy = v.y0 + 44 + fy * (H - 44);
       const a = at(v.x0 - 0.12 * W, sy);
       const b = at(v.x1 + 0.12 * W, sy);
       const m = at((v.x0 + v.x1) / 2 + (r() - 0.5) * 0.3 * W, sy);
       if (!a || !b || !m) continue;
       if (Math.min(a.y, b.y) < y0 || Math.max(a.y, b.y) > y1) continue;
+      // (jamais en travers de son visage : au-dessus de sa tête ou en dessous, sinon pas du tout)
+      if (!pathOk(st, it, { a, b }, S)) continue;
       if (!seen(st, m)) continue;
-      // (de préférence au-dessus de sa tête : pas en travers de son visage, même loin derrière)
-      const overHead = hc && sy > hc.y - hr && sy < hc.y + hr;
-      best.push({ a, b, k: overHead ? 1 : 0, v: r() });
+      best.push({ a, b, v: r() });
     }
     if (!best.length) {
       it.why.ciel = (it.why.ciel ?? 0) + 1;
       return false;
     }
-    best.sort((p, q) => p.k - q.k || p.v - q.v);
+    best.sort((p, q) => p.v - q.v);
     it.path = best[0];
     it.at = best[0].a.clone().lerp(best[0].b, 0.5);
-    it.t = r() * 3;
+    it.t ??= r() * 3;
     return true;
   }
 
-  function place(st) {
+  // ---------------------------------------------------------------- poser, revoir, enlever
+
+  /** Les places de cet objet, dans l'ordre où on les essaie : d'abord celles qu'on voit (tirées dans l'ordre du jour), puis celles du décor. */
+  function orderOf(it, seenFloor, seenWall) {
+    const shuffle = (list, tag) => {
+      const r = seeded(hashSeed(`${seed}|${it.kind}|${it.i}|${tag}`));
+      return list.map((s) => ({ s, v: r() })).sort((a, b) => a.v - b.v).map((x) => x.s);
+    };
+    if ((it.where === 'floor' || it.where === 'air') && seenFloor.length) return [...shuffle(seenFloor, 'vue'), ...it.order];
+    // (perché d'abord, sur les places du décor ; puis par terre, là où on voit le sol)
+    if (it.ground && seenFloor.length) {
+      const up = it.order.filter((s) => s.kind !== 'floor');
+      return [...up, ...shuffle(seenFloor, 'vue'), ...it.order.filter((s) => s.kind === 'floor')];
+    }
+    if (it.where === 'hang' && seenWall.length) return [...shuffle(seenWall, 'mur'), ...it.order];
+    return it.order;
+  }
+
+  let budget = 0;
+  /**
+   * Pose ce qui n'a pas encore de place (ou plus), sans toucher à ce qui est bien placé. tries : combien de places
+   * peuvent aller jusqu'aux rayons sur le décor (le téléphone ne doit pas s'arrêter de dessiner).
+   */
+  function place(st, tries = 24, now = null) {
     tried = true;
-    box = animalBox(st);
-    // (la caméra à jour, même sans image rendue depuis qu'elle a bougé)
-    st.camera.updateMatrixWorld?.();
-    decor.group.updateMatrixWorld(true);
-    const taken = [];
+    budget = tries;
+    const S = survey(st);
+    // (posé pour la caméra qui arrive : il ne doit pas non plus gêner là où elle est encore)
+    let Snow = null;
+    const safeNow = (it, p, s) => {
+      if (!now?.target) return true;
+      return atPose(st, now, () => {
+        Snow ??= survey(st);
+        return fits(st, it, p, [], Snow, s, 'safe');
+      });
+    };
+    const live = items.filter((i) => i.at && !i.fade);
+    const taken = live.filter((i) => !i.path).map((i) => ({ p: i.at, r: (SIZE[i.kind] ?? [0.2])[0] }));
+    let count = live.length;
     const seenFloor = anywhere ? [] : floorInView(st);
-    let count = 0;
+    const seenWall = anywhere ? [] : wallInView(st);
     for (const it of items) {
+      if (it.at || it.cool > clock) continue;
       // (le petit plus : seulement s'il manque encore de quoi voir)
       if (it.life && count >= min) continue;
       if (it.where === 'far') {
-        if (farPlace(st, it)) {
+        if (farPlace(st, it, S)) {
           count++;
-          placed.push(it.kind);
-          if (!it.path) {
-            it.m.visible = true;
-            it.m.scale.setScalar(0.001);
-          }
+          if (!it.path) appear(it);
         }
         continue;
       }
-      // (au sol : d'abord des places qu'on voit, tirées dans l'ordre du jour, puis celles du décor)
-      if ((it.where === 'floor' || it.where === 'air') && seenFloor.length) {
-        const r = seeded(hashSeed(`${seed}|${it.kind}|vue`));
-        it.order = seenFloor.map((s) => ({ s, v: r() })).sort((a, b) => a.v - b.v).map((x) => x.s).concat(it.order);
-      }
-      for (const s of it.order) {
+      // (là où le dernier essai s'est arrêté faute de temps, pour le même cadrage : pas toujours les mêmes places)
+      const order = orderOf(it, seenFloor, seenWall);
+      const from = it.resume?.pose === placedFor && it.resume.n === order.length ? it.resume.k : 0;
+      it.resume = null;
+      for (let j = 0; j < order.length; j++) {
+        const k = (from + j) % order.length;
+        const s = order[k];
+        if (budget <= 0) {
+          it.resume = { pose: placedFor, n: order.length, k };
+          break;
+        }
         const p = V(...s.p);
+        const [, h] = SIZE[it.kind] ?? [0.2, 0.3];
+        if (s.area) {
+          // (sur un pan de mur : centré sur le point vu, à une hauteur qui lui va — plus bas près d'un petit animal, une
+          // cloche à hauteur de mouton ; un tableau jamais au ras du sol)
+          const [lo0, hi] = HANG_Y[it.kind] ?? [0.5, 2.5];
+          const lo = it.kind === 'cadre' ? lo0 : Math.min(lo0, 0.45 * (box ? box.max.y - box.min.y : 2));
+          const ya = Math.max(s.area.y0, lo);
+          const yb = Math.min(s.area.y1 - h, hi);
+          if (yb < ya) continue;
+          p.y = Math.min(yb, Math.max(ya, p.y - h / 2));
+        }
         if (it.where === 'air') p.y += 0.35 + 0.25 * Math.min(1.5, box ? box.max.y : 1);
         // (appuyée contre le mur : le pied un peu en avant, le haut contre le mur)
         if (it.where === 'lean') p.add(V(Math.sin(s.face ?? 0) * 0.3, 0, Math.cos(s.face ?? 0) * 0.3));
-        if (!fits(st, it, p, taken)) continue;
+        if (!fits(st, it, p, taken, S, s) || !safeNow(it, p, s)) continue;
         it.at = p;
+        it.spot = s;
         it.m.position.copy(p);
         // (face à nous, avec un petit angle ; posé sur une lisse, le long de celle-ci ; accroché : face au dehors du mur)
         const r = seeded(hashSeed(`${it.kind}|${s.p.join(',')}`));
         it.m.rotation.y = s.face ?? (it.where === 'lean' ? (r() - 0.5) * 0.3 : it.kind === 'brouette' || it.kind === 'botte' ? (r() - 0.5) * 0.6 : (r() - 0.5) * 1.2);
         if (it.kind === 'chat' || it.kind === 'oiseau' || it.kind === 'mouette') it.m.rotation.y = (s.face ?? 0) + (r() - 0.5) * 0.5 + (it.kind !== 'chat' ? Math.PI / 2 : 0);
         if (it.where === 'hang') it.m.rotation.y = s.face ?? 0;
-        if (it.kind === 'poule') it.m.userData.range = 0.35;
-        it.m.visible = true;
-        it.m.scale.setScalar(0.001);
-        taken.push(p);
-        placed.push(it.kind);
+        appear(it);
+        taken.push({ p, r: (SIZE[it.kind] ?? [0.2])[0] });
         count++;
         break;
       }
+    }
+    listPlaced();
+  }
+
+  /** Il apparaît doucement à sa place. */
+  function appear(it) {
+    it.m.visible = true;
+    it.m.scale.setScalar(0.001);
+    it.grow = 0;
+    it.fade = 0;
+  }
+
+  /** Il s'en va : en fondu (now : tout de suite — il passerait devant l'animal ou ce qu'on lui tend). */
+  function leave(it, now = false) {
+    // (pas de retour tout de suite : il clignoterait si l'animal va et vient)
+    if (now) it.cool = clock + 1.2;
+    if (now || it.grow < 0.05) gone(it);
+    else if (!it.fade) it.fade = 1;
+    listPlaced();
+  }
+
+  /** Il n'est plus là : sa place est libre, une autre lui sera cherchée (la caméra posée). */
+  function gone(it) {
+    it.at = null;
+    it.spot = null;
+    it.fade = 0;
+    it.m.visible = false;
+    dirty = true;
+    listPlaced();
+  }
+
+  function listPlaced() {
+    placed.length = 0;
+    for (const it of items) if (it.at && !it.fade) placed.push(it.kind);
+  }
+
+  /** Les objets posés ont-ils toujours leur place ? Ceux qui ne l'ont plus s'en vont (mode : voir fits). */
+  function recheck(st, mode) {
+    const S = survey(st);
+    for (const it of items) {
+      if (!it.at || it.path || it.fade) continue;
+      const ok = it.where === 'far' ? farSpotOk(st, it, it.at, S, FAR_EXT[it.kind] ?? [], mode) : fits(st, it, it.at, [], S, it.spot, mode);
+      if (!ok) leave(it, mode === 'safe');
+    }
+  }
+
+  // ---------------------------------------------------------------- la caméra : où elle est, où elle va
+
+  /** La caméra du moment, ou celle où elle va (goal) : position, cible, décalage de l'image (la carte de fin). */
+  function poseOf(st, goal) {
+    const G = goal ? st.camGoal : null;
+    const pos = (G?.position ?? st.camPos ?? st.camera.position).clone();
+    const target = (G?.target ?? st.camTarget ?? null)?.clone() ?? null;
+    const f = st.focus;
+    const viewY = goal ? (f ? st.size.h / 2 - (f.top + f.bottom) / 2 : 0) : st.viewY ?? 0;
+    return { pos, target, viewY, key: `${st.size?.w}|${st.size?.h}|${st.view?.x0}|${st.view?.y0}` };
+  }
+  const gap = (a, b) => (!a || !b || a.key !== b.key || !a.target || !b.target ? Infinity : a.pos.distanceTo(b.pos) + a.target.distanceTo(b.target) + Math.abs(a.viewY - b.viewY) * 0.002);
+
+  /** Le temps de fn, la caméra mise à la pose P (sans rien changer d'autre) ; puis elle revient où elle était. */
+  function atPose(st, P, fn) {
+    const c = st.camera;
+    if (!P.target) return fn();
+    const pos = c.position.clone();
+    const quat = c.quaternion.clone();
+    const was = c.view?.enabled ? { ...c.view } : null;
+    c.position.copy(P.pos);
+    c.lookAt(P.target);
+    if (Math.abs(P.viewY) > 0.5) c.setViewOffset(st.size.w, st.size.h, 0, P.viewY, st.size.w, st.size.h);
+    else if (c.view?.enabled) c.clearViewOffset();
+    c.updateMatrixWorld();
+    try {
+      return fn();
+    } finally {
+      c.position.copy(pos);
+      c.quaternion.copy(quat);
+      if (was) c.setViewOffset(was.fullWidth, was.fullHeight, was.offsetX, was.offsetY, was.width, was.height);
+      else if (c.view?.enabled) c.clearViewOffset();
+      c.updateMatrixWorld();
+    }
+  }
+
+  let since = 0;
+  let clock = 0;
+  let goalSeen = null;
+  let placedFor = null;
+  let lastTry = 0;
+  let dirty = false;
+  /**
+   * Toutes les 0,2 s : le cadrage qui vient (ce qui n'y aura plus sa place s'efface déjà) ; la caméra en chemin et
+   * l'animal qui bouge (ce qui passerait devant lui disparaît tout de suite) ; la caméra arrivée, ou presque — une
+   * caméra qui suit sa tête ne se pose jamais tout à fait — : ce qui manque reprend une place, là où elle va.
+   */
+  function watch(dt, st) {
+    since += dt;
+    if (since < 0.2) return;
+    since = 0;
+    const goal = poseOf(st, true);
+    if (gap(goal, goalSeen) > 0.02) {
+      goalSeen = goal;
+      atPose(st, goal, () => recheck(st, 'keep'));
+    }
+    recheck(st, 'safe');
+    const live = items.filter((i) => i.at && !i.fade).length;
+    if (!dirty && live >= min) return;
+    if (!items.some((i) => !i.at && !(i.cool > clock))) return;
+    // (une fois par nouveau cadrage, ou quand un objet s'en est allé ; sinon, de temps en temps : la tête a bougé) —
+    // tout de suite, sans attendre que la caméra arrive : une caméra qui suit sa tête met des secondes à se poser
+    if (clock - lastTry < 0.6) return;
+    const behind = items.some((i) => i.resume);
+    if (dirty || gap(goal, placedFor) > 0.1 || clock - lastTry > (behind ? 0.6 : 2)) {
+      dirty = false;
+      // (le même cadrage : on reprend là où on s'était arrêté)
+      if (gap(goal, placedFor) > 0.1) placedFor = goal;
+      lastTry = clock;
+      const now = poseOf(st, false);
+      atPose(st, goal, () => place(st, 16, gap(now, goal) > 0.05 ? now : null));
     }
   }
 
   /** Le vol : traverse l'image en quelques secondes, attend, repart (dans l'autre sens pour l'hirondelle). */
   const _d = V();
-  function fly(it, dt) {
+  function fly(it, dt, st) {
     const f = it.m.userData.flight;
-    const P = it.path;
     const swallow = it.kind === 'hirondelle';
     const bfly = it.kind === 'papillons';
     const T = swallow ? 3.2 : bfly ? 11 : 8;
     const wait = swallow ? 4 : bfly ? 3 : 6;
     it.t += dt;
     const k = it.t % (T + wait);
-    const back = (swallow || bfly) && Math.floor(it.t / (T + wait)) % 2 === 1;
-    if (k > T) {
+    const cyc = Math.floor(it.t / (T + wait));
+    // (à chaque passage, le trajet est revu pour l'image du moment et la tête où elle est : sinon un autre, ou pas de
+    // passage cette fois)
+    if (cyc !== it.cyc && st?.view && !anywhere) {
+      it.cyc = cyc;
+      const S = survey(st);
+      it.skip = false;
+      if (!pathOk(st, it, it.path, S)) {
+        const old = it.path;
+        if (!farPlace(st, it, S)) {
+          it.path = old;
+          it.skip = true;
+        }
+      }
+    }
+    if (k > T || it.skip) {
       it.m.visible = false;
       return;
     }
     it.m.visible = true;
+    const P = it.path;
     const u = k / T;
+    const back = (swallow || bfly) && cyc % 2 === 1;
     const a = back ? P.b : P.a;
     const b = back ? P.a : P.b;
     _d.subVectors(b, a);
     it.m.position.copy(a).addScaledVector(_d, u);
-    it.m.position.y += Math.sin(u * Math.PI * (swallow ? 3 : bfly ? 4 : 1.5)) * (swallow ? 0.18 : bfly ? 0.12 : 0.5);
+    it.m.position.y += Math.sin(u * Math.PI * (swallow ? 3 : bfly ? 4 : 1.5)) * (SWING[it.kind]?.[0] ?? 0.3);
     it.m.rotation.y = bfly ? 0 : Math.atan2(-_d.z, _d.x);
     for (const bd of f.birds) {
       bd.position.copy(bd.userData.off);
@@ -1139,7 +1841,11 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     items,
     /** Les places au sol qu'on voit en ce moment (essais). */
     floorInView: (st) => floorInView(st),
-    /** Choisit les places maintenant (tests ; le jeu attend la caméra posée). */
+    /** Les places au mur qu'on voit en ce moment (essais). */
+    wallInView: (st) => wallInView(st),
+    /** Ce qu'il ne faut jamais cacher, et où c'est dans l'image (essais). */
+    survey: (st) => survey(st),
+    /** Choisit les places maintenant (essais ; le jeu attend la caméra posée). */
     placeNow(st) {
       place(st);
       for (const it of items) if (it.at && !it.path) it.m.scale.setScalar(1);
@@ -1147,11 +1853,29 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     update(dt, st) {
       // (quelques images après l'ouverture : la caméra est à sa place, pas à l'origine ; sans caméra fixe, tout de suite)
       // (une caméra qui ne se pose jamais tout à fait — la friandise suit la main — : on place quand même après ~3 s)
-      if (!tried && (anywhere || (st.ready && ++frames > 3 && ((st.settled?.(0.02) ?? true) || frames > 90)))) place(st);
+      clock += dt;
+      if (!tried) {
+        if (st.ready) waited += dt;
+        if (anywhere || (st.ready && ++frames > 3 && ((st.settled?.(0.02) ?? true) || waited > 3))) {
+          // (à la place où va la caméra : une caméra qui ne se pose jamais tout à fait y est presque)
+          const goal = anywhere ? null : poseOf(st, true);
+          placedFor = goalSeen = goal;
+          if (goal) atPose(st, goal, () => place(st));
+          else place(st);
+          lastTry = clock;
+        }
+      } else if (!anywhere && st.view) watch(dt, st);
       for (const it of items) {
         if (!it.at) continue;
         if (it.path) {
-          fly(it, dt);
+          fly(it, dt, st);
+          continue;
+        }
+        if (it.fade) {
+          // (il s'en va : il rapetisse, puis sa place est libre)
+          it.fade = Math.max(0, it.fade - dt / 0.25);
+          it.m.scale.setScalar(Math.max(0.001, it.fade * it.fade));
+          if (!it.fade) gone(it);
           continue;
         }
         if (it.grow < 1) {

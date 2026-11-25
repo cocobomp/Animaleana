@@ -537,15 +537,24 @@ export function homeSet(stage, opts = {}) {
   // (accrochés au mur du fond, de part et d'autre de la porte-fenêtre : un tableau dedans, un nichoir dehors)
   for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.3) {
     if (backFence || (x > wx0 - 0.2 && x < wx1 + 0.2)) continue;
-    for (const y of [0.7, 1.05]) spots.push({ kind: 'hang', p: [x, y, R.back + 0.04], face: 0 });
+    for (const y of [0.7, 1.05]) spots.push({ kind: 'hang', p: [x, y, R.back + 0.04], face: 0, wall: walls.back });
   }
-  // (en voyage : accrochés aux poteaux de la clôture du fond, posés sur sa lisse du haut)
+  // (en voyage : accrochés aux poteaux de la clôture du fond, posés sur sa lisse du haut — la clôture est dans walls.back)
   if (backFence) {
-    for (const p of backFence.posts) if (p.x > R.left + 0.3 && p.x < R.side - 0.2) spots.push({ kind: 'hang', p: [p.x, backFence.rails[1], R.back + 0.07], face: 0 });
-    for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'perch', p: [x, backFence.top + 0.02, R.back], face: 0 });
+    for (const p of backFence.posts) if (p.x > R.left + 0.3 && p.x < R.side - 0.2) spots.push({ kind: 'hang', p: [p.x, backFence.rails[1], R.back + 0.07], face: 0, wall: walls.back });
+    for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'perch', p: [x, backFence.top + 0.02, R.back], face: 0, wall: walls.back });
   }
-  if (sideFence) for (let z = R.back + 0.3; z < 1.6; z += 0.35) spots.push({ kind: 'perch', p: [R.side + 0.05, sideFence.top + 0.02, z], face: -Math.PI / 2 });
-  else spots.push({ kind: 'perch', p: [winX, 0.05, R.back + 0.12], face: 0 });
+  if (sideFence) for (let z = R.back + 0.3; z < 1.6; z += 0.35) spots.push({ kind: 'perch', p: [R.side + 0.05, sideFence.top + 0.02, z], face: -Math.PI / 2, wall: walls.side });
+  else spots.push({ kind: 'perch', p: [winX, 0.05, R.back + 0.12], face: 0, wall: walls.back });
+  // Les pans de mur où accrocher un tableau (dedans), un nichoir (dehors), là où la caméra les voit, même en gros plan
+  // sur un chat (extras.js) : le lambris et l'enduit du mur du fond, pas sur la porte-fenêtre ni son voilage ; dedans,
+  // le mur de côté. Ce qui y est déjà (le cadre, la plaque à son nom, la cimaise) : placeExtras le voit et l'évite.
+  // (en voyage, pas de mur au fond : une clôture basse, avec ses places à elle, plus haut)
+  const holes = [[wx0 - 0.08, wx1 + 0.08, -1, winH + 0.15], [wx1 - 0.1, wx1 + 0.42, -1, winH + 0.25]];
+  const backArea = (y0, y1, at) => ({ axis: 'z', at, u0: R.left + 0.3, u1: R.side - 0.15, y0, y1, face: 0, wall: walls.back, holes });
+  const sideArea = (y0, y1, at) => ({ axis: 'x', at, u0: R.back + 0.15, u1: 2.0, y0, y1, face: -Math.PI / 2, wall: walls.side });
+  const hangAreas = backFence ? [] : [backArea(0.11, wainH - 0.03, R.back + 0.012), backArea(wainH + 0.05, R.roof - 0.15, R.back)];
+  if (!out) hangAreas.push(sideArea(0.11, wainH - 0.03, R.side - 0.012), sideArea(wainH + 0.05, R.roof - 0.15, R.side));
 
   return {
     group: g,
@@ -559,6 +568,7 @@ export function homeSet(stage, opts = {}) {
     sky,
     ground: field ? [...field.mats, ...(far?.mats ?? [])] : [],
     spots,
+    hangAreas,
     area: { x0: R.left + 0.4, x1: R.side - 0.25, z0: R.back + 0.25, z1: 1.8, y: out ? 0.02 : 0 },
     anchors: { eat, drink },
     layout,

@@ -369,16 +369,17 @@ export function barnSet(stage, opts = {}) {
     // (accrochés à un poteau de la clôture, sous la lisse du haut ; à droite, loin du râtelier)
     // (entre deux lisses, sur un poteau ; ou cloué à la lisse du milieu)
     const hy = back.rails[0] + 0.05;
-    for (const p of back.posts) if (p.x < S.halfW - 0.3) spots.push({ kind: 'hang', p: [p.x, hy, backZ + 0.06], face: 0 });
-    for (let x = -3.2; x <= S.halfW - 0.4; x += 0.35) spots.push({ kind: 'hang', p: [x, back.rails[1] - 0.085, backZ + 0.025], face: 0 });
+    for (const p of back.posts) if (p.x < S.halfW - 0.3) spots.push({ kind: 'hang', p: [p.x, hy, backZ + 0.06], face: 0, wall: walls.back });
+    for (let x = -3.2; x <= S.halfW - 0.4; x += 0.35) spots.push({ kind: 'hang', p: [x, back.rails[1] - 0.085, backZ + 0.025], face: 0, wall: walls.back });
+    // (la clôture de droite : cachée quand la caméra passe de l'autre côté, ce qui y est accroché ou perché aussi)
     for (const p of right.posts) {
       if (Math.abs(p.z - eat.z) < rack.w / 2 + 0.4) continue;
-      spots.push({ kind: 'hang', p: [S.halfW, right.rails[0] + 0.05, p.z], face: -Math.PI / 2 });
+      spots.push({ kind: 'hang', p: [S.halfW, right.rails[0] + 0.05, p.z], face: -Math.PI / 2, wall: walls.right });
     }
     for (let z = 0.4; z <= S.front - 0.2; z += 0.4) spots.push({ kind: 'floor', p: [-S.halfW + 0.2, 0, z] });
     for (let z = S.back - 1.2; z <= S.front + 1.8; z += 0.3) {
       if (Math.abs(z - eat.z) < rack.w / 2 + 0.4) continue;
-      spots.push({ kind: 'perch', p: [S.halfW + 0.06, right.top + 0.02, z], face: -Math.PI / 2 });
+      spots.push({ kind: 'perch', p: [S.halfW + 0.06, right.top + 0.02, z], face: -Math.PI / 2, wall: walls.right });
     }
     return { sky, ground: [...field.mats, ...far.mats], spots };
   }
@@ -601,7 +602,9 @@ export function barnSet(stage, opts = {}) {
     outdoor: out,
     sky: outside?.sky ?? null,
     ground: outside?.ground ?? [],
-    spots: out ? outside.spots : barnSpots(S, win, kind),
+    spots: out ? outside.spots : barnSpots(S, win, kind, walls),
+    // (dans la case : les pans de mur où accrocher une cloche, un fer, là où la caméra les voit — extras.js)
+    hangAreas: out ? [] : barnHangAreas(S, win, walls, limeMat ? Math.max(0.55, u * 0.75) : 0),
     area: out ? { x0: -S.halfW - 3, x1: S.halfW - 0.3, z0: S.back + 0.2, z1: S.front + 1.5, y: 0 } : { x0: -S.halfW + 0.3, x1: S.halfW - 0.3, z0: S.back + 0.3, z1: S.front - 0.3, y: 0.06 },
     anchors: { eat },
     layout,
@@ -646,18 +649,31 @@ export function barnSet(stage, opts = {}) {
  * Les places des objets du jour dans la case (extras.js) : au sol le long du mur du fond et dans le coin avant
  * gauche ; sur l'appui de la lucarne et la lisse du haut de la barrière ; contre le mur du fond.
  */
-function barnSpots(S, win, kind) {
+function barnSpots(S, win, kind, walls) {
   const spots = [];
   const lift = (x, z) => litterHeight(S, x, z) - 0.02;
   for (let x = -S.halfW + 1.2; x <= S.halfW - 0.5; x += 0.35) spots.push({ kind: 'floor', p: [x, lift(x, S.back + 0.35), S.back + 0.35] });
   for (let z = 0.6; z <= S.front - 0.4; z += 0.35) spots.push({ kind: 'floor', p: [-S.halfW + 0.35, lift(-S.halfW + 0.35, z), z] });
-  for (const dx of [-0.2, 0, 0.2]) spots.push({ kind: 'perch', p: [win.x + dx, win.y - win.h / 2 - 0.1, S.back + 0.1], face: 0 });
+  for (const dx of [-0.2, 0, 0.2]) spots.push({ kind: 'perch', p: [win.x + dx, win.y - win.h / 2 - 0.1, S.back + 0.1], face: 0, wall: walls.back });
   for (let x = -S.halfW + 1.4; x <= S.halfW - 0.6; x += 0.5) spots.push({ kind: 'lean', p: [x, lift(x, S.back + 0.08), S.back + 0.08] });
   // (accrochés au mur du fond, sous la lucarne)
   const hy = Math.max(0.75, Math.min(win.y - win.h / 2 - 0.45, 1.2));
   // (pas sur le poteau du milieu, qui avance un peu)
-  for (let x = -S.halfW + 0.4; x <= S.halfW - 0.45; x += 0.3) if (Math.abs(x - 0.15 * S.halfW) > 0.25) spots.push({ kind: 'hang', p: [x, hy, S.back + 0.01], face: 0 });
+  for (let x = -S.halfW + 0.4; x <= S.halfW - 0.45; x += 0.3) if (Math.abs(x - 0.15 * S.halfW) > 0.25) spots.push({ kind: 'hang', p: [x, hy, S.back + 0.01], face: 0, wall: walls.back });
   return spots;
+}
+
+/**
+ * Les pans de mur de la case où accrocher une cloche, un fer (extras.js : placeExtras y cherche une place qu'on voit,
+ * en gros plan comme de loin) : le mur du fond, sous la sablière (pas sur la lucarne) ; à la chèvrerie et à l'étable,
+ * le soubassement en planches (lowH : sa hauteur ; 0 : pas de soubassement), un peu en avant de la chaux. Ce qui y est
+ * déjà (les poteaux, la pierre à sel, la plaque, la brosse) : placeExtras le voit et l'évite.
+ */
+function barnHangAreas(S, win, walls, lowH) {
+  const hole = [win.x - win.w / 2 - 0.15, win.x + win.w / 2 + 0.15, win.y - win.h / 2 - 0.15, win.y + win.h / 2 + 0.15];
+  const back = (y0, y1, at) => ({ axis: 'z', at, u0: -S.halfW + 0.2, u1: S.halfW - 0.2, y0, y1, face: 0, wall: walls.back, holes: [hole] });
+  if (!lowH) return [back(0.3, S.eave - 0.1, S.back)];
+  return [back(0.25, lowH - 0.04, S.back + 0.0355), back(lowH + 0.1, S.eave - 0.1, S.back)];
 }
 
 export function litterHeight(S, x, z) {

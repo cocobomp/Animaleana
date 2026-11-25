@@ -228,7 +228,9 @@ describe('le fond du lieu de voyage dans la scène', () => {
   }
 
   it('la plage : le sol devient sable, puis redevient herbe ; la mer et l\'écume sont là ; tout ce qui est planté est sur le sable', () => {
-    const { sc, ctx } = farmStage({ species: 'cow', set: decorFor('cow', 'ailleurs', { amb, look: 'plage', kinds: ['coquillage', 'crabe', 'mouette'], seed: 5 }) });
+    // (avec la vie du lieu, comme le jeu la donne : en gros plan sur la vache au râtelier, le sable proche est le long du
+    // râtelier — rien ne s'y pose, jamais sur ce qu'on lui tend : la vie accrochée ou au loin est ce qu'on voit)
+    const { sc, ctx } = farmStage({ species: 'cow', set: decorFor('cow', 'ailleurs', { amb, look: 'plage', kinds: ['coquillage', 'crabe', 'mouette'], life: ['vol', 'nichoir', 'fer'], seed: 5 }) });
     const D = sc.decor;
     const main = D.ground.find((m) => m.userData?.main);
     // (le décor de base est construit avant le fond : on compare avec un pré ordinaire)

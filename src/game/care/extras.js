@@ -1308,11 +1308,12 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   }
 
   /**
-   * Deux places se gênent-elles (a : la nouvelle) ? Trop près l'une de l'autre, ou l'une au-dessus de l'autre quand
-   * leurs hauteurs se croisent : le licol pendu sous le chat perché sur la cloison, la fourche dressée sous lui.
+   * Deux places se gênent-elles ? Trop près l'une de l'autre — leurs rayons, et un peu d'air autour de la plus petite,
+   * quel que soit l'ordre où elles sont posées —, ou l'une au-dessus de l'autre quand leurs hauteurs se croisent : le
+   * licol pendu sous le chat perché sur la cloison, la fourche dressée sous lui.
    */
   function clash(a, b) {
-    const room = Math.max(a.r + 0.25, a.r + b.r);
+    const room = Math.max(a.r + b.r, a.r + 0.25, b.r + 0.25);
     if (a.p.distanceTo(b.p) < room) return true;
     return Math.hypot(a.c.x - b.c.x, a.c.z - b.c.z) < room && a.y0 < b.y1 + 0.1 && b.y0 < a.y1 + 0.1;
   }

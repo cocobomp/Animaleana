@@ -194,25 +194,30 @@ function overCoat(sc, it) {
 }
 
 /**
- * Les objets posés (pas ce qui vole) qui entrent l'un dans l'autre : leurs boîtes monde, rentrées d'un centimètre, se
- * chevauchent (le rouge-gorge dans la botte de paille). Les poules au loin : chacune sa boîte, pas celle des deux.
+ * Les objets posés (pas ce qui vole) qui entrent l'un dans l'autre : deux de leurs pièces (chacune sa boîte monde,
+ * rentrée d'un centimètre) se chevauchent — le rouge-gorge dans la botte de paille, la fourche dans le chat.
  */
 function inEachOther(live) {
-  const boxes = [];
+  const parts = [];
   for (const it of live) {
     if (it.path) continue;
-    const parts = it.kind === 'poulailler' ? it.m.children : [it.m];
-    for (const o of parts) boxes.push([it, new THREE.Box3().setFromObject(o).expandByScalar(-0.01)]);
+    it.m.updateWorldMatrix(true, true);
+    it.m.traverseVisible((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld).expandByScalar(-0.01);
+      if (!b.isEmpty()) parts.push([it, b]);
+    });
   }
-  const out = [];
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      const [a, A] = boxes[i];
-      const [b, B] = boxes[j];
-      if (a !== b && !A.isEmpty() && !B.isEmpty() && A.intersectsBox(B)) out.push([a.kind, b.kind]);
+  const out = new Set();
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i + 1; j < parts.length; j++) {
+      const [a, A] = parts[i];
+      const [b, B] = parts[j];
+      if (a !== b && A.intersectsBox(B)) out.add(`${a.kind} dans ${b.kind}`);
     }
   }
-  return out;
+  return [...out];
 }
 
 /**
@@ -250,7 +255,7 @@ function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
     sc.proxy.bake();
     sc.proxy.at = sc.time;
     for (const p of head()) for (const b of blockers(sc, X, p)) rep.bad.push(`${b} devant sa tête (${phase})`);
-    for (const [a, b] of inEachOther(live)) rep.bad.push(`${a} dans ${b} (${phase})`);
+    for (const pair of inEachOther(live)) rep.bad.push(`${pair} (${phase})`);
     for (const [name, o] of offered()) for (const p of boxPoints(o)) for (const b of blockers(sc, X, p)) rep.bad.push(`${b} devant ${name} (${phase})`);
     for (const it of live) {
       if (it.path) {

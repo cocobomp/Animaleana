@@ -10,7 +10,7 @@
 // saison ; et tout libéré, le décor du soin rendu tel quel.
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import * as THREE from 'three';
-import { careAmbience, hashSeed } from '../src/game/care/setting.js';
+import { careAmbience, hashSeed, pickExtras, extrasPlace } from '../src/game/care/setting.js';
 import { GRASS_TINT } from '../src/game/care/outdoor.js';
 import { fakeCtx as fakeCtxOf } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -96,6 +96,38 @@ function clearOfPost(items, post) {
     const d = Math.hypot(it.at.x - post.position.x, it.at.z - post.position.z);
     expect(d, `${it.kind} dans le réverbère`).toBeGreaterThan((RAD[it.kind] ?? 0.12) + 0.1);
   }
+}
+/** Le mur de la chèvrerie au fond du pré (sa boîte, monde). */
+function houseWall(pre) {
+  let wall = null;
+  pre.group.traverse((o) => {
+    if (o.parent?.userData?.house && o.geometry?.type === 'BoxGeometry' && o.geometry.parameters.depth === 3) wall = new THREE.Box3().setFromObject(o);
+  });
+  return wall;
+}
+/** Combien de sommets des maillages de o (monde) sont dans la boîte b. */
+function pointsIn(o, b) {
+  let n = 0;
+  const q = V();
+  o.updateMatrixWorld(true);
+  o.traverse((m) => {
+    if (!m.isMesh) return;
+    const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) if (b.containsPoint(q.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld))) n++;
+  });
+  return n;
+}
+/** Les pièces pleines du décor qui dépassent du sol (pas l'herbe, le ciel, les objets du jour) : leurs boîtes. */
+function solidBoxes(d) {
+  const out = [];
+  d.group.updateMatrixWorld(true);
+  d.group.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.userData?.grass || o.userData?.sky || o.material?.transparent) return;
+    for (let q = o; q; q = q.parent) if (q === d.extras?.group || q.visible === false) return;
+    const box = new THREE.Box3().setFromObject(o);
+    if (box.max.y > 0.03) out.push({ o, box });
+  });
+  return out;
 }
 /** Le soleil du décor (la lumière qui fait les ombres). */
 function sunOf(d) {
@@ -244,6 +276,66 @@ describe('la balle de la chèvre, dans le pré', () => {
       sc.dispose();
     }
     expect(n).toBeGreaterThan(8);
+  }, 120000);
+
+  it('les deux poules au loin ne sont jamais dans la chèvrerie : là où elles sont vraiment, tournées, au bout de leur promenade', () => {
+    const amb = careAmbience({ hour: 13, weather: 'clear', season: 'summer' });
+    let n = 0;
+    for (let i = 0; i < 40; i++) {
+      const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, `f${i}`, 3 + i) });
+      const game = goatPlay.goatPlay3dGame(ctx);
+      run(ctx, game, sc, 1.5);
+      const pre = sc.decor;
+      const it = pre.extras.items.find((x) => x.kind === 'poulailler' && x.at);
+      if (it) {
+        n++;
+        const wall = houseWall(pre);
+        // (elles vont et viennent : à plusieurs moments de leur promenade)
+        for (let k = 0; k < 6; k++) {
+          run(ctx, game, sc, 0.4);
+          it.m.updateMatrixWorld(true);
+          for (const h of it.m.children) expect(pointsIn(h, wall), `f${i} : une poule dans la chèvrerie`).toBe(0);
+        }
+      }
+      game.destroy();
+      sc.dispose();
+    }
+    expect(n).toBeGreaterThan(4);
+  }, 120000);
+
+  it('au pied de la chèvrerie, rien de posé au sol ne rentre dans le mur, la porte ou le poteau du coin (la brouette, la botte, la poule)', () => {
+    const amb = careAmbience({ hour: 13, weather: 'clear', season: 'summer' });
+    // (des jours où la brouette, la botte ou la poule sont parmi les objets du jour du pré)
+    const days = [];
+    for (let day = 1; days.length < 16 && day < 400; day++) {
+      const kinds = pickExtras({ day, id: 'g2', place: extrasPlace('pre'), species: 'goat', n: 3, amb });
+      if (kinds.some((k) => k === 'brouette' || k === 'botte' || k === 'poule')) days.push(day);
+    }
+    let byWall = 0;
+    let refused = 0;
+    for (const day of days) {
+      for (const [w, h] of [[390, 600], [844, 390]]) {
+        const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, 'g2', day), w, h });
+        const game = goatPlay.goatPlay3dGame(ctx);
+        run(ctx, game, sc, 1.5);
+        const pre = sc.decor;
+        const solids = solidBoxes(pre);
+        for (const it of pre.extras.items) {
+          if (['brouette', 'botte', 'poule'].includes(it.kind)) refused += it.why.mur ?? 0;
+          if (!it.at || it.path || it.where !== 'floor') continue;
+          if (it.spot?.tight) byWall++;
+          it.m.updateMatrixWorld(true);
+          const b = new THREE.Box3().setFromObject(it.m).expandByScalar(-0.01);
+          const at = `${(it.at.x - pre.dims.x0).toFixed(2)}, ${(it.at.z - pre.dims.z0).toFixed(2)}`;
+          for (const { o, box } of solids) expect(box.intersectsBox(b), `jour ${day}, ${w}×${h} : ${it.kind} (${at}) dans ${o.geometry.type}`).toBe(false);
+        }
+        game.destroy();
+        sc.dispose();
+      }
+    }
+    // (des choses posées au pied du mur, d'autres trop grosses pour y tenir, parties ailleurs)
+    expect(byWall).toBeGreaterThan(4);
+    expect(refused).toBeGreaterThan(0);
   }, 120000);
 
   it("la nuit, pendant la partie : le côté de la chèvre qu'on voit reçoit la lumière, lancer après lancer", () => {

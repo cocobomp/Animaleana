@@ -13,6 +13,8 @@ import { canvasTex } from './textures.js';
 import { EXTRAS, seeded, hashSeed } from './setting.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+/** La verticale (les poules au loin tournent autour). */
+const UP = V(0, 1, 0);
 
 function shade(o) {
   o.traverse((m) => {
@@ -842,14 +844,18 @@ function flight(keep, { n = 3, color = 0x3a3a44, span = 0.45 } = {}) {
   return { g, birds };
 }
 
+/** Les deux poules au loin : [x, z, taille] dans leur groupe ; chacune va et vient de FAR_HEN_RANGE (le long de x). */
+const FAR_HENS = [[0, 0, 1.3], [0.8, 0.5, 1.2]];
+const FAR_HEN_RANGE = 0.5;
+
 /** Deux poules au loin, qui picorent (le poulailler n'est pas loin). */
 function farHens(keep) {
   const g = new THREE.Group();
-  for (const [x, z, s] of [[0, 0, 1.3], [0.8, 0.5, 1.2]]) {
+  for (const [x, z, s] of FAR_HENS) {
     const h = hen(keep, { far: true });
     h.position.set(x, 0, z);
     h.scale.setScalar(s);
-    h.userData.range = 0.5;
+    h.userData.range = FAR_HEN_RANGE;
     g.add(h);
   }
   g.userData.step = (dt) => {
@@ -1533,6 +1539,41 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     });
   }
 
+  let solidBoxes = null;
+  const _q = V();
+  /**
+   * Ce point est-il dans un maillage plein du décor (le mur de la chèvrerie, un poteau, une botte) ? Sa boîte dans son
+   * propre repère : un mur tourné reste un mur. Les boîtes sont prises une fois (le décor ne bouge pas).
+   */
+  function inSolid(q) {
+    if (!solidBoxes) {
+      solidBoxes = solidList().map((o) => {
+        o.updateWorldMatrix(true, false);
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        return { o, inv: o.matrixWorld.clone().invert(), b: o.geometry.boundingBox };
+      });
+    }
+    for (const s of solidBoxes) {
+      if (!s.o.parent || !shown(s.o)) continue;
+      if (s.b.containsPoint(_q.copy(q).applyMatrix4(s.inv))) return true;
+    }
+    return false;
+  }
+
+  let solidWorld = null;
+  const _tb = new THREE.Box3();
+  /** Sa boîte au sol en p (rad de côté, les trois quarts vers nous et vers le fond, h de haut) touche-t-elle une pièce pleine du décor qui dépasse du sol ? */
+  function touchesSolid(p, rad, h) {
+    solidWorld ??= solidList().map((o) => ({ o, box: shownBox(o, new THREE.Box3()) }));
+    _tb.min.set(p.x - rad, p.y + 0.03, p.z - rad * 0.75);
+    _tb.max.set(p.x + rad, p.y + h, p.z + rad * 0.75);
+    for (const { o, box } of solidWorld) {
+      if (box.isEmpty() || box.max.y < p.y + 0.03 || !o.parent || !shown(o)) continue;
+      if (box.intersectsBox(_tb)) return true;
+    }
+    return false;
+  }
+
   const nearWall = new Map();
   /** Les maillages du décor tout près de ce pan de mur (ce qui peut y être accroché ou en dépasser), calculés une fois. */
   function wallList(A) {
@@ -1623,6 +1664,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     for (const q of avoid) if (Math.hypot(p.x - q.x, p.z - q.z) < rad + 0.25) return no('réverbère');
     // (accroché, perché, appuyé : à un mur, une clôture qu'on voit — le décor cache ceux qui passent devant la caméra)
     if (s?.wall && !shown(s.wall)) return no('mur caché');
+    // (une place serrée contre le décor — au pied d'un mur, entre une porte et un poteau : s.tight — : posé là, il ne
+    // touche aucune pièce pleine ; face à nous, tourné d'un rien, il prend son rayon de côté et les trois quarts de
+    // son rayon vers le mur)
+    if (it.where === 'floor' && s?.tight && touchesSolid(p, rad, h)) return no('mur');
     // (ni sur ce qu'on lui tend — mangeoire, seau, gamelles, filet, notre main — ni sur la plaque à son nom : leur
     // boîte, dans le monde et dans l'image, pas seulement leur centre)
     const ib = new THREE.Box3(V(p.x - rad, p.y, p.z - rad), V(p.x + rad, p.y + h, p.z + rad));
@@ -1789,10 +1834,14 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     return true;
   }
 
-  /** Les poules au loin, le rouge-gorge derrière lui : cette place se voit-elle, loin de sa tête ? */
-  function farSpotOk(st, it, p, S, ext, mode = 'place') {
+  /**
+   * Les poules au loin, le rouge-gorge derrière lui : cette place se voit-elle, loin de sa tête ? rot : leur rotation
+   * (autour de la verticale), tirée avant l'essai — les points essayés sont ceux où elles seront vraiment.
+   */
+  function farSpotOk(st, it, p, S, rot = 0, mode = 'place') {
     const v = st.view;
-    const pts = [p, ...ext.map((e) => p.clone().add(e))];
+    const turn = (e) => p.clone().add(e.clone().applyAxisAngle(UP, rot));
+    const pts = [p, ...(FAR_EXT[it.kind] ?? []).map(turn)];
     // (derrière lui, mais pas forcément derrière ce qu'on lui tend, l'abreuvoir rangé au fond : ni dessus, ni devant)
     const ib = new THREE.Box3().setFromPoints(pts).expandByScalar(0.08);
     const r = rectOf(st, ib);
@@ -1807,8 +1856,17 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       if (s.behind || s.x < v.x0 + 10 || s.x > v.x1 - 10 || s.y < v.y0 + 40 || s.y > v.y1 - 10) return false;
       if (onHead(S, { x0: s.x, x1: s.x, y0: s.y, y1: s.y }, 1.5)) return false;
     }
-    // (au moins une des deux poules se voit : entre les lisses de la clôture, à côté de lui)
-    return it.kind === 'rougegorge' ? seen(st, p.clone().add(V(0, 0.06, 0))) : seen(st, p.clone().add(V(0, 0.3, 0))) || seen(st, p.clone().add(V(0.8, 0.3, 0.5)));
+    if (it.kind === 'rougegorge') return seen(st, p.clone().add(V(0, 0.06, 0)));
+    // (les deux poules : jamais dans un mur, un poteau, une botte — ni à leur place, ni au bout de leur promenade, bec
+    // et queue compris, à la hauteur de leur corps —, et au moins une se voit : entre les lisses de la clôture, à côté
+    // de lui)
+    let one = false;
+    for (const [x, z, s] of FAR_HENS) {
+      const walk = (FAR_HEN_RANGE + 0.3) * s;
+      for (const dx of [-walk, 0, walk]) if (inSolid(turn(V(x + dx, 0.2 * s, z)))) return false;
+      one ||= seen(st, turn(V(x, 0.3, z)));
+    }
+    return one;
   }
   const FAR_EXT = {
     // (le rouge-gorge : sa tête, sa queue, ses petits sauts, dans tous les sens)
@@ -1836,6 +1894,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
         const A = decor.outdoor ? null : decor.area;
         const [zn, zf] = robin ? [0.3, 2.2] : [2.2, 7.5];
         const gy0 = decor.area?.y ?? 0;
+        // (leur rotation, tirée pour chaque place avant de l'essayer : on essaie là où elles seront vraiment)
+        const turn = seeded(hashSeed(`${seed}|${it.kind}|tourne|${it.tries}`));
         const cands = [];
         for (let gy = 0.12; gy <= 0.8; gy += 0.05) {
           for (let gx = 0.08; gx <= 0.92; gx += 0.06) {
@@ -1845,24 +1905,25 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
             if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
             if (A && (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1)) continue;
             if (blocked(p, robin ? 0.1 : 0.9)) continue; // (ni sur la caisse de transport, ni sur les choses du pays)
-            cands.push({ p, v: r() });
+            cands.push({ p, v: r(), rot: (turn() - 0.5) * 1.5 });
           }
         }
         cands.sort((a, b) => a.v - b.v);
-        C = { J, cands, n: 0, r };
+        C = { J, cands, n: 0 };
         if (J) it.cur = C;
       }
       for (; C.n < Math.min(80, C.cands.length); C.n++) {
         if (J && late()) return null;
         worked = true;
-        const p = C.cands[C.n].p;
+        const { p, rot } = C.cands[C.n];
         // (pas sur ce qui est déjà posé : la botte de paille, l'oiseau du jour descendu dans la paille)
         const me = spaceOf(it, p);
         if (taken.some((q) => clash(me, q))) continue;
-        if (!farSpotOk(st, it, p, S, FAR_EXT[it.kind])) continue;
+        if (!farSpotOk(st, it, p, S, rot)) continue;
         it.at = p;
+        it.rot = rot;
         it.m.position.copy(p);
-        it.m.rotation.y = (C.r() - 0.5) * 1.5;
+        it.m.rotation.y = rot;
         it.cur = null;
         return true;
       }
@@ -2108,7 +2169,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const S = survey(st);
     for (const it of items) {
       if (!it.at || it.path || it.fade) continue;
-      const ok = it.where === 'far' ? farSpotOk(st, it, it.at, S, FAR_EXT[it.kind] ?? [], mode) : fits(st, it, it.at, [], S, it.spot, mode);
+      const ok = it.where === 'far' ? farSpotOk(st, it, it.at, S, it.rot ?? 0, mode) : fits(st, it, it.at, [], S, it.spot, mode);
       if (!ok) leave(it, mode === 'safe');
     }
   }

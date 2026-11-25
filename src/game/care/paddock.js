@@ -377,28 +377,31 @@ export function paddockSet(stage, yard) {
 
   // Les places des objets du jour : au sol devant la clôture du fond et sur sa lisse du haut (derrière le terrain : la
   // balle ne roule pas jusque-là), accrochés à ses poteaux ; ni devant la porte ni sur le touret. (En voyage, la
-  // clôture du fond va jusqu'au coin de gauche : les places aussi.)
+  // clôture du fond va jusqu'au coin de gauche : les places aussi.) Au sol, toutes serrées contre le décor (tight :
+  // extras.js) — ce qui y est posé ne passe ni dans les lisses, ni dans un poteau, la paille, le touret ou le mur ; une
+  // botte tient devant la clôture du fond, la brouette ne tient pas dans ce petit pré.
   const spots = [];
   const topY = 0.92 * fH + 0.05;
   const back0 = travel ? F.x0 + 0.45 : F.x0 + 3.7;
   for (let x = back0; x <= F.x1 - 2 * sR - 0.6; x += 0.35) {
-    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.32] });
+    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.48], tight: true });
     spots.push({ kind: 'perch', p: [x, topY, F.z0 + 0.07], face: 0 });
   }
   for (const p of backPosts) if (p.x > back0 - 0.1 && p.x < F.x1 - 0.2) spots.push({ kind: 'hang', p: [p.x, 0.32 * fH + 0.06, F.z0 + 0.06], face: 0 });
   for (let z = F.z0 + 2 * sR + 1; z <= zNear; z += 0.35) spots.push({ kind: 'perch', p: [F.x1 - 0.07, topY, z], face: -Math.PI / 2 });
-  // (le long du mur chaulé de la chèvrerie, de part et d'autre de la porte : au pied du mur, appuyé, accroché)
+  // (le long du mur chaulé de la chèvrerie, de part et d'autre de la porte : au pied du mur, appuyé, accroché ; au sol,
+  // entre le mur, l'encadrement de la porte, le poteau du coin et la clôture de gauche)
   const wallZ = F.z0 - 0.4;
   for (let x = bx - 0.3; !travel && x <= F.x0 + 3.2; x += 0.3) {
     if (Math.abs(x - door.x) < dW / 2 + 0.3) continue;
-    spots.push({ kind: 'floor', p: [x, 0, wallZ + 0.3] });
+    spots.push({ kind: 'floor', p: [x, 0, wallZ + 0.42], tight: true });
     spots.push({ kind: 'lean', p: [x, 0, wallZ + 0.04] });
     spots.push({ kind: 'hang', p: [x, Math.min(1.25, wallH - 0.6), wallZ + 0.005], face: 0 });
   }
   // (le long de la clôture de gauche et de droite, hors du terrain : au sol, sur la lisse du haut ; pas sur la paille)
   for (let z = F.z0 + 0.8; z <= zNear + 0.2; z += 0.35) {
-    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z] }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
-    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z] });
+    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z], tight: true }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
+    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z], tight: true });
   }
   // (le réverbère de la nuit : contre le mur, juste à droite de la porte, son bras au-dessus d'elle — là où rien ne se
   // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait ; en voyage, à la même

@@ -724,6 +724,43 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     return Math.hypot(Math.max(x0, Math.min(hc.x, x1)) - hc.x, Math.max(y0, Math.min(hc.y, y1)) - hc.y) < hr;
   }
 
+  it('chien et chat au jardin en voyage : les arbres de la ferme, cachés, ne cachent pas le rouge-gorge (les rayons ne les voient pas)', () => {
+    const visible = (o) => {
+      for (let p = o; p; p = p.parent) if (!p.visible) return false;
+      return true;
+    };
+    const orig = THREE.Raycaster.prototype.intersectObject;
+    let hidden = 0;
+    let tested = 0;
+    try {
+      THREE.Raycaster.prototype.intersectObject = function (o, ...rest) {
+        tested++;
+        if (!visible(o)) hidden++;
+        return orig.call(this, o, ...rest);
+      };
+      for (const species of ['dog', 'cat']) {
+        for (const look of ['plage', 'montagne', 'japon', 'bush']) {
+          const set = C.decorFor(species, 'ailleurs', { amb, look, kinds: [], life: ['rougegorge'], seed: 3 });
+          const { sc } = P.makePetStage({ species, breed: species === 'dog' ? 'labrador' : null, set });
+          // (les arbres et collines de la ferme sont là, cachés)
+          let far = 0;
+          sc.decor.group.traverse((o) => {
+            if (o.userData?.far) far++;
+          });
+          expect(far).toBeGreaterThan(0);
+          for (let k = 0; k < 90; k++) sc.update(1 / 30);
+          const robin = sc.decor.extras.items.find((it) => it.kind === 'rougegorge');
+          expect(robin.at, `${species} ${look} : ${JSON.stringify(robin.why)}`).toBeTruthy();
+          sc.dispose();
+        }
+      }
+    } finally {
+      THREE.Raycaster.prototype.intersectObject = orig;
+    }
+    expect(tested).toBeGreaterThan(0);
+    expect(hidden).toBe(0);
+  }, 60000);
+
   it('la construction du pays n\'est jamais juste derrière sa tête, au téléphone en portrait comme en paysage', () => {
     const sizes = [[390, 600], [900, 400], [640, 300]];
     for (const species of ['horse', 'cow']) {

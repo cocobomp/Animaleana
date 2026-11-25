@@ -444,7 +444,7 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
     FB = await import('../src/cloud/feedback.js');
   }, 120000);
   afterEach(() => {
-    FB.FEEDBACK.on = false; // (en veille, comme dans le jeu)
+    FB.FEEDBACK.on = true; // (allumé, comme dans le jeu)
   });
   beforeEach(() => {
     vi.stubGlobal('localStorage', fakeStorage({ 'animaleana.profiles': JSON.stringify([{ id: 'p1', name: 'Léa' }]) }));
@@ -637,8 +637,9 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
     expect(JSON.stringify(item)).not.toMatch(/Léa|Dupont|"p1"/);
   });
 
-  it('en veille (on: false) : pas de 💌 dans ⋯ Plus, ⚙️ Réglages, l\'écran des profils ni l\'Aide, même en ligne', async () => {
-    expect(FB.FEEDBACK.on, 'le bouton est en veille').toBe(false);
+  it('éteint (on: false) : pas de 💌 dans ⋯ Plus, ⚙️ Réglages, l\'écran des profils ni l\'Aide, même en ligne', async () => {
+    expect(FB.FEEDBACK.on, 'le bouton est allumé dans le jeu').toBe(true);
+    FB.FEEDBACK.on = false;
     expect(FB.feedbackShown({ protocol: 'https:' })).toBe(false);
     const flat = (x) => [x].flat(Infinity).filter(Boolean).flatMap((n) => [n, ...(n.children ? flat(n.children) : [])]);
     const shown = [];
@@ -747,10 +748,11 @@ describe('❓ l\'aide en parle', () => {
     vi.stubGlobal('location', { protocol: 'file:' });
     expect(searchHelp('donner mon avis').map((x) => x.id)).not.toContain('feedback');
     expect(searchHelp('').map((x) => x.id)).not.toContain('feedback');
-    // En veille : la fiche n'y est pas non plus, même en ligne.
+    // Éteint : la fiche n'y est pas non plus, même en ligne.
     vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
     FB.FEEDBACK.on = false;
     expect(searchHelp('donner mon avis').map((x) => x.id)).not.toContain('feedback');
+    FB.FEEDBACK.on = true;
   });
 });
 

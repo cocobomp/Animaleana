@@ -151,9 +151,8 @@ Les anciennes versions du jeu (encore en cache sur un appareil) ne peuvent alors
 
 ## 💌 Les avis des joueurs
 
-> ⏸️ **En veille.** Le bouton est caché dans le jeu (`FEEDBACK = { on: false }` dans `src/cloud/feedback.js`). Pour
-> l'allumer : publier les règles Firestore (« Publier les règles »), puis mettre `on: true` et pousser. Tout le reste
-> (fenêtre, règles, tests, mail des avis ci-dessous) est prêt.
+> Le bouton est allumé (`FEEDBACK = { on: true }` dans `src/cloud/feedback.js`), les règles Firestore publiées. Si un
+> jour les règles ne le sont plus : mettre `on: false` (le bouton se cache partout) et pousser.
 
 Dans le jeu en ligne, « 💌 Ton avis » (menu ⋯ Plus, ⚙️ Réglages et écran des profils) : un smiley (😍 🙂 😐 😕), une
 sorte (idée, bug, j'aime, autre) et un petit texte. Code : `src/cloud/feedback.js` (le message, l'envoi, la file d'attente),

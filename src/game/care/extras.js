@@ -803,9 +803,10 @@ const SIZE = {
  * laisse peu de sol dans l'image) : des choses accrochées au mur ou à un poteau, un vol d'oiseaux qui traverse le ciel
  * loin derrière, des poules au loin, une hirondelle sous le toit. look : la famille du voyage (des mouettes à la plage,
  * des rochers rouges dans le bush). anywhere : pas de caméra fixe (la longe : la caméra tourne avec le cheval) — les
- * objets prennent leur place tout de suite, sans regarder l'image.
+ * objets prennent leur place tout de suite, sans regarder l'image. avoid : des points du sol où rien ne se pose (le
+ * pied du réverbère, la nuit : decor.avoid, ambience.js).
  */
-export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3, look = null, anywhere = false } = {}) {
+export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3, look = null, anywhere = false, avoid = decor.avoid ?? [] } = {}) {
   const keep = bag();
   const g = new THREE.Group();
   g.name = 'objets du jour';
@@ -842,6 +843,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     };
     const [rad, h] = SIZE[it.kind] ?? [0.2, 0.3];
     for (const q of taken) if (q.distanceTo(p) < rad + 0.25) return no('pris');
+    // (ni dans le réverbère : son poteau, sa lanterne)
+    for (const q of avoid) if (Math.hypot(p.x - q.x, p.z - q.z) < rad + 0.25) return no('réverbère');
     // (ni sur ce qu'on lui tend : mangeoire, seau, gamelles, filet…)
     for (const pr of Object.values(decor.props ?? {})) {
       const o = pr?.group;

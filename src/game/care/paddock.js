@@ -5,15 +5,18 @@
 //
 // Le terrain du jeu dessiné (400 × 165, fun.js ballGame) est posé sur l'herbe devant nous : yard = { xC (milieu, x),
 // half (demi-largeur, m), zFar (bord du fond), depth (profondeur, m) }. Même forme que les autres décors (stallSet,
-// barnSet) : { group, dims, props, layout, update, dispose }. Il suit l'heure, la météo et la saison du jeu (yard.season ;
-// ambience.js : le ciel recolorable, le sol que la pluie mouille et que la neige blanchit, l'herbe cachée sous la neige)
-// et reçoit les objets du jour (spots : le long de la clôture du fond, derrière le terrain).
+// barnSet) : { group, dims, props, layout, update, dispose }. Il suit l'heure, la météo et la saison du jeu (yard.season :
+// l'herbe, les touffes, les arbres au loin, des feuilles mortes l'automne à la place des pâquerettes ; ambience.js : le
+// ciel recolorable, le sol que la pluie mouille et que la neige blanchit, l'herbe cachée sous la neige, la nuit le
+// réverbère et sa lumière sur le terrain, la brume qui recule avec la caméra) et reçoit les objets du jour (spots : le
+// long de la clôture du fond, derrière le terrain).
 
 import * as THREE from 'three';
 import { canvasTex, rng } from './textures.js';
 import { bag, barnWood, strawBale, lumpy } from './barnProps.js';
 import { limeWallTexture } from './farmBarn.js';
 import { farAway, skySphere, GRASS_TINT } from './outdoor.js';
+import { fogFromCamera } from './ambience.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -79,6 +82,53 @@ export function tuftTexture() {
   }, { repeat: false, key: 'pre-tuft' });
 }
 
+/** Les feuilles mortes de l'automne, à la place des pâquerettes (comme grassField, outdoor.js). */
+const DEAD_LEAVES = [0xc8642c, 0xd89a3a, 0x8a4a24];
+
+/**
+ * Les pâquerettes de la saison : n l'été, plus au printemps, chacune à la place at() → [x, z] (tirée de r) ; des
+ * pétales blancs, un cœur jaune. L'automne, des feuilles mortes rousses à leur place (moins nombreuses, plus grandes :
+ * comme grassField, outdoor.js) ; rien l'hiver. size : le rayon d'une fleur. Deux instances au plus ; sous la neige,
+ * elles disparaissent (userData.grass : ambience.js).
+ */
+export function daisies(keep, { n, season = 'summer', r, at, size = 0.012 }) {
+  const g = new THREE.Group();
+  if (season === 'winter') return g;
+  const autumn = season === 'autumn';
+  const count = Math.round(n * (autumn ? 0.6 : season === 'spring' ? 1.4 : 1));
+  const petal = keep(new THREE.CircleGeometry(size, 10));
+  petal.rotateX(-Math.PI / 2);
+  const petals = new THREE.InstancedMesh(petal, keep(new THREE.MeshStandardMaterial({ color: autumn ? 0xffffff : 0xfbfaf4, roughness: 0.7 })), count);
+  let hearts = null;
+  if (!autumn) {
+    const heart = keep(new THREE.CircleGeometry(size * 0.375, 8));
+    heart.rotateX(-Math.PI / 2);
+    heart.translate(0, 0.001, 0);
+    hearts = new THREE.InstancedMesh(heart, keep(new THREE.MeshStandardMaterial({ color: 0xf1c232, roughness: 0.6 })), count);
+  }
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const c = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    const [x, z] = at(i);
+    const y = 0.02 + r() * 0.02;
+    if (autumn) {
+      // (une feuille : un peu allongée, tournée au hasard, rousse, orange ou brune)
+      m4.compose(V(x, y * 0.6, z), q.setFromEuler(e.set(0, r() * 6, 0)), V(1.6, 1, 1.28));
+      petals.setColorAt(i, c.setHex(DEAD_LEAVES[i % 3]));
+    } else m4.makeTranslation(x, y, z);
+    petals.setMatrixAt(i, m4);
+    hearts?.setMatrixAt(i, m4);
+  }
+  for (const o of [petals, hearts]) {
+    if (!o) continue;
+    o.userData.grass = true;
+    g.add(o);
+  }
+  return g;
+}
+
 /** Le ciel : bleu en haut, pâle et un peu doré vers l'horizon (une grande sphère vue de dedans). */
 export function skyDome(keep, r = 40) {
   const geo = keep(new THREE.SphereGeometry(r, 24, 12));
@@ -130,7 +180,9 @@ export function paddockSet(stage, yard) {
   groundMat.userData.main = true;
   mesh(new THREE.PlaneGeometry(60, 60), groundMat, [xC, 0, zFar], [-Math.PI / 2, 0, 0], false);
   const door = V(F.x0 + 1.6, 0, F.z0 - 0.35);
-  mesh(new THREE.PlaneGeometry(2.6, 2.2), keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 })), [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
+  const dirtMat = keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 }));
+  const dirt = mesh(new THREE.PlaneGeometry(2.6, 2.2), dirtMat, [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
+  dirt.userData.grass = true; // (sous la neige, elle disparaît comme l'herbe : ambience.js)
 
   // touffes d'herbe (cartes en croix) et pâquerettes, semées partout sauf au milieu du terrain
   const tuftTex = keep(tuftTexture());
@@ -165,29 +217,8 @@ export function paddockSet(stage, yard) {
   tufts.receiveShadow = true;
   tufts.userData.grass = true; // (sous la neige, l'herbe disparaît : ambience.js)
   g.add(tufts);
-  // pâquerettes : un cœur jaune, des pétales blancs (une seule petite forme)
-  const daisy = new THREE.Group();
-  const petal = keep(new THREE.CircleGeometry(0.012, 10));
-  petal.rotateX(-Math.PI / 2);
-  const heart = keep(new THREE.CircleGeometry(0.0045, 8));
-  heart.rotateX(-Math.PI / 2);
-  heart.translate(0, 0.001, 0);
-  const nD = 70;
-  const petals = new THREE.InstancedMesh(petal, keep(new THREE.MeshStandardMaterial({ color: 0xfbfaf4, roughness: 0.7 })), nD);
-  const hearts = new THREE.InstancedMesh(heart, keep(new THREE.MeshStandardMaterial({ color: 0xf1c232, roughness: 0.6 })), nD);
-  for (let i = 0; i < nD; i++) {
-    const x = xC + (r() - 0.5) * (half * 2 + 3);
-    const z = zFar - 0.6 + r() * (depth + 2);
-    m4.makeTranslation(x, 0.02 + r() * 0.02, z);
-    petals.setMatrixAt(i, m4);
-    hearts.setMatrixAt(i, m4);
-  }
-  daisy.add(petals, hearts);
-  petals.userData.grass = true;
-  hearts.userData.grass = true;
-  // (pas de pâquerettes l'hiver)
-  daisy.visible = season !== 'winter';
-  g.add(daisy);
+  // pâquerettes (des feuilles mortes l'automne, rien l'hiver)
+  g.add(daisies(keep, { n: 70, season, r, size: 0.012, at: () => [xC + (r() - 0.5) * (half * 2 + 3), zFar - 0.6 + r() * (depth + 2)] }));
 
   // ---------------------------------------------------------------- la clôture (poteaux et trois lisses)
   const post = keep(barnWood(21, true, 'old'));
@@ -348,8 +379,13 @@ export function paddockSet(stage, yard) {
     if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z] }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
     if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z] });
   }
-  // (le réverbère de la nuit : contre la clôture du fond, à côté de la porte)
-  const lampSpot = V(F.x0 + 2.9, 0, F.z0 - 0.3);
+  // (le réverbère de la nuit : contre le mur, juste à droite de la porte, son bras au-dessus d'elle — là où rien ne se
+  // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait)
+  // (sa lumière : en hauteur, devant le terrain, du côté de la caméra. On voit la chèvre de devant et d'en haut, et
+  // elle attend la balle au premier rang : une lumière au-dessus du terrain l'éclairait par le dos, le côté qu'on voit
+  // restait noir. D'ici, ce côté reçoit la lumière partout où elle court, jusqu'au fond)
+  const lampSpot = V(door.x + dW / 2 + 0.2, 0, F.z0 - 0.25);
+  const lampLight = V(xC, Math.max(2.6, 1.8 * u + 1.6), zNear + depth * 0.55);
 
   return {
     group: g,
@@ -359,10 +395,18 @@ export function paddockSet(stage, yard) {
     outdoor: true,
     skyMesh: sky,
     ground: [groundMat, tuftMat, ...far.mats],
+    // (la terre battue : mouillée et assombrie comme l'herbe, ambience.js)
+    groundMarks: [dirtMat],
     spots,
     lampSpot,
+    lampFace: Math.PI,
+    lampLight,
+    // (de son pied aux coins du fond : là où la chèvre va le plus loin d'elle)
+    lampReach: Math.hypot(half, depth * 1.55),
     // (la pluie, la neige : sur tout le terrain, pas seulement autour de la chèvre)
     weatherBox: { x0: F.x0 - 1.5, x1: F.x1 + 1.5, z0: F.z0 - 2, z1: F.z1 + 2.5, top: Math.max(3, 3 * u + 1) },
+    // (la caméra voit tout le terrain de loin, plus loin encore en portrait : la brume recule d'autant)
+    fogScale: fogFromCamera(),
     layout() {},
     /** Le ciel, la brume, les reflets du pré (à rendre au départ : voir goatPlay3d.js). */
     sky(st) {

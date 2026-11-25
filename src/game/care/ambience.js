@@ -14,6 +14,21 @@ import { animalBox } from './extras.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
+/** La distance de la caméra à l'animal pour laquelle la brume est réglée (un soin ordinaire : 4,4 m). */
+export const FOG_CAM = 4.4;
+
+/**
+ * La brume d'un décor que la caméra voit de loin (le pré de la balle, le rond de longe) : plus loin d'autant, pour que
+ * l'animal n'y soit pas plus noyé que dans un soin ordinaire. Au téléphone en portrait, la caméra recule pour tout
+ * faire tenir en largeur : la brume est relue à chaque image (decor.fogScale, applyAmbience). min : jamais moins.
+ */
+export function fogFromCamera(min = 1) {
+  return (st) => {
+    const d = st?.camPos && st?.camTarget ? st.camPos.distanceTo(st.camTarget) : 0;
+    return Math.max(min, d / FOG_CAM);
+  };
+}
+
 /** Le rôle d'une lumière du décor : 'sun', 'sky', 'fill' (ou celui qu'on lui a donné). */
 function roleOf(l) {
   if (l.userData.role) return l.userData.role;
@@ -99,7 +114,14 @@ function lampPost(keep, h) {
 
 /**
  * Habille la scène selon l'ambiance amb (careAmbience). decor : { group, outdoor, sky, ground, spots, dims, room } ;
- * stage : la scène (marks, box, camera, scene). Renvoie { update(dt, stage), dispose(), lamp, rain, snow }.
+ * stage : la scène (marks, box, camera, scene). Renvoie { update(dt, stage), dispose(), lamp, lampPost, rain, snow }.
+ *
+ * Ce qu'un grand décor de jeu peut ajouter (le pré de la balle, le rond de longe) : fogScale (un nombre, ou une
+ * fonction de la scène relue à chaque image : fogFromCamera), lampSpot et lampFace (la place du réverbère, hors du
+ * terrain), lampLight et lampReach (la place de sa lumière, en hauteur du côté de la caméra, et la distance au sol de
+ * son pied au point du terrain le plus loin d'elle), groundMarks (les matières posées sur le sol : piste, liseré, terre
+ * battue), weatherBox (où tombent pluie et neige).
+ * Le pied du réverbère est noté dans decor.avoid le temps de l'ambiance : les objets du jour ne s'y posent pas.
  */
 export function applyAmbience(stage, decor, amb) {
   const keep = bag();
@@ -162,17 +184,22 @@ export function applyAmbience(stage, decor, amb) {
 
   // ---------------------------------------------------------------- le ciel, la brume
   const sc = stage.scene;
+  // (un grand décor — le rond de longe, ses arbres tout autour ; le pré de la balle, vu de loin — : la brume plus loin,
+  // decor.fogScale ; une fonction : relue à chaque image, la caméra recule ou avance)
+  const fogK = typeof decor.fogScale === 'function' ? decor.fogScale : null;
+  const fogAt = (st) => Math.max(1, (fogK ? fogK(st) : decor.fogScale) || 1);
+  const near0 = amb.foggy ? 3 : amb.snowy ? 8 : amb.wet ? 9 : 14;
+  const far0 = amb.foggy ? 16 : amb.snowy || amb.wet ? 26 : 36;
+  let fog = null;
   if (out) {
     // (le ciel : decor.skyMesh, ou decor.sky quand c'est lui — le pré de la balle et le rond de longe ont une méthode sky)
     const skyM = decor.skyMesh ?? (decor.sky?.isMesh ? decor.sky : null);
     skyM?.setColors?.(skyTop, skyLow);
     sc.background = skyLow.clone();
     const fogCol = skyLow.clone().lerp(skyTop, 0.3);
-    // (un grand décor — le rond de longe, ses arbres tout autour — : la brume plus loin, decor.fogScale)
-    const k = Math.max(1, decor.fogScale ?? 1);
-    const near = (amb.foggy ? 3 : amb.snowy ? 8 : amb.wet ? 9 : 14) * k;
-    const far = (amb.foggy ? 16 : amb.snowy || amb.wet ? 26 : 36) * k;
-    sc.fog = new THREE.Fog(fogCol, near, far);
+    const k = fogAt(stage);
+    fog = new THREE.Fog(fogCol, near0 * k, far0 * k);
+    sc.fog = fog;
     // (le brouillard, la nuit : le ciel se voit à peine)
     if (skyM && (amb.foggy || night)) skyM.material.fog = false;
   }
@@ -230,6 +257,18 @@ export function applyAmbience(stage, decor, amb) {
     });
   }
   if (night) for (const m of grounds) m.color.multiplyScalar(0.6);
+  // (ce qui est posé sur le sol — la piste du rond, son liseré, la terre battue devant la porte — : mouillé et assombri
+  // comme lui, sinon il luit la nuit sur le sol sombre ; son dessin reste. Sous la neige, la couche blanche recouvre la
+  // piste ; le liseré et la terre battue disparaissent avec l'herbe, userData.grass)
+  for (const m of (decor.groundMarks ?? []).filter(Boolean)) {
+    if (grounds.includes(m)) continue;
+    saved.push({ m, color: m.color.clone(), rough: m.roughness, map: m.map });
+    if (amb.wet) {
+      m.color.multiplyScalar(0.72);
+      m.roughness = Math.min(m.roughness, 0.55);
+    }
+    if (night) m.color.multiplyScalar(0.6);
+  }
   if (out && amb.snowy) {
     const st = keep(snowTexture());
     st.repeat.set(6, 6);
@@ -338,9 +377,12 @@ export function applyAmbience(stage, decor, amb) {
 
   // ---------------------------------------------------------------- la lampe (la nuit ; le soir par gros temps)
   let lamp = null;
+  let pole = null;
+  const avoid0 = decor.avoid;
   if (amb.lamp) {
     const light = new THREE.PointLight(0xffb866, 1, 0, 2);
     let at;
+    let flood = false;
     if (out) {
       // un réverbère au fond, à gauche de lui (il éclaire son flanc et le coin repas) ; ou à la place que le décor
       // lui garde (decor.lampSpot : hors du terrain de jeu)
@@ -354,7 +396,17 @@ export function applyAmbience(stage, decor, amb) {
       }
       post.updateMatrixWorld(true);
       g.add(post);
+      pole = post;
       at = post.localToWorld(post.userData.light.clone());
+      // (son pied et sa lanterne : les objets du jour se posent à côté, jamais dedans — placeExtras, decor.avoid)
+      decor.avoid = [...(avoid0 ?? []), post.position.clone(), at.clone().setY(0)];
+      if (decor.lampLight) {
+        // (un terrain où l'animal court partout — le rond, le pré de la balle — : la lumière là où le décor la met,
+        // pour éclairer le côté qu'on voit où qu'il soit ; au rond, au-dessus du milieu, où est la caméra ; au pré,
+        // devant le terrain, de notre côté ; le réverbère reste là, allumé)
+        at = decor.lampLight.clone();
+        flood = true;
+      }
     } else {
       // la lanterne accrochée au plafond, au-dessus de lui, un peu vers nous
       const roof = decor.dims?.roof ?? decor.dims?.eave ?? decor.room?.roof ?? 2.6;
@@ -364,10 +416,20 @@ export function applyAmbience(stage, decor, amb) {
       at = l.position.clone().add(V(0, -0.13, 0));
     }
     light.position.copy(at);
-    // (assez fort pour bien le voir : sa lumière à la distance de son flanc vaut un peu plus que le ciel de nuit)
-    // (un réverbère que le décor a mis à l'écart — le pré de la balle — : pas plus fort pour autant, il éblouirait le mur)
-    const d = Math.max(0.8, Math.min(decor.lampSpot ? 1.6 : 99, at.distanceTo(center)));
-    light.intensity = 1.9 * d * d;
+    if (flood) {
+      // (la même lumière partout sur le terrain, comme un projecteur : sans baisse avec la distance — l'enfant au
+      // milieu n'est pas éblouie, le cheval au bout de la longe pas dans le noir —, puis éteinte au-delà de la clôture)
+      const d = Math.hypot(decor.lampReach ?? 0, at.y - center.y);
+      light.decay = 0;
+      light.distance = Math.max(4, d * 2.5);
+      const win = (1 - (d / light.distance) ** 4) ** 2;
+      light.intensity = 1.9 / win;
+    } else {
+      // (assez fort pour bien le voir : sa lumière à la distance de son flanc vaut un peu plus que le ciel de nuit)
+      // (un réverbère que le décor a mis à l'écart : pas plus fort pour autant, il éblouirait ce qui est près de lui)
+      const d = Math.max(0.8, Math.min(decor.lampSpot ? 1.6 : 99, at.distanceTo(center)));
+      light.intensity = 1.9 * d * d;
+    }
     light.userData.role = 'lamp';
     light.userData.base = light.intensity;
     g.add(light);
@@ -377,18 +439,26 @@ export function applyAmbience(stage, decor, amb) {
   let time = 0;
   return {
     lamp,
+    lampPost: pole,
     rain,
     snow,
     group: g,
-    update(dt) {
+    update(dt, st = stage) {
       time += dt;
       rain?.userData.step(Math.min(dt, 0.1));
       snow?.userData.step(Math.min(dt, 0.1));
       for (const o of overlays) o.tex.offset.y = (o.tex.offset.y + o.speed * dt) % 1;
       // (la flamme de la lampe vacille un peu)
       if (lamp) lamp.intensity = lamp.userData.base * (1 + Math.sin(time * 13) * 0.02 + Math.sin(time * 7.3) * 0.015);
+      // (la caméra a reculé ou avancé : la brume suit, decor.fogScale)
+      if (fogK && fog && st.scene?.fog === fog) {
+        const k = fogAt(st);
+        fog.near = near0 * k;
+        fog.far = far0 * k;
+      }
     },
     dispose() {
+      if (amb.lamp && out) decor.avoid = avoid0;
       for (const s of saved) {
         s.m.color.copy(s.color);
         s.m.roughness = s.rough;

@@ -1248,6 +1248,9 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
 
   let box = null;
   const tmp = V();
+  /** Ce point (à rad près) tombe-t-il dans ce qui occupe le sol (decor.blocks : la caisse de transport en voyage, les
+   * choses du pays posées près de lui — away.js) ? Au-dessus, il est libre. */
+  const blocked = (p, rad) => (decor.blocks ?? []).some((b) => p.y < b.max.y && p.x > b.min.x - rad && p.x < b.max.x + rad && p.z > b.min.z - rad && p.z < b.max.z + rad);
   const rc = new THREE.Raycaster();
 
   // ---------------------------------------------------------------- ce qui gêne : l'animal, ce qu'on lui tend
@@ -1614,6 +1617,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       const me = spaceOf(it, p, s);
       for (const q of taken) if (clash(me, q)) return no('pris');
     }
+    // (ni sur ce qui occupe le sol : la caisse de transport en voyage, les choses du pays près de lui — away.js)
+    if (blocked(p, rad)) return no('occupé');
     // (ni dans le réverbère : son poteau, sa lanterne)
     for (const q of avoid) if (Math.hypot(p.x - q.x, p.z - q.z) < rad + 0.25) return no('réverbère');
     // (accroché, perché, appuyé : à un mur, une clôture qu'on voit — le décor cache ceux qui passent devant la caméra)
@@ -1839,6 +1844,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
             const p = ray.origin.clone().addScaledVector(ray.direction, (gy0 - ray.origin.y) / ray.direction.y);
             if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
             if (A && (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1)) continue;
+            if (blocked(p, robin ? 0.1 : 0.9)) continue; // (ni sur la caisse de transport, ni sur les choses du pays)
             cands.push({ p, v: r() });
           }
         }

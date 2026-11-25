@@ -21,7 +21,8 @@ import { grassField, skySphere } from './outdoor.js';
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 /**
- * Le clapier et son enclos. stage : la scène. Renvoie { group, props, layout, update, restore, dispose }.
+ * Le clapier et son enclos. stage : la scène. Renvoie { group, props, layout, update, restore, dispose } (blocks : les
+ * boîtes au sol où rien ne se pose, sa caisse de transport en voyage).
  * opts.grass : dans son enclos dehors, sur l'herbe (pas la litière de paille du clapier) ; opts.season : la saison.
  * opts.travel (sur l'herbe, en voyage) : ni le clapier de la ferme ni sa plaque, ni le jardin de la maison — un enclos
  * grillagé bas derrière lui, sa caisse de transport, et loin derrière, le fond du lieu du voyage (away.js).
@@ -184,12 +185,20 @@ export function hutchSet(stage, opts = {}) {
   house.scale.setScalar(hs);
   house.position.set(Math.min(L.tail.x - 0.12, -len * 0.7) - 0.22 * hs, 0, R.back + 0.3 * hs + 0.05);
   house.rotation.y = 0.35;
-  // (en voyage : sa caisse de transport à la place de sa maisonnette)
+  // (en voyage : sa caisse de transport à la place de sa maisonnette. Plus grande qu'elle : on la cale d'après lui, son
+  // bord droit, de biais compris, en retrait derrière sa queue (une fois et demie sa longueur, comme la caisse du chien
+  // et du chat : la caméra penchée sur sa gamelle voit le sol derrière lui, une chose du pays y tient — away.js), son
+  // fond contre le grillage — elle ne rentre jamais dans son arrière-train, ni dans le grillage)
+  const blocks = [];
   if (travel) {
     const crate = travelCrate(keep, Math.max(0.4, Math.min(0.85, len * 1.3 + 0.1)), 0x6a9a4a);
-    crate.position.set(house.position.x, 0, R.back + 0.35);
     crate.rotation.y = 0.2;
+    crate.updateMatrixWorld(true);
+    const cb = new THREE.Box3().setFromObject(crate);
+    crate.position.set(Math.min(house.position.x, L.tail.x - 0.1 - Math.max(0.5, 1.6 * len) - cb.max.x), 0, R.back + 0.03 - cb.min.z);
     g.add(crate);
+    // (sa place au sol : ni objet du jour ni chose du pays dedans — extras.js, away.js)
+    blocks.push(cb.translate(crate.position));
   } else g.add(house);
   {
     const wood = keep(new THREE.MeshStandardMaterial({ map: keep(woodTexture({ base: '#d8b48a', dark: '#9a7350', vertical: true, seed: 31, boards: 5 })), roughness: 0.8 }));
@@ -349,12 +358,15 @@ export function hutchSet(stage, opts = {}) {
   stage.scene.fog = new THREE.Fog(0xcfe0e8, 5, 12);
 
   // Les places des objets du jour (extras.js) : au sol devant le clapier, sur son toit, contre ses planches.
+  // (en voyage, aucune dans l'emprise de sa caisse : 20 cm de marge, la taille d'un objet ; contre le grillage, l'objet
+  // est posé 30 cm en avant)
+  const free = (x, z) => !blocks.some((b) => x > b.min.x - 0.2 && x < b.max.x + 0.2 && z > b.min.z - 0.2 && z < b.max.z + 0.2);
   const spots = [];
-  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.25) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.22] });
+  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.25) if (free(x, R.back + 0.22)) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.22] });
   // (sur le toit du clapier ; en voyage, sur la barre du haut du grillage)
   if (travel) for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, 0.8, R.back], face: 0, wall: backWire });
   else for (let x = hx - hW / 2 + 0.3; x <= hx + hW / 2 - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, hH + 0.2, R.back + 0.1], face: 0, wall: hutch });
-  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.04] });
+  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) if (free(x, R.back + 0.34)) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.04] });
   // (sur ses planches, là où la caméra les voit, à hauteur de lapin : une botte de carottes, un nichoir — la porte, la
   // plaque, le râtelier, les montants y sont déjà, placeExtras les voit et les évite)
   // (en voyage, pas de clapier : rien à y accrocher)
@@ -370,6 +382,7 @@ export function hutchSet(stage, opts = {}) {
     ground: field ? field.mats : [],
     spots,
     hangAreas,
+    blocks,
     area: { x0: R.left + 0.3, x1: R.side - 0.25, z0: R.back + 0.2, z1: 1.4, y: 0.02 },
     anchors: { eat },
     layout,

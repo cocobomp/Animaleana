@@ -149,6 +149,40 @@ function instances(W) {
   });
   return out;
 }
+/** Les dunes de la plage (en instances, tournées autour du rond) : la hauteur de leur sable au sol en (x, z). */
+function sandOf(W) {
+  const list = [];
+  const m4 = new THREE.Matrix4();
+  W.group.updateMatrixWorld(true);
+  W.group.traverse((o) => {
+    if (!o.isInstancedMesh || !o.geometry.userData?.dune) return;
+    for (let i = 0; i < o.count; i++) {
+      o.getMatrixAt(i, m4);
+      const m = m4.clone().premultiply(o.matrixWorld);
+      list.push({ inv: m.clone().invert(), y: new THREE.Vector3().setFromMatrixPosition(m).y, sy: new THREE.Vector3().setFromMatrixColumn(m, 1).length() });
+    }
+  });
+  const q = new THREE.Vector3();
+  return (x, z) => Math.max(0, ...list.map((d) => {
+    // (dans le repère de la dune, une demi-sphère de rayon 1)
+    q.set(x, 0, z).applyMatrix4(d.inv);
+    const k = 1 - q.x * q.x - q.z * q.z;
+    return k > 0 ? d.y + d.sy * Math.sqrt(k) : 0;
+  }));
+}
+/** Les coins au sol de chaque cabane de la plage (monde). */
+function hutCorners(W) {
+  const huts = W.landmarks.find((it) => it.o.userData.huts).o;
+  huts.updateMatrixWorld(true);
+  const out = [];
+  for (const hut of huts.children) {
+    // (ses murs : la première pièce de la maison)
+    const body = hut.children[0];
+    const { width, height, depth } = body.geometry.parameters;
+    for (const x of [-width / 2, width / 2]) for (const z of [-depth / 2, depth / 2]) out.push(body.localToWorld(new THREE.Vector3(x, -height / 2, z)));
+  }
+  return out;
+}
 /** Les matières du fond (et celles des pièces en instances). */
 function materials(W) {
   const s = new Set();
@@ -503,6 +537,167 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     sc.dispose();
   }, 120000);
 
+  it('chien, chat, lapin, nourrir et abreuver dans les Alpes et à Kyoto : une chose du lieu se voit tout près de lui, jamais devant lui ni devant sa gamelle', () => {
+    // (la caméra penchée sur sa gamelle ne voyait rien du lieu : ni le fond, ni les choses posées derrière la clôture —
+    // le chat qui mange en voyage avait l'image du jardin de la ferme)
+    // (le chihuahua : son gros plan n'a presque pas de sol libre — sa tête, sa gamelle, le sac ; s'il y a la place, les
+    // mêmes règles)
+    for (const [species, breed, must] of [['dog', 'labrador', true], ['cat', 'europeen', true], ['rabbit', 'belier', true], ['dog', 'chihuahua', false]]) {
+      for (const look of ['montagne', 'japon']) {
+        for (const act of ['feed', 'water']) {
+          const tag = `${species} ${breed} ${look} ${act}`;
+          const set = C.decorFor(species, 'ailleurs', { amb, look, kinds: [], seed: 2 });
+          const { a, sc } = P.makePetStage({ species, breed, set });
+          const ctx = P.ctxFor(a, sc);
+          const game = H.pets[species][act](ctx);
+          P.run(ctx, game, sc, 2);
+          const W = sc.decor.away;
+          const shown = W.close.filter((c) => c.o.visible);
+          if (must) expect(shown.length, `${tag} : rien du lieu tout près`).toBeGreaterThan(0);
+          for (const c of shown) expect({ montagne: ['rocher', 'sapineau'], japon: ['pas', 'bambous'] }[look], tag).toContain(c.kind);
+          // des rayons depuis la caméra à travers chacune : on la voit (rien devant elle) ; là où on la voit, ni lui
+          // (sa tête comprise) ni ses gamelles derrière elle
+          sc.scene.updateMatrixWorld(true);
+          // (les pièces qu'on voit de ses gamelles)
+          const bowls = [];
+          for (const o of [sc.decor.props.food.group, sc.decor.props.water.group]) {
+            o.traverseVisible((x) => {
+              if (x.isMesh && !x.isInstancedMesh) bowls.push(new THREE.Box3().setFromObject(x));
+            });
+          }
+          let seen = 0;
+          for (const c of shown) {
+            const b = new THREE.Box3().setFromObject(c.o);
+            const pts = [];
+            for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) pts.push(sc.project(new THREE.Vector3(x, y, z)));
+            const [x0, x1] = [Math.min(...pts.map((q) => q.x)), Math.max(...pts.map((q) => q.x))];
+            const [y0, y1] = [Math.min(...pts.map((q) => q.y)), Math.max(...pts.map((q) => q.y))];
+            for (let i = 0; i < 6; i++) {
+              for (let j = 0; j < 6; j++) {
+                const ray = sc.rayAt(x0 + ((i + 0.5) / 6) * (x1 - x0), y0 + ((j + 0.5) / 6) * (y1 - y0));
+                const hit = new THREE.Raycaster(ray.origin.clone(), ray.direction.clone()).intersectObject(c.o, true)[0];
+                if (!hit) continue;
+                const skin = sc.proxy.hit(ray, sc.time);
+                const pot = bowls.map((bb) => ray.intersectBox(bb, new THREE.Vector3())).filter(Boolean).map((p) => p.distanceTo(ray.origin));
+                expect(skin && skin.distance > hit.distance + 0.01, `${tag} : ${c.kind} devant lui`).toBeFalsy();
+                for (const d of pot) expect(d > hit.distance + 0.01, `${tag} : ${c.kind} devant sa gamelle`).toBe(false);
+                if ((!skin || skin.distance > hit.distance) && pot.every((d) => d > hit.distance)) seen++;
+              }
+            }
+          }
+          if (must || shown.length) expect(seen, `${tag} : rien du lieu ne se voit`).toBeGreaterThan(0);
+          // (ni dans sa caisse de transport ; à la fermeture, la place qu'elles prenaient au sol est rendue)
+          let crate = null;
+          sc.decor.group.traverse((o) => {
+            if (o.userData?.crate) crate = new THREE.Box3().setFromObject(o);
+          });
+          for (const c of W.close) expect(crate.containsPoint(c.at.clone().setY(0.01)), `${tag} : ${c.kind} dans la caisse`).toBe(false);
+          const blocks = sc.decor.blocks;
+          // (et leurs formes, matières, pièces en instances : libérées)
+          const parts = new Set();
+          for (const c of W.close) {
+            c.o.traverse((x) => {
+              if (x.geometry) parts.add(x.geometry);
+              if (x.material) parts.add(x.material);
+              if (x.isInstancedMesh) parts.add(x);
+            });
+          }
+          const freed = new Set();
+          for (const x of parts) x.addEventListener('dispose', () => freed.add(x));
+          game.destroy?.();
+          sc.dispose();
+          expect(blocks.length, tag).toBe(1);
+          expect(freed.size, `${tag} : libérées`).toBe(parts.size);
+        }
+      }
+    }
+  }, 180000);
+
+  it('la plage, pour chaque espèce : les cabanes jamais enterrées dans une dune, ni à cheval sur la clôture, ni dans la mer', () => {
+    // (la dune de gauche était posée sur les cabanes : jusqu'à 1,24 m de sable sur 1,9 m de mur ; près d'un chat ou d'un
+    // lapin, elles passaient aussi devant la clôture du fond)
+    const pets = { dog: 'labrador', cat: 'europeen', rabbit: 'belier' };
+    for (const species of ['cow', 'sheep', 'horse', 'dog', 'cat', 'rabbit']) {
+      for (const [w, h] of [[390, 600], [900, 400]]) {
+        let S;
+        if (pets[species]) {
+          const set = C.decorFor(species, 'ailleurs', { amb, look: 'plage', kinds: [], seed: 2 });
+          const { a, sc } = P.makePetStage({ species, breed: pets[species], set, w, h });
+          const ctx = P.ctxFor(a, sc, w, h);
+          S = { sc, ctx, game: H.pets[species].feed(ctx) };
+        } else S = feedScene(species, 'plage', w, h);
+        const { sc, ctx, game } = S;
+        P.run(ctx, game, sc, 1.5);
+        const W = sc.decor.away;
+        const tag = `${species} ${w}×${h}`;
+        const sand = sandOf(W);
+        const huts = W.landmarks.find((it) => it.o.userData.huts)?.o;
+        expect(huts, tag).toBeTruthy();
+        const hb = new THREE.Box3().setFromObject(huts);
+        expect(hb.min.z, `${tag} : les cabanes dans la mer`).toBeGreaterThan(W.shore + 0.5);
+        // (sous chaque coin de chaque cabane, moins de 10 cm de sable)
+        for (const p of hutCorners(W)) expect(sand(p.x, p.z), `${tag} : une cabane enterrée dans la dune`).toBeLessThan(0.1);
+        // (ni les cabanes ni les choses posées près de lui à cheval sur la clôture du fond)
+        for (const it of W.landmarks) expect(new THREE.Box3().setFromObject(it.o).max.z, `${tag} : devant la clôture`).toBeLessThan(W.back);
+        // (aucun pin planté dans une cabane)
+        for (const { o, p } of instances(W)) {
+          if (o.geometry.type !== 'CylinderGeometry' || o.geometry.parameters.radiusTop !== 0.1) continue;
+          expect(p.x > hb.min.x - 0.3 && p.x < hb.max.x + 0.3 && p.z > hb.min.z - 0.3 && p.z < hb.max.z + 0.3, `${tag} : un pin dans les cabanes`).toBe(false);
+        }
+        game.destroy?.();
+        sc.dispose();
+      }
+    }
+  }, 180000);
+
+  it('le lapin en voyage : sa caisse de transport ne rentre jamais dans son pelage, et rien du jour n\'est posé dedans', () => {
+    // (la caisse, plus grande que la maisonnette, rentrait dans l'arrière-train du nain, du bélier et du rex ; un
+    // coquillage du jour était posé dedans)
+    for (const [breed, ageDays] of [['nain', 900], ['belier', 900], ['rex', 900], ['geant_flandres', 900], ['belier', 2]]) {
+      for (const act of ['feed', 'brush']) {
+        const set = C.decorFor('rabbit', 'ailleurs', { amb, look: 'plage', kinds: ['coquillage', 'crabe', 'seau'], seed: 2 });
+        const { a, sc } = P.makePetStage({ species: 'rabbit', breed, ageDays, set });
+        const D = sc.decor;
+        let crate = null;
+        D.group.traverse((o) => {
+          if (o.userData?.crate) crate = o;
+        });
+        expect(crate, breed).toBeTruthy();
+        // (la boîte de la caisse dans son repère : de biais, elle n'est pas alignée sur la scène)
+        const local = new THREE.Box3();
+        crate.traverse((o) => {
+          if (!o.isMesh || o.isInstancedMesh) return;
+          o.geometry.computeBoundingBox();
+          local.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrix));
+        });
+        // (son fond contre le grillage, pas au travers)
+        sc.scene.updateMatrixWorld(true);
+        expect(new THREE.Box3().setFromObject(crate).min.z, `${breed} : la caisse dans le grillage`).toBeGreaterThan(D.room.back);
+        const ctx = P.ctxFor(a, sc);
+        const game = H.pets.rabbit[act](ctx);
+        const m = sc.model.coatMesh;
+        const v = new THREE.Vector3();
+        let inside = 0;
+        for (let f = 0; f < 90; f++) {
+          P.run(ctx, game, sc, 1 / 30);
+          if (f % 15) continue;
+          const inv = crate.matrixWorld.clone().invert();
+          for (let i = 0; i < m.geometry.attributes.position.count; i++) {
+            if (local.containsPoint(m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).applyMatrix4(inv))) inside++;
+          }
+        }
+        expect(inside, `${breed} (${ageDays} j) ${act} : sommets du pelage dans la caisse`).toBe(0);
+        // (ni place des objets du jour ni objet posé dans son emprise)
+        const [b] = D.blocks;
+        const inBox = (x, z) => x > b.min.x && x < b.max.x && z > b.min.z && z < b.max.z;
+        for (const s of D.spots) if (s.kind === 'floor' || s.kind === 'lean') expect(inBox(s.p[0], s.p[2] + (s.kind === 'lean' ? 0.3 : 0)), `${breed} : place ${s.kind} dans la caisse`).toBe(false);
+        for (const it of D.extras.items) if (it.at) expect(inBox(it.at.x, it.at.z), `${breed} : ${it.kind} dans la caisse`).toBe(false);
+        game.destroy?.();
+        sc.dispose();
+      }
+    }
+  }, 120000);
+
   /** Le rectangle de o dans l'image touche-t-il le cercle de sa tête (même mesure que away.js, un peu de marge) ? */
   function behindHead(sc, o) {
     sc.scene.updateMatrixWorld(true);
@@ -545,10 +740,11 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
   }, 240000);
 
   it('posée juste derrière sa tête, la construction glisse sur le côté dès que l\'image change', () => {
-    for (const look of ['montagne', 'japon', 'haras']) {
+    for (const look of ['montagne', 'japon', 'haras', 'plage']) {
       const { sc, ctx, game } = feedScene('horse', look);
       run(ctx, game, sc, 1.5);
       const it = sc.decor.away.landmarks[0];
+      const sand = sandOf(sc.decor.away);
       // (on la met sur la ligne de la caméra à sa tête, à sa profondeur)
       sc.scene.updateMatrixWorld(true);
       const hd = sc.live('head');
@@ -564,6 +760,9 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
       sc.update(1 / 30);
       expect(it.shift, look).not.toBe(0);
       expect(behindHead(sc, it.o), look).toBe(false);
+      // (glissées, les cabanes de la plage ne vont jamais dans une dune)
+      const b = new THREE.Box3().setFromObject(it.o);
+      for (const x of [b.min.x, b.max.x]) for (const z of [b.min.z, b.max.z]) expect(sand(x, z), `${look} : glissée dans une dune`).toBeLessThan(0.1);
       game.destroy();
       sc.dispose();
     }
@@ -654,6 +853,11 @@ describe('la balle de la chèvre et la longe, en voyage', () => {
         if (pen.away.shore !== null) expect(p.z, 'arbre dans la mer').toBeGreaterThan(pen.away.shore + 0.5);
       }
       expect(quads.size).toBe(4);
+      // (autour du rond aussi, les cabanes de la plage ne sont pas enterrées dans une dune)
+      if (look === 'plage') {
+        const sand = sandOf(pen.away);
+        for (const p of hutCorners(pen.away)) expect(sand(p.x, p.z), 'une cabane enterrée').toBeLessThan(0.1);
+      }
       for (let k = 0; k < 30; k++) {
         ctx.time += 1 / 30;
         game.update(1 / 30);

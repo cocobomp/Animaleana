@@ -57,6 +57,24 @@ const NEAR = {
   normandie: [['cagette', -2.0, 0.5], ['bidon', -0.9, 0.4]],
 };
 
+/**
+ * Dans les gros plans, tout près de lui, sur le sol que la caméra voit : deux petites choses du pays (dans l'ordre où
+ * on les essaie, la plus visible d'abord ; les digitales n'ont pas d'hiver).
+ */
+const CLOSE = {
+  plage: ['chateau', 'oyats'],
+  montagne: ['rocher', 'sapineau'],
+  volcan: ['lave', 'cairn'],
+  rocheuses: ['tronc', 'barriere'],
+  pampa: ['herbes', 'herbes'],
+  japon: ['bambous', 'pas'],
+  mediterranee: ['jarre', 'lavande'],
+  bush: ['spinifex', 'termitiere'],
+  cottage: ['digitales', 'portillon'],
+  haras: ['barriere', 'obstacle'],
+  normandie: ['cagette', 'bidon'],
+};
+
 /** Ce que la lumière n'éclaire pas (l'écume, la fumée) : sa force selon le moment (la nuit, presque éteint). */
 const UNLIT = { matin: 0.92, jour: 1, soir: 0.72, nuit: 0.2 };
 
@@ -200,9 +218,11 @@ function opening(keep, into, mat, x, y, z, w, h) {
 
 /**
  * Habille le décor dehors (decor : sa version dehors) pour la famille de lieu look (AWAY_LOOKS), sous l'ambiance amb
- * (careAmbience : l'heure, la saison, la neige, la pluie, le brouillard). Renvoie { group, look, shore, landmarks,
- * update(dt, stage), dispose() } (shore : le bord de la mer, z ; landmarks : les constructions qu'on garde hors de sa
- * tête dans l'image).
+ * (careAmbience : l'heure, la saison, la neige, la pluie, le brouillard). Renvoie { group, look, shore, back,
+ * landmarks, close, update(dt, stage), dispose() } (shore : le bord de la mer, z ; back : le bord du fond, z — tout ce
+ * qui est posé au fond est derrière ; landmarks : les constructions qu'on garde hors de sa tête dans l'image ; close :
+ * les petites choses du pays posées tout près de lui dans les gros plans, { o, kind, at, hidden } — hidden : pourquoi
+ * elle est cachée en ce moment, ou null ; closeWhy : les places refusées, par raison).
  */
 export function dressAway(stage, decor, look, amb = null) {
   const L = AWAY_LOOKS[look];
@@ -414,6 +434,8 @@ export function dressAway(stage, decor, look, amb = null) {
   const treeKind = { pin: 'pin', sapin: 'sapin', bouleau: 'bouleau', cerisier: 'cerisier', olivier: 'olivier', eucalyptus: 'eucalyptus', pommier: 'pommier', ombu: 'feuillu', feuillu: 'feuillu' }[L.trees] ?? 'feuillu';
   const nTrees = many({ plage: 6, montagne: 14, volcan: 5, rocheuses: 9, pampa: 3, japon: 9, mediterranee: 10, bush: 7, cottage: 9, haras: 8, normandie: 9 }[look] ?? 8);
   const beach = look === 'plage';
+  // (les pins de la plage : plantés après les cabanes et le parasol, à côté d'eux — voir plus bas)
+  const beachTrees = [];
   for (let i = 0; i < nTrees; i++) {
     // (la plage : les pins sur le sable, sur les côtés, entre la clôture et la mer — jamais dans l'eau)
     const depth = beach ? (1.5 + r() * 3.5) * kSea : 11 + r() * 8;
@@ -422,7 +444,8 @@ export function dressAway(stage, decor, look, amb = null) {
     if (beach && !ring && Math.abs(side) < 9) continue;
     const p = at(side, depth);
     if (!onLand(p.z, 1)) continue;
-    tree(look === 'mediterranee' && i % 3 === 1 ? 'cypres' : treeKind, p.x, p.z, s);
+    if (beach) beachTrees.push({ side, depth, p, s });
+    else tree(look === 'mediterranee' && i % 3 === 1 ? 'cypres' : treeKind, p.x, p.z, s);
   }
   if (L.trees === 'ombu') {
     const p = at(-9, 14);
@@ -475,15 +498,6 @@ export function dressAway(stage, decor, look, amb = null) {
         boat.position.y = Math.sin(t * 1.1) * 0.05;
         boat.position.x = sx + 6 + Math.sin(t * 0.05) * 3;
       });
-    }
-  }
-  if (far.has('dunes')) {
-    // (deux dunes sur les côtés, entre la clôture et la mer : leur pied n'atteint ni l'une ni l'autre)
-    const dm = mat(white ? 0xe8edf2 : 0xe8d6b0);
-    const dg = keep(new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2));
-    for (const s of [-1, 1]) {
-      const p = at(s * (12 + r() * 4), (3.0 + r() * 0.4) * kSea);
-      inst.add(dg, dm, [p.x, -0.1, p.z], [6 + r() * 3, 1.2 + r() * 0.6, 2.2 * kSea], p.ry);
     }
   }
   if (far.has('sommets')) {
@@ -583,22 +597,43 @@ export function dressAway(stage, decor, look, amb = null) {
   // ---------------------------------------------------------------- la construction du pays (à gauche, au loin)
   // (les constructions qu'on garde hors de sa tête dans l'image : voir clearHead)
   const landmarks = [];
-  /** Pose o au fond (side, depth), tourné de rot (et vers nous), et la garde hors de sa tête (glisse de step m). */
+  // (la place de chaque chose posée, en mètres de côté et de profondeur : les dunes et les pins de la plage s'en
+  // écartent)
+  const spans = [];
+  /** Sa boîte dans son propre repère, tourné de rot (côté : x ; vers nous : +z). */
+  const ownBox = (o, rot) => {
+    o.position.set(0, o.position.y, 0);
+    o.rotation.y = rot;
+    o.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(o);
+  };
+  /**
+   * Pose o au fond (side, depth), tourné de rot (et vers nous), et la garde hors de sa tête (glisse de step m). Son
+   * devant reste toujours derrière le bord du fond : jamais à cheval sur la clôture.
+   */
   const place = (o, side, depth, rot = 0, guard = true, step = 1.5) => {
-    const p = at(side, depth);
+    const b = ownBox(o, rot);
+    const d = Math.max(depth, b.max.z + 0.05);
+    const p = at(side, d);
     o.position.set(p.x, o.position.y, p.z);
     o.rotation.y = rot + p.ry;
     g.add(o);
+    spans.push({ x0: side + b.min.x, x1: side + b.max.x, d0: d - b.max.z, d1: d - b.min.z, depth: d });
     if (guard) landmarks.push({ o, step });
     return o;
   };
+  /** Le côté side, mesuré à la profondeur from, ramené à la profondeur to (autour du rond, l'arc grandit avec elle). */
+  const sideAt = (side, from, to) => (ring ? (side * (ring + to)) / (ring + from) : side);
   const dark = mat(0x2a2420);
   const glass = mat(0x8ab0c8, { roughness: 0.3 });
   let mark = null;
   switch (L.landmark) {
     case 'cabane': {
-      // (deux cabanes rayées sur le sable, en retrait du bord de l'eau)
+      // (deux cabanes rayées sur le sable, entre la clôture et l'eau : leur devant à 40 cm au moins derrière la clôture,
+      // leur fond à 60 cm au moins du bord de l'eau ; plus petites s'il n'y a pas la place — la mer est toute proche
+      // d'un chat. Les dunes et les pins s'en écartent : rien ne les enterre)
       const land = new THREE.Group();
+      land.userData.huts = true;
       const walls = keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#3a78c0')), roughness: 0.8 }));
       for (const [k, dx] of [[0, -1.2], [1, 1.2]]) {
         const hm = k ? keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#d84a3a')), roughness: 0.8 })) : walls;
@@ -607,7 +642,11 @@ export function dressAway(stage, decor, look, amb = null) {
         opening(keep, h, dark, 0, 0.75, 0.8, 0.7, 1.4);
         land.add(h);
       }
-      place(land, -11.3, Math.min(4.5, 7 * kSea - 2.2), 0.25);
+      const b = ownBox(land, 0.25);
+      const sea = 7 * kSea;
+      const k = Math.min(1, (sea - 1) / (b.max.z - b.min.z));
+      land.scale.setScalar(k);
+      place(land, -11.3, THREE.MathUtils.clamp(4.5, b.max.z * k + 0.4, sea - 0.6 + b.min.z * k), 0.25);
       // (un parasol planté dans le sable)
       const pole = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.03, 0.03, 2, 5)), mat(0xe8e0d0));
       const um = new THREE.Mesh(keep(new THREE.ConeGeometry(1.1, 0.45, 10, 1, true)), keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#f0a83a')), side: THREE.DoubleSide, roughness: 0.8 })));
@@ -859,11 +898,10 @@ export function dressAway(stage, decor, look, amb = null) {
   if (mark?.userData.step) steps.push(mark.userData.step);
 
   // ---------------------------------------------------------------- tout près, juste derrière la clôture
-  // Le lieu se voit même dans les gros plans : la caméra penchée sur la gamelle du chien ne voit que le sol, juste
-  // derrière lui. Deux ou trois choses du pays, à sa taille (plus près d'un lapin que d'un cheval), au-delà de la clôture
-  // du fond : jamais devant lui, et pas derrière sa tête (clearHead). Pas au rond de longe : ses abords sont la piste.
+  // Deux ou trois choses du pays juste derrière la clôture du fond, à sa taille (plus près d'un lapin que d'un cheval) :
+  // jamais devant lui, et pas derrière sa tête (clearHead). Pas au rond de longe : ses abords sont la piste. (Les gros
+  // plans d'un petit animal ne les voient pas : voir placeClose.)
   if (!ring) {
-    // (la caméra penchée sur un petit animal voit le sol derrière sa queue, à quelques fois sa taille : on y va)
     const hgt = box.max.y - box.min.y;
     const kS = THREE.MathUtils.clamp(hgt / 0.5, 0.8, 1.3);
     const kD = THREE.MathUtils.clamp(hgt / 0.5, 0.5, 1.3);
@@ -1047,6 +1085,49 @@ export function dressAway(stage, decor, look, amb = null) {
         return null;
     }
   }
+
+  // ---------------------------------------------------------------- la plage : pins et dunes, à côté de ce qui est posé
+  /** Ce point (côté, profondeur) tombe-t-il sur une chose posée, à m mètres près ? */
+  const onSpan = (side, depth, m) => spans.some((f) => {
+    const s = sideAt(side, depth, f.depth);
+    return depth > f.d0 - m && depth < f.d1 + m && s > f.x0 - m && s < f.x1 + m;
+  });
+  // (un pin n'a pas son tronc dans une cabane, ni sa couronne dans son toit)
+  for (const t of beachTrees) if (!onSpan(t.side, t.depth, 1.5)) tree(treeKind, t.p.x, t.p.z, t.s);
+  const mounds = [];
+  if (far.has('dunes')) {
+    // (deux dunes sur les côtés, entre la clôture et la mer : leur pied n'atteint ni l'une ni l'autre. Chacune s'écarte
+    // de ce qui est posé de son côté — les cabanes, le parasol, le paravent — : le sable n'enterre rien)
+    const dm = mat(white ? 0xe8edf2 : 0xe8d6b0);
+    const dg = keep(new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2));
+    dg.userData.dune = true;
+    for (const s of [-1, 1]) {
+      const depth = (3.0 + r() * 0.4) * kSea;
+      const rx = 6 + r() * 3;
+      const rz = 2.2 * kSea;
+      const h = 1.2 + r() * 0.6;
+      let side = s * (12 + r() * 4);
+      for (const f of spans) {
+        if (f.d1 < depth - rz || f.d0 > depth + rz) continue;
+        const x0 = sideAt(f.x0, f.depth, depth);
+        const x1 = sideAt(f.x1, f.depth, depth);
+        if ((x0 + x1) * s <= 0) continue;
+        side = s < 0 ? Math.min(side, x0 - 0.5 - rx) : Math.max(side, x1 + 0.5 + rx);
+      }
+      const p = at(side, depth);
+      inst.add(dg, dm, [p.x, -0.1, p.z], [rx, h, rz], p.ry);
+      mounds.push({ x: p.x, z: p.z, rx, rz, h });
+    }
+  }
+  /** La hauteur du sable des dunes en (x, z) (hors du rond de longe : rien n'y glisse). */
+  const sandAt = (x, z) => {
+    let y = 0;
+    for (const m of mounds) {
+      const k = 1 - ((x - m.x) / m.rx) ** 2 - ((z - m.z) / m.rz) ** 2;
+      if (k > 0) y = Math.max(y, m.h * Math.sqrt(k) - 0.1);
+    }
+    return y;
+  };
   inst.done();
   // (tout le fond sans ombres : le soleil n'ombre que ses abords, la carte des ombres n'est pas lue si loin)
   g.traverse((o) => {
@@ -1091,8 +1172,24 @@ export function dressAway(stage, decor, look, amb = null) {
   }
   /** Le rectangle q touche-t-il un des cercles de sa tête ? */
   const hits = (q, zone) => !!q && zone.some((c) => Math.hypot(Math.max(q.x0, Math.min(c.x, q.x1)) - c.x, Math.max(q.y0, Math.min(c.y, q.y1)) - c.y) < c.r);
+  /** Glissée de d m, la construction reste-t-elle hors des dunes (moins de 10 cm de sable sous chaque coin) ? */
+  const offDunes = (it, d) => !mounds.length || [it.box.min.x, it.box.max.x].every((x) => [it.box.min.z, it.box.max.z].every((z) => sandAt(x + it.x0 + d, z) < 0.1));
   // (où va sa tête pendant le soin : debout au repos, et la bouche à la mangeoire ou à la gamelle — mesurée par le décor)
   const restHead = [stage.marks?.head, stage.marks?.muzzle, decor.anchors?.eat].filter((p) => p?.isVector3).map((p) => p.clone());
+  /**
+   * Sa tête dans l'image : un cercle autour de chaque place où elle est et où elle va pendant le soin (d : sa distance
+   * à la caméra).
+   */
+  function headZone(st) {
+    const rad = 0.25 * Math.max(0.25, box.max.y - box.min.y);
+    const zone = [];
+    for (const p of [st.live('head'), st.live('muzzle'), ...restHead]) {
+      if (!p) continue;
+      const q = st.project(p);
+      if (!q.behind) zone.push({ x: q.x, y: q.y, r: (st.projectRadius?.(p, rad) ?? 30) + 10, d: st.camera.position.distanceTo(p) });
+    }
+    return zone;
+  }
   function clearHead(st) {
     if (ring || !guards.length || !st?.view || !st.project || !st.live || !st.camera) return;
     // (la caméra telle qu'elle projette : sa place, son orientation, son cadre — à 5 cm près, sa respiration n'y fait rien)
@@ -1102,28 +1199,34 @@ export function dressAway(stage, decor, look, amb = null) {
     const key = [...mw.slice(0, 3), ...mw.slice(8, 11), ...mw.slice(12, 15), pm[0], pm[5], pm[9], v.x0, v.x1, v.y0, v.y1].map((k) => Math.round(k * 20)).join('|');
     if (key === lastKey) return;
     lastKey = key;
-    // (sa tête là où elle est, et là où elle va pendant le soin : un cercle autour de chaque place)
-    const rad = 0.25 * Math.max(0.25, box.max.y - box.min.y);
-    const zone = [];
-    for (const p of [st.live('head'), st.live('muzzle'), ...restHead]) {
-      if (!p) continue;
-      const q = st.project(p);
-      if (!q.behind) zone.push({ x: q.x, y: q.y, r: (st.projectRadius?.(p, rad) ?? 30) + 10 });
-    }
+    const zone = headZone(st);
     if (!zone.length) return;
+    // (les petites choses posées tout près de lui : cachées tant que, dans l'image, elles passent devant sa tête — le
+    // cœur du cercle, sa tête elle-même —, sa gamelle ou lui, de plus de 8 px : sa tête bouge un peu, elles ne
+    // clignotent pas. Derrière, c'est lui qui les cache un peu quand il tourne la tête : elles restent)
+    if (close.length) {
+      const avoid = keepOut(st);
+      for (const c of close) {
+        const q = rectBox(st, _lo.set(c.at.x - c.rad, c.y, c.at.z - c.rad), _hi.set(c.at.x + c.rad, c.y + c.h, c.at.z + c.rad));
+        const near = avoid.dist(_box.set(_lo, _hi), false);
+        const front = zone.filter((z) => near < z.d).map((z) => ({ ...z, r: (z.r - 10) * 0.6 }));
+        c.hidden = !q ? 'derrière' : hits(q, front) ? 'tête' : covers(q, avoid, -8, near) ? 'lui' : null;
+        c.o.visible = !c.hidden;
+      }
+    }
     const hc = zone[0];
     // (là où elle glisse, avec de la marge : sa tête bouge un peu en mangeant, elle n'y retombe pas)
     const wide = zone.map((c) => ({ ...c, r: c.r * 1.4 + 10 }));
     for (const it of guards) {
       const now = rectOf(st, it, it.shift);
       if (!hits(now, zone)) continue;
-      // (d'abord du côté où elle est déjà, par rapport à sa tête)
+      // (d'abord du côté où elle est déjà, par rapport à sa tête ; jamais dans une dune)
       const first = now.x0 + now.x1 < 2 * hc.x ? -1 : 1;
       let best = null;
       for (let k = 1; k <= 16 && best === null; k++) {
         for (const s of [first, -first]) {
           const d = it.shift + s * k * it.step;
-          if (best === null && !hits(rectOf(st, it, d), wide)) best = d;
+          if (best === null && offDunes(it, d) && !hits(rectOf(st, it, d), wide)) best = d;
         }
       }
       if (best === null) continue;
@@ -1132,16 +1235,302 @@ export function dressAway(stage, decor, look, amb = null) {
     }
   }
 
+  // ---------------------------------------------------------------- tout près de lui, dans les gros plans
+  // La caméra penchée sur la gamelle d'un chien, d'un chat, d'un lapin ne voit que le sol autour de lui : ni le fond, ni
+  // les choses posées derrière la clôture. Quand elle ne voit presque rien au-delà (moins d'un rayon de l'image sur
+  // six), on pose deux petites choses du pays (CLOSE), à sa taille, là où elle les voit, sur la bande de sol libre au
+  // bord de l'image : jamais sur sa tête ni là où elle va, jamais devant lui, sa gamelle, le sac ou la carafe qu'on tient
+  // (plus loin qu'eux, ce sont eux qui la cachent un peu), ni dans sa caisse, ni à cheval sur la clôture. Choisies une
+  // fois la caméra posée, comme les objets du jour, qui les évitent ensuite (decor.blocks) ; si la caméra bouge et que
+  // l'une passe devant sa tête, sa gamelle ou lui, elle se cache.
+  const close = [];
+  const closeWhy = {};
+  const ownBlocks = [];
+  let closeTried = false;
+  let closeFrames = 0;
+  const _lo = V();
+  const _hi = V();
+  const _box = new THREE.Box3();
+  /**
+   * Le rectangle d'une boîte (min, max) dans l'image, ou null si elle passe derrière la caméra (part : seulement ses
+   * coins devant la caméra — le bras qui arrive de derrière elle).
+   */
+  function rectBox(st, min, max, part = false) {
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const x of [min.x, max.x]) {
+      for (const y of [min.y, max.y]) {
+        for (const z of [min.z, max.z]) {
+          const q = st.project(corner.set(x, y, z));
+          if (q.behind) {
+            if (part) continue;
+            return null;
+          }
+          x0 = Math.min(x0, q.x);
+          x1 = Math.max(x1, q.x);
+          y0 = Math.min(y0, q.y);
+          y1 = Math.max(y1, q.y);
+        }
+      }
+    }
+    return x0 <= x1 ? { x0, x1, y0, y1 } : null;
+  }
+  /** Les rectangles a et b se touchent-ils dans l'image (à m pixels près) ? */
+  const overlap = (a, b, m = 0) => a.x0 < b.x1 + m && a.x1 > b.x0 - m && a.y0 < b.y1 + m && a.y1 > b.y0 - m;
+  /** Les boîtes (monde) des pièces qui se voient de o. */
+  function visibleBoxes(o) {
+    const out = [];
+    o.updateWorldMatrix(true, true);
+    o.traverseVisible((x) => {
+      if (!x.isMesh || x.isInstancedMesh || !x.geometry) return;
+      if (!x.geometry.boundingBox) x.geometry.computeBoundingBox();
+      out.push(x.geometry.boundingBox.clone().applyMatrix4(x.matrixWorld));
+    });
+    return out;
+  }
+  /**
+   * Ce qu'elles ne couvrent jamais dans l'image : lui (sa silhouette : les sommets de son pelage, chaque rangée de 12 px
+   * remplie d'un bord à l'autre, entre ses pattes aussi), sa gamelle (ce que le décor lui tend) et ce que le jeu tient
+   * dans la scène (le sac, la carafe, la main qui verse). Chacun avec sa distance à la caméra la plus grande (far) :
+   * une chose posée tout entière plus loin ne le couvre pas, c'est lui qui la cache un peu. Renvoie { rows, rects, far,
+   * dist } (far : celle de lui ; dist(boîte, far) : la distance à la caméra de son coin le plus loin ou le plus près).
+   */
+  function keepOut(st) {
+    const v = st.view;
+    const S = 12;
+    const rows = new Map();
+    const m = st.model?.coatMesh;
+    if (m?.geometry?.attributes?.position) {
+      m.updateWorldMatrix(true, false);
+      const n = m.geometry.attributes.position.count;
+      for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 1500))) {
+        const q = st.project(m.getVertexPosition(i, corner).applyMatrix4(m.matrixWorld));
+        if (q.behind) continue;
+        const k = Math.floor((q.y - v.y0) / S);
+        const row = rows.get(k);
+        if (row) {
+          row[0] = Math.min(row[0], q.x);
+          row[1] = Math.max(row[1], q.x);
+        } else rows.set(k, [q.x, q.x]);
+      }
+    }
+    const cam = st.camera.position;
+    /** La distance à la caméra du coin le plus loin (far) ou le plus près (near) d'une boîte. */
+    const dist = (b, far) => {
+      let d = far ? 0 : Infinity;
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) d = (far ? Math.max : Math.min)(d, cam.distanceTo(corner.set(x, y, z)));
+      return d;
+    };
+    const ab = animalBox(st);
+    const rects = [];
+    if (!rows.size) {
+      const q = rectBox(st, ab.min, ab.max);
+      if (q) rects.push({ ...q, far: dist(ab, true) });
+    }
+    const held = Object.values(decor.props ?? {}).map((pr) => pr?.group).filter((o) => o?.visible && o.parent);
+    // (ce que le jeu a mis dans la scène, hors du décor et de lui : le sac et la main, la carafe… pièce par pièce)
+    for (const o of st.scene?.children ?? []) if (o !== decor.group && o !== st.holder && !o.isLight && !o.isCamera && !o.isSprite && o.visible) held.push(o);
+    for (const o of held) {
+      for (const b of visibleBoxes(o)) {
+        const q = rectBox(st, b.min, b.max, true);
+        if (q) rects.push({ x0: q.x0 - 12, x1: q.x1 + 12, y0: q.y0 - 12, y1: q.y1 + 12, far: dist(b, true) });
+      }
+    }
+    return { S, rows, rects, y0: v.y0, far: dist(ab, true), dist };
+  }
+  /**
+   * Le rectangle q (à m pixels près) touche-t-il lui ou ce qu'on lui tend (keepOut) ? near : la distance à la caméra
+   * de son coin le plus proche — tout entier plus loin qu'eux, il ne les couvre pas (Infinity : jamais dessus).
+   */
+  function covers(q, K, m = 0, near = 0) {
+    if (K.rects.some((k) => near < k.far + 0.02 && overlap(q, k, m))) return true;
+    if (near > K.far + 0.02) return false;
+    const k0 = Math.floor((q.y0 - m - K.y0) / K.S) - 1;
+    const k1 = Math.floor((q.y1 + m - K.y0) / K.S) + 1;
+    for (let k = k0; k <= k1; k++) {
+      const row = K.rows.get(k);
+      if (row && q.x0 - m < row[1] + K.S && q.x1 + m > row[0] - K.S) return true;
+    }
+    return false;
+  }
+  /** Ce point au sol (à rad près) tombe-t-il dans ce qui occupe le sol (decor.blocks : sa caisse) ? */
+  const blockedAt = (p, rad) => (decor.blocks ?? []).some((b) => p.x > b.min.x - rad && p.x < b.max.x + rad && p.z > b.min.z - rad && p.z < b.max.z + rad);
+  let walls = null;
+  /** Ce point se voit-il depuis la caméra (rien du décor devant : sa caisse, un mur) ? */
+  function seenAt(st, q) {
+    if (!walls) {
+      walls = [];
+      for (const c of decor.group.children) {
+        if (c === g || c === decor.extras?.group) continue;
+        c.traverse((o) => {
+          if (o.isMesh && !o.isInstancedMesh && !o.userData?.grass && !o.userData?.sky && !o.material?.transparent) walls.push(o);
+        });
+      }
+    }
+    const cam = st.camera.position;
+    const dir = q.clone().sub(cam);
+    const d = dir.length();
+    const rc = new THREE.Raycaster(cam.clone(), dir.normalize(), 0.05, d - 0.05);
+    for (const o of walls) {
+      let shown = true;
+      for (let p = o; p && shown; p = p.parent) shown = p.visible;
+      if (shown && rc.intersectObject(o, false).length) return false;
+    }
+    return true;
+  }
+  function placeClose(st) {
+    closeTried = true;
+    const A = decor.area;
+    const v = st.view;
+    if (ring || !A || !CLOSE[look] || !v || !st.rayAt || !st.project || !st.live || !st.camera) return;
+    /** Une place refusée, et pourquoi (essais). */
+    const no = (why) => {
+      closeWhy[why] = (closeWhy[why] ?? 0) + 1;
+      return null;
+    };
+    st.camera.updateMatrixWorld?.();
+    decor.group.updateMatrixWorld(true);
+    const W = v.x1 - v.x0;
+    const H = v.y1 - v.y0;
+    // (la caméra voit-elle déjà le lieu : le ciel, ou le sol bien au-delà de la clôture ? alors rien de plus)
+    let n = 0;
+    let open = 0;
+    for (let gy = 0.06; gy < 1; gy += 0.125) {
+      for (let gx = 0.06; gx < 1; gx += 0.125) {
+        const ray = st.rayAt(v.x0 + gx * W, v.y0 + gy * H);
+        n++;
+        if (ray.direction.y > -0.02 || ray.origin.z + (ray.direction.z * (A.y - ray.origin.y)) / ray.direction.y < zb - 1.5) open++;
+      }
+    }
+    if (open > n / 6) return void no('ouvert');
+    const ab = animalBox(st);
+    const hgt = ab.max.y - ab.min.y;
+    const len = Math.max(ab.max.x - ab.min.x, ab.max.z - ab.min.z);
+    // (la clôture du fond : devant elle ou juste derrière, dans le lieu, sans jamais être à cheval dessus)
+    const fence = decor.room?.back ?? decor.dims?.back ?? A.z0 - 0.25;
+    // (sa tête là où elle est et là où elle va : rien dessus ni derrière dans l'image ; lui, ce qu'on lui tend : rien
+    // devant)
+    const zone = headZone(st);
+    const avoid = keepOut(st);
+    const extras = (decor.extras?.items ?? []).filter((it) => it.at && !it.path).map((it) => it.at);
+    /**
+     * Posée en p, à l'échelle k (r0, h0 : son rayon et sa hauteur à l'échelle 1) : { q, rad, h, k }, ou null. behind :
+     * elle peut être derrière lui ou sa gamelle dans l'image (sinon, à côté d'eux, tout entière).
+     */
+    const fit = (p, k, r0, h0, behind) => {
+      const rad = r0 * k;
+      const h = h0 * k;
+      // (autour de lui, dans le décor : ni à cheval sur la clôture, ni trop près de nous — comme les objets du jour —,
+      // ni contre lui, ni dans sa caisse, ni sur une autre)
+      if (p.x < A.x0 + rad || p.x > A.x1 - rad || Math.abs(p.z - fence) < rad + 0.02 || p.z < fence - 2.5 || p.z > ab.max.z + 0.45 * hgt + 0.2) return no('dehors');
+      // (devant lui, la place du pas qu'il fait jusqu'à sa gamelle)
+      if (p.x + rad > ab.min.x - 0.03 && p.x - rad < ab.max.x + 0.03 + 0.35 * len && p.z + rad > ab.min.z - 0.03 && p.z - rad < ab.max.z + 0.03) return no('contre lui');
+      if (blockedAt(p, rad) || close.some((c) => c.at.distanceTo(p) < c.rad + rad + 0.1) || extras.some((e) => e.distanceTo(p) < rad + 0.25)) return no('pris');
+      // (tout entière dans l'image, sous la barre du haut, assez grande pour qu'on la reconnaisse ; pas sur sa tête, pas
+      // devant lui ni sa gamelle ; vue, pas cachée derrière sa caisse)
+      const q = rectBox(st, _lo.set(p.x - rad, A.y, p.z - rad), _hi.set(p.x + rad, A.y + h, p.z + rad));
+      if (!q || q.x0 < v.x0 + 6 || q.x1 > v.x1 - 6 || q.y0 < v.y0 + 40 || q.y1 > v.y1 - 6) return no('image');
+      if (q.y1 - q.y0 < 28) return no('trop petite');
+      if (hits(q, zone)) return no('tête');
+      const near = behind ? avoid.dist(_box.set(_lo, _hi), false) : 0;
+      if (covers(q, avoid, 6, near) || close.some((c) => overlap(q, c.rect, 4))) return no('sur lui ou sa gamelle');
+      // (et on la voit : le haut de son milieu n'est caché ni par lui, ni par ce qu'on lui tend, ni par sa caisse)
+      const mx = (q.x0 + q.x1) / 2;
+      const my = q.y0 + (q.y1 - q.y0) * 0.3;
+      if (covers({ x0: mx - 2, x1: mx + 2, y0: my - 2, y1: my + 2 }, avoid) || !seenAt(st, V(p.x, A.y + h * 0.6, p.z))) return no('cachée');
+      return { q, rad, h, k };
+    };
+    // (les places : sous des points de l'image, au sol, essayées dans un ordre fixe pour ce lieu ; une grille fine —
+    // dans un gros plan, la place libre est une bande étroite au bord de l'image)
+    const cands = [];
+    for (let gy = 0.08; gy <= 0.98; gy += 0.04) {
+      for (let gx = 0.02; gx <= 0.98; gx += 0.04) {
+        const ray = st.rayAt(v.x0 + gx * W, v.y0 + gy * H);
+        if (ray.direction.y > -1e-3) continue;
+        cands.push({ p: ray.origin.clone().addScaledVector(ray.direction, (A.y - ray.origin.y) / ray.direction.y), v: r() });
+      }
+    }
+    cands.sort((a, b) => a.v - b.v);
+    for (const kind of CLOSE[look]) {
+      const o = nearProp(kind);
+      if (!o) continue;
+      const b = ownBox(o, 0);
+      const r0 = Math.max(-b.min.x, b.max.x, -b.min.z, b.max.z);
+      const h0 = b.max.y;
+      // (à sa taille : pas plus haute que la moitié de lui, pas plus large que le tiers de sa longueur — un tout petit
+      // château de sable près d'un chihuahua)
+      const k0 = Math.min(1, (0.55 * hgt) / h0, (0.3 * len) / r0);
+      let got = null;
+      // (d'abord à côté de lui, tout entière ; sinon derrière lui ou sa gamelle, qui la cachent un peu — moins sûr : il
+      // se lève, tourne la tête)
+      for (const behind of [false, true]) {
+        for (const { p } of cands) {
+          // (la caméra est tout près : dans l'image, pas plus du cinquième de sa hauteur ni du quart de sa largeur ;
+          // plus petite encore s'il le faut pour tenir dans la place libre)
+          const q0 = rectBox(st, _lo.set(p.x - r0 * k0, A.y, p.z - r0 * k0), _hi.set(p.x + r0 * k0, A.y + h0 * k0, p.z + r0 * k0));
+          if (!q0) continue;
+          const kMax = k0 * Math.min(1, (0.2 * H) / (q0.y1 - q0.y0), (0.25 * W) / (q0.x1 - q0.x0));
+          for (const s of [1, 0.6]) {
+            got = fit(p, kMax * s, r0, h0, behind);
+            if (got) break;
+          }
+          if (got) {
+            got.p = p;
+            break;
+          }
+        }
+        if (got) break;
+      }
+      if (!got) continue;
+      const { p, q, rad, h, k } = got;
+      o.position.set(p.x, 0, p.z);
+      o.rotation.y = (r() - 0.5) * 0.8;
+      o.scale.setScalar(0.001);
+      o.traverse((x) => {
+        if (x.isMesh) {
+          x.castShadow = false;
+          x.receiveShadow = false;
+        }
+      });
+      g.add(o);
+      close.push({ o, kind, k, rad, h, y: A.y, at: p, rect: q, grow: 0 });
+      // (sa place au sol : les objets du jour n'y vont pas)
+      const bb = new THREE.Box3(V(p.x - rad, 0, p.z - rad), V(p.x + rad, h, p.z + rad));
+      ownBlocks.push(bb);
+      if (!decor.blocks) decor.blocks = [];
+      decor.blocks.push(bb);
+    }
+  }
+  /** Les petites choses tout près : posées une fois la caméra posée (quelques images, ou ~3 s au plus), puis qui poussent. */
+  function closeUp(dt, st) {
+    if (!closeTried && st?.ready && ++closeFrames > 3 && ((st.settled?.(0.02) ?? true) || closeFrames > 90)) placeClose(st);
+    for (const c of close) {
+      if (c.grow >= 1) continue;
+      c.grow = Math.min(1, c.grow + dt / 0.45);
+      c.o.scale.setScalar(c.k * Math.max(0.001, 1 - (1 - c.grow) * (1 - c.grow)));
+    }
+  }
+
   return {
     group: g,
     look,
     shore,
+    back: ring ? null : zb,
     landmarks: guards,
+    close,
+    closeWhy,
     update(dt, st) {
       for (const s of steps) s(Math.min(dt, 0.1));
       clearHead(st);
+      closeUp(Math.min(dt, 0.1), st);
     },
     dispose() {
+      for (const b of ownBlocks) {
+        const i = decor.blocks?.indexOf(b) ?? -1;
+        if (i >= 0) decor.blocks.splice(i, 1);
+      }
       for (const s of saved) {
         s.m.color.copy(s.color);
         if (s.m.map !== s.map) {

@@ -1268,6 +1268,16 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     return list;
   }
 
+  /** Le pan de mur du décor (decor.hangAreas) où se trouve ce point, ou null. */
+  function areaOf(p) {
+    for (const A of decor.hangAreas ?? []) {
+      const k = A.axis === 'z' ? p.z : p.x;
+      const u = A.axis === 'z' ? p.x : p.z;
+      if (Math.abs(k - A.at) < 0.06 && u >= A.u0 && u <= A.u1 && p.y >= A.y0 - 0.05 && p.y <= A.y1) return A;
+    }
+    return null;
+  }
+
   /** Derrière tout l'objet accroché, le mur est-il là, nu (ni fenêtre, ni poteau, ni plaque, ni rien d'autre dessus) ? */
   function bare(st, p, rad, h, A) {
     const cam = st.camera.position;
@@ -1349,8 +1359,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       }
     }
     if (mode === 'safe') return true;
-    // (accroché à un pan de mur : le mur est là, nu, derrière lui)
-    if (placing && s?.area && !bare(st, p, rad, h, s.area)) return no('mur');
+    // (accroché à un pan de mur : le mur est là, nu, derrière lui — aussi aux places fixes du décor sur ce mur : un
+    // tableau ne chevauche pas celui qui y est déjà)
+    const wall = s?.area ?? (it.where === 'hang' ? areaOf(p) : null);
+    if (placing && wall && !bare(st, p, rad, h, wall)) return no('mur');
     // (on le voit : ni tout entier derrière l'animal, ni derrière un mur — les murs, seulement pour une nouvelle place)
     if ((over || placing) && !seen(st, p.clone().add(V(0, h * 0.5, 0)), placing) && !seen(st, p.clone().add(V(0, h * 0.9, 0)), placing)) return no('caché');
     return true;

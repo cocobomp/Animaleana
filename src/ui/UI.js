@@ -7,7 +7,7 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
-import { updateCoinChip } from './piggy.js'; // 🐷 tirelire : compteur de pièces, objectif, pièces qui volent
+import { updateCoinChip, celebrate, resetCoins } from './piggy.js'; // 🐷 tirelire : compteur de pièces, objectif, pièces qui volent, mots de fête
 import { openVet } from './vet.js';
 import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { openGalops, openFactAlbum } from './galops.js'; // 🎓 les Galops, 🃏 les cartes « Le savais-tu ? »
@@ -292,6 +292,7 @@ export class UI {
   }
 
   onStart(game) {
+    resetCoins(this); // (une partie ouverte, ou rouverte après une synchro : rien n'a été gagné, rien ne vole)
     this.clearScreen();
     this.hud.hidden = false;
     this.camBtn.hidden = false;
@@ -1456,6 +1457,12 @@ export class UI {
   openJournal(tab) { panels.openJournal(this, tab); this.game?.emit('panel', 'journal'); }
   openCareers() { openCareers(this); } // 💼 métiers (src/ui/careers.js)
   openJobs() { panels.openJobs(this); }
+
+  /**
+   * 🎉 Un moment fêté (src/ui/piggy.js celebrate) : opts { word, big, from }. Le mot part de l'endroit touché et
+   * accompagne jusqu'au compteur les pièces gagnées juste avant ; sans pièces : le mot seul.
+   */
+  celebrate(opts) { celebrate(this, opts); }
   openSettings() { panels.openSettings(this); this.game?.emit('panel', 'settings'); }
   openFarm() { panels.openFarm(this); this.game?.emit('panel', 'farm'); }
   openTack(opts) { panels.openTack(this, opts); } // sellerie : catalogue (src/ui/tack.js)

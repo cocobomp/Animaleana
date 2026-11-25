@@ -35,7 +35,7 @@ import {
   socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn, HELPERS, equipmentShown, helperShown,
 } from '../sim/farm.js';
 import { SPECIES, isOffered, coreShown, anyAvailable } from '../sim/species.js';
-import { jobPayout, recordJob, goalBought } from '../sim/piggyBank.js'; // 🐷 tirelire : série des boulots, objectif d'épargne
+import { jobPayout, recordJob, goalBought, jobCheer } from '../sim/piggyBank.js'; // 🐷 tirelire : série des boulots, objectif d'épargne, mot de fête
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, careFull, bondStage, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
@@ -138,6 +138,18 @@ export function jobBlock(profile, job, day, hour) {
 
 /** Les petits boulots proposés à ce profil (un boulot avec une espèce pas encore proposée n'apparaît pas). */
 export const availableJobs = (profile) => JOBS.filter((j) => anyAvailable(profile, j.needs));
+
+/**
+ * 🐷 Ce qui reste possible aujourd'hui, d'après jobBlock (les règles ne changent pas) : any (encore au moins un boulot
+ * avant 18 h, maintenant ou plus tard dans la journée), all (tous ceux qui restent, l'un après l'autre, finis avant
+ * 18 h : la journée complète est encore possible). Pour ne rien promettre « aujourd'hui » quand il est trop tard.
+ */
+export function jobsStillToday(profile, jobs, day, hour) {
+  const h0 = Math.max(hour, JOB_HOURS.from);
+  const left = jobs.filter((j) => jobBlock(profile, j, day, h0) !== 'done');
+  const hours = left.reduce((n, j) => n + j.hours, 0);
+  return { any: left.some((j) => !jobBlock(profile, j, day, h0)), all: !left.length || h0 + hours <= JOB_HOURS.to };
+}
 
 export const VET_COST = { clinic: 30, home: 50 };
 
@@ -1068,6 +1080,7 @@ export class Game {
     audio.ui('coin');
     const coins = isSandbox(p) ? '' : ` +${CHALLENGE_REWARD.coins} 🪙`;
     this.ui.toast(`${t('ch_done', { what: t(`ch_${c.def.id}`), name: horse.name, g: horse.sex })}${coins}`, 7000);
+    this.ui.celebrate?.({ word: t('cel_challenge') }); // 🎉 « Défi réussi ! » et les pièces qui volent (src/ui/piggy.js)
   }
 
   /**
@@ -2455,6 +2468,7 @@ export class Game {
     addStat(this.profile, 'goalsReached');
     audio.ui('levelUp');
     this.ui.toast(t('goal_bought', { name: label }), 6000);
+    this.ui.celebrate?.({ word: t('cel_goalDone'), big: true }); // 🎉 « Objectif atteint ! » (le mot seul : on a payé)
   }
 
   train(a, trainingId) {
@@ -2943,6 +2957,9 @@ export class Game {
   }
 
   doJob(job) {
+    // 🏡 Les voisins sont à la maison : en voyage, pas de petit boulot (le compteur 🪙 ouvre les boulots partout).
+    // jobBlock ne change pas : c'est une garde en plus, avant lui.
+    if (!this.isHome) return this.ui.toast(t('job_why_away'), 4000);
     const why = jobBlock(this.profile, job, this.day, this.hour);
     if (why) return this.ui.toast(t(`job_why_${why}`, { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) }), 4000);
     const p = this.profile;
@@ -2956,10 +2973,17 @@ export class Game {
     earn(p, pay.total);
     audio.ui('coin');
     addStat(p, 'jobs');
-    this.ui.refresh(); // (tout de suite : les pièces volent du boulot touché jusqu'au compteur, src/ui/piggy.js)
-    if (isSandbox(p)) return this.ui.toast(t('jobDone', { n: job.pay }));
-    this.ui.toast(t('jobDone', { n: pay.total }) + (pay.streak ? ` ${t('job_streakGain', { n: pay.streak, days: pay.n })}` : ''), 4500);
-    if (pay.full) this.ui.toast(t('job_fullGain', { n: pay.full }), 5000);
+    // Les messages d'abord : « 🎯 Tu as assez ! » (src/ui/piggy.js, au rafraîchissement) vient après eux, en dernier,
+    // et reste visible au téléphone quand le panneau est ouvert (style.css : seuls les deux derniers s'affichent).
+    if (isSandbox(p)) this.ui.toast(t('jobDone', { n: job.pay }));
+    else {
+      this.ui.toast(t('jobDone', { n: pay.total }) + (pay.streak ? ` ${t('job_streakGain', { n: pay.streak, days: pay.n })}` : ''), 4500);
+      if (pay.full) this.ui.toast(t('job_fullGain', { n: pay.full }), 5000);
+    }
+    // 🎉 Tout de suite : « Bravo ! » (ou « 🔥 3 jours de suite ! », « Journée complète ! ») part du boulot touché et
+    // accompagne les pièces jusqu'au compteur (src/ui/piggy.js : celebrate, qui rafraîchit l'écran).
+    const cheer = jobCheer(pay);
+    this.ui.celebrate({ word: t(cheer.key, cheer), big: cheer.big });
   }
 
   // ---------------------------------------------------------------- ferme

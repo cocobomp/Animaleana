@@ -11,14 +11,16 @@
 // src/ui/piggy.js (tirelire du HUD, pièces qui volent) et src/ui/panels.js (openJobs).
 //
 // Dans le profil (sauvegardé ; absents d'une ancienne partie : createProfile les remet par défaut) :
-//   goal : null | { kind: 'gear', id, size } | { kind: 'tool', id } | { kind: 'animal', species, breed, stage }
-//          (+ told : la fête « tu as assez ! » déjà faite)
+//   goal : null | { kind: 'gear', id, size } | { kind: 'tool', id } | { kind: 'animal', species, breed, stage, place }
+//          (+ told : la fête « tu as assez ! » déjà faite ; place : l'élevage du voyage où l'animal a été choisi,
+//          absent à la maison et dans une ancienne partie : voir goalPlace)
 //   jobStreak : { day (dernier jour avec un boulot), n (jours de suite) }
 
 import { GEAR, gearPrice, defaultSize } from './gear.js';
 import { TOOLS } from './tools.js';
 import { SPECIES } from './species.js';
-import { shopPrice } from './adoption.js';
+import { shopPrice, breedsFor } from './adoption.js';
+import { PLACES } from './places.js';
 
 /** Bonus de série : (jours de suite - 1) × step, au plus max × step (le 5e jour et après : +20). */
 export const JOB_STREAK = { step: 5, max: 4 };
@@ -65,6 +67,19 @@ export function recordJob(profile, day) {
   return profile.jobStreak;
 }
 
+/** 🔥 Les paliers de la série fêtés par un mot (« 🔥 3 jours de suite ! ») au premier boulot du jour. */
+export const STREAK_CHEERS = [3, 5, 7, 14, 30];
+
+/**
+ * 🎉 Le mot de fête d'un boulot (pay : jobPayout) : { key, n, big }. Un seul à la fois, le plus beau : la journée
+ * complète (en grand), sinon un palier de la série, sinon « Bravo ! ». Ne change rien (les textes : src/i18n.js).
+ */
+export function jobCheer(pay) {
+  if (pay?.full) return { key: 'cel_fullDay', big: true };
+  if (pay?.streak && STREAK_CHEERS.includes(pay.n)) return { key: 'cel_streak', n: pay.n, big: false };
+  return { key: 'cel_bravo', big: false };
+}
+
 // ---------------------------------------------------------------- 🎯 objectif d'épargne
 
 /** Le prix de l'objectif (null : objectif inconnu, par exemple un objet retiré du jeu). */
@@ -93,12 +108,31 @@ export function sameGoal(a, b) {
   return false;
 }
 
-/** Choisit (ou change) l'objectif. Rien en bac à sable (l'argent y est illimité). */
+/**
+ * Choisit (ou change) l'objectif. Rien en bac à sable (l'argent y est illimité). Un animal choisi à l'élevage d'un
+ * voyage garde son lieu (place) : on dira où aller l'acheter (goalPlace).
+ */
 export function setGoal(profile, goal) {
   if (profile.mode === 'sandbox' || goalPrice(goal) === null) return false;
   const { kind, id, size, species, breed, stage } = goal;
-  profile.goal = Object.fromEntries(Object.entries({ kind, id, size, species, breed, stage }).filter(([, v]) => v !== undefined));
+  const place = kind === 'animal' && typeof goal.place === 'string' && PLACES[goal.place] ? goal.place : undefined;
+  profile.goal = Object.fromEntries(Object.entries({ kind, id, size, species, breed, stage, place }).filter(([, v]) => v !== undefined));
   return true;
+}
+
+/**
+ * 🧭 Où acheter l'animal de l'objectif : null (à l'animalerie de la maison, ou pas un animal) ou l'id du lieu de son
+ * élevage, quand la race n'est vendue que là-bas (un Kiso : au Japon). Lu de façon tolérante : un objectif sans lieu
+ * (ancienne partie) prend l'origine de la race ; un lieu inconnu est ignoré.
+ */
+export function goalPlace(profile) {
+  const g = profile?.goal;
+  if (g?.kind !== 'animal') return null;
+  const home = typeof profile.home === 'string' && PLACES[profile.home] ? profile.home : 'maison';
+  if (breedsFor(home, true).some((x) => x.species === g.species && x.breed.id === g.breed)) return null; // (vendu ici)
+  const origin = SPECIES[g.species]?.breeds.find((b) => b.id === g.breed)?.origin;
+  for (const id of [g.place, origin]) if (typeof id === 'string' && PLACES[id] && id !== home) return id;
+  return null;
 }
 
 export const clearGoal = (profile) => { profile.goal = null; };

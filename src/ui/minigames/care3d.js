@@ -36,7 +36,7 @@ import { hoofTrim3dGame } from './hoofTrim3d.js';
 import { goatPlay3dGame } from './goatPlay3d.js';
 import { barnClean3dGame } from './barnClean3d.js';
 import { lunge3dGame, liberty3dGame } from './lunge3d.js'; // (longe et liberté dans le rond de longe)
-import { careSetting, gameAmbience, pickExtras, pickLife, hashSeed, awayLook, extrasPlace } from '../../game/care/setting.js'; // (le vrai lieu, l'heure, la météo)
+import { careSetting, gameAmbience, pickExtras, pickLife, hashSeed, awayLook, extrasPlace, AWAY_LOOKS } from '../../game/care/setting.js'; // (le vrai lieu, l'heure, la météo)
 import { dressDecor } from '../../game/care/dress.js'; // (le lieu du voyage, l'ambiance, les objets du jour)
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
@@ -81,6 +81,9 @@ export function decorFor(species, place, { amb = null, kinds = [], life = [], se
     if (species === 'rabbit') opts.grass = true;
     else opts.outdoor = true;
   }
+  // (en voyage, le chien, le chat et le lapin n'ont ni la façade de la maison ni le clapier de la ferme : une clôture
+  // basse, et le fond du lieu derrière ; un lieu inconnu garde le jardin habituel)
+  if (place === 'ailleurs' && AWAY_LOOKS[look]) opts.travel = true;
   return (stage) => {
     const d = base(stage, opts);
     d.place = place;

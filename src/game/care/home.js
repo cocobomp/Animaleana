@@ -513,6 +513,11 @@ export function homeSet(stage, opts = {}) {
   for (let x = R.left + 0.5; x <= R.side - 0.35; x += 0.3) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.3] });
   for (let z = 0.4; z <= 1.6; z += 0.3) spots.push({ kind: 'floor', p: [L.tail.x - 0.5 - 0.3 * len, 0, z] });
   for (let x = R.left + 0.5; x <= R.side - 0.4; x += 0.4) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.06] });
+  // (accrochés au mur du fond, de part et d'autre de la porte-fenêtre : un tableau dedans, un nichoir dehors)
+  for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.3) {
+    if (x > wx0 - 0.2 && x < wx1 + 0.2) continue;
+    for (const y of [0.7, 1.05]) spots.push({ kind: 'hang', p: [x, y, R.back + 0.04], face: 0 });
+  }
   if (sideFence) for (let z = R.back + 0.3; z < 1.6; z += 0.35) spots.push({ kind: 'perch', p: [R.side + 0.05, sideFence.top + 0.02, z], face: -Math.PI / 2 });
   else spots.push({ kind: 'perch', p: [winX, 0.05, R.back + 0.12], face: 0 });
 

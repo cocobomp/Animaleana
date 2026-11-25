@@ -366,6 +366,15 @@ export function barnSet(stage, opts = {}) {
       spots.push({ kind: 'perch', p: [x, back.top + 0.02, backZ], face: 0 });
     }
     for (const p of back.posts) if (p.x < S.halfW - 0.4) spots.push({ kind: 'lean', p: [p.x + 0.15, 0, backZ + 0.08] });
+    // (accrochés à un poteau de la clôture, sous la lisse du haut ; à droite, loin du râtelier)
+    // (entre deux lisses, sur un poteau ; ou cloué à la lisse du milieu)
+    const hy = back.rails[0] + 0.05;
+    for (const p of back.posts) if (p.x < S.halfW - 0.3) spots.push({ kind: 'hang', p: [p.x, hy, backZ + 0.06], face: 0 });
+    for (let x = -3.2; x <= S.halfW - 0.4; x += 0.35) spots.push({ kind: 'hang', p: [x, back.rails[1] - 0.085, backZ + 0.025], face: 0 });
+    for (const p of right.posts) {
+      if (Math.abs(p.z - eat.z) < rack.w / 2 + 0.4) continue;
+      spots.push({ kind: 'hang', p: [S.halfW, right.rails[0] + 0.05, p.z], face: -Math.PI / 2 });
+    }
     for (let z = 0.4; z <= S.front - 0.2; z += 0.4) spots.push({ kind: 'floor', p: [-S.halfW + 0.2, 0, z] });
     for (let z = S.back - 1.2; z <= S.front + 1.8; z += 0.3) {
       if (Math.abs(z - eat.z) < rack.w / 2 + 0.4) continue;
@@ -644,6 +653,10 @@ function barnSpots(S, win, kind) {
   for (let z = 0.6; z <= S.front - 0.4; z += 0.35) spots.push({ kind: 'floor', p: [-S.halfW + 0.35, lift(-S.halfW + 0.35, z), z] });
   for (const dx of [-0.2, 0, 0.2]) spots.push({ kind: 'perch', p: [win.x + dx, win.y - win.h / 2 - 0.1, S.back + 0.1], face: 0 });
   for (let x = -S.halfW + 1.4; x <= S.halfW - 0.6; x += 0.5) spots.push({ kind: 'lean', p: [x, lift(x, S.back + 0.08), S.back + 0.08] });
+  // (accrochés au mur du fond, sous la lucarne)
+  const hy = Math.max(0.75, Math.min(win.y - win.h / 2 - 0.45, 1.2));
+  // (pas sur le poteau du milieu, qui avance un peu)
+  for (let x = -S.halfW + 0.4; x <= S.halfW - 0.45; x += 0.3) if (Math.abs(x - 0.15 * S.halfW) > 0.25) spots.push({ kind: 'hang', p: [x, hy, S.back + 0.01], face: 0 });
   return spots;
 }
 

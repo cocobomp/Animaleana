@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { playGame } from './fun.js';
 import { drawCountZone } from './food.js';
-import { withLogic } from './care3d.js';
+import { withLogic, dressOther } from './care3d.js';
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { canvasTex } from '../../game/care/textures.js';
 import { paddockSet } from '../../game/care/paddock.js';
@@ -63,8 +63,11 @@ export function goatPlay3dGame(ctx) {
   const barn = sc.decor;
   const before = { bg: sc.scene.background, fog: sc.scene.fog, env: sc.scene.environmentIntensity };
   sc.scene.remove(barn.group);
-  const pre = paddockSet(sc, { xC, half, zFar, depth });
+  // (l'heure, la météo, la saison et les objets du jour du soin : decor.dress, care3d.js)
+  const dress = barn?.dress ?? null;
+  const pre = paddockSet(sc, { xC, half, zFar, depth, season: dress?.amb?.season });
   pre.sky(sc);
+  dressOther(sc, pre, dress, 'pre');
   sc.decor = pre;
   sc.scene.add(pre.group);
 

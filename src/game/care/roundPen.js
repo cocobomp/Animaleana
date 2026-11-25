@@ -6,11 +6,15 @@
 //
 // pen = { R (rayon de la piste, m), F (rayon de la clôture, m), u (taille du cheval : 1 pour un selle français) }.
 // Le centre du rond est l'origine. Même forme que les autres décors (stallSet, paddockSet) :
-// { group, dims, props, layout, update, dispose } ; sky(stage) pose le ciel et la brume (à rendre au départ).
+// { group, dims, props, layout, update, dispose } ; sky(stage) pose le ciel et la brume (à rendre au départ). Il suit
+// l'heure, la météo et la saison du jeu (pen.season ; ambience.js : ciel recolorable, sol mouillé ou blanc, herbe
+// cachée sous la neige ; la pluie tombe sur tout le rond, weatherBox) et reçoit les objets du jour (spots : dehors,
+// au pied de la clôture, sur sa lisse du haut, accrochés aux poteaux — la caméra est dedans, ils sont derrière lui).
 
 import * as THREE from 'three';
 import { canvasTex, rng } from './textures.js';
 import { bag, barnWood, strawBale, lumpy } from './barnProps.js';
+import { skySphere, GRASS_TINT, LEAVES } from './outdoor.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -187,6 +191,7 @@ export function roundPenSet(stage, pen) {
   const { R, F } = pen;
   const u = THREE.MathUtils.clamp(pen.u ?? 1, 0.4, 1.3);
   const r = rng(17);
+  const season = pen.season ?? 'summer';
   const mesh = (geo, mat, pos, rot = null, shadow = true) => {
     const m = new THREE.Mesh(keep(geo), mat);
     m.position.set(...pos);
@@ -200,11 +205,14 @@ export function roundPenSet(stage, pen) {
   // ---------------------------------------------------------------- le sol : l'herbe, le sable du rond, la piste
   const grass = keep(grassTexture());
   grass.repeat.set(26, 26);
-  mesh(new THREE.PlaneGeometry(90, 90), keep(new THREE.MeshStandardMaterial({ map: grass, roughness: 1, color: 0xdfe8cf })), [0, 0, 0], [-Math.PI / 2, 0, 0], false);
+  const grassMat = keep(new THREE.MeshStandardMaterial({ map: grass, roughness: 1, color: GRASS_TINT[season] ?? 0xdfe8cf }));
+  grassMat.userData.main = true;
+  mesh(new THREE.PlaneGeometry(90, 90), grassMat, [0, 0, 0], [-Math.PI / 2, 0, 0], false);
   const sand = keep(sandTexture());
   sand.repeat.set(F / 1.6, F / 1.6);
   const sandGeo = new THREE.CircleGeometry(F + 0.35, 72);
-  mesh(sandGeo, keep(new THREE.MeshStandardMaterial({ map: sand, roughness: 1, color: 0xf4ece0 })), [0, 0.004, 0], [-Math.PI / 2, 0, 0], false);
+  const sandMat = keep(new THREE.MeshStandardMaterial({ map: sand, roughness: 1, color: 0xf4ece0 }));
+  mesh(sandGeo, sandMat, [0, 0.004, 0], [-Math.PI / 2, 0, 0], false);
   // un liseré d'herbe foulée et de sable mêlés tout autour (le bord du sable n'est pas une coupe nette)
   const edge = new THREE.RingGeometry(F + 0.2, F + 0.75, 72, 1);
   const ecol = new Float32Array(edge.attributes.position.count * 4);
@@ -320,7 +328,8 @@ export function roundPenSet(stage, pen) {
   // ---------------------------------------------------------------- l'herbe autour : touffes et pâquerettes
   const tuftGeo = keep(new THREE.PlaneGeometry(1, 1));
   tuftGeo.translate(0, 0.5, 0);
-  const tuftMat = keep(new THREE.MeshStandardMaterial({ map: keep(tuftTexture()), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9 }));
+  const tuftMat = keep(new THREE.MeshStandardMaterial({ map: keep(tuftTexture()), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9, color: season === 'autumn' ? 0xe8dcb0 : season === 'winter' ? 0xd8d8c4 : 0xffffff }));
+  tuftMat.userData.tuft = true;
   const nT = high ? 520 : 320;
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, nT * 2);
   let k = 0;
@@ -340,6 +349,7 @@ export function roundPenSet(stage, pen) {
   }
   tufts.count = k;
   tufts.receiveShadow = true;
+  tufts.userData.grass = true; // (sous la neige, l'herbe disparaît : ambience.js)
   g.add(tufts);
   const petal = keep(new THREE.CircleGeometry(0.014, 8));
   petal.rotateX(-Math.PI / 2);
@@ -356,6 +366,9 @@ export function roundPenSet(stage, pen) {
     petals.setMatrixAt(i, m4);
     hearts.setMatrixAt(i, m4);
   }
+  petals.userData.grass = true;
+  hearts.userData.grass = true;
+  petals.visible = hearts.visible = season !== 'winter';
   g.add(petals, hearts);
 
   // ---------------------------------------------------------------- au loin : l'écurie, des arbres, des collines
@@ -392,7 +405,7 @@ export function roundPenSet(stage, pen) {
   stable.rotation.y = 0.45;
   g.add(stable);
   const trunkMat = keep(new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 }));
-  const leafMats = [0x4f7a34, 0x5d8a3c, 0x46702f].map((c) => keep(new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true })));
+  const leafMats = (LEAVES[season] ?? LEAVES.summer).map((c) => keep(new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true })));
   const crown = keep(lumpy(new THREE.IcosahedronGeometry(1, 2), 0.16, 4, 2.4));
   const trunkGeo = keep(new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8));
   // (tout autour du rond : la caméra suit le cheval et fait le tour, il y a des arbres de tous les côtés ; en instances,
@@ -424,7 +437,7 @@ export function roundPenSet(stage, pen) {
     c.count = nC[j];
   });
   g.add(trunks, ...crowns);
-  const hillMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c9f5c, roughness: 1 }));
+  const hillMat = keep(new THREE.MeshStandardMaterial({ color: season === 'autumn' ? 0x9a9a5c : season === 'winter' ? 0x8c9a80 : 0x7c9f5c, roughness: 1 }));
   const hillGeo = keep(new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2));
   const nH = 12;
   const hills = new THREE.InstancedMesh(hillGeo, hillMat, nH);
@@ -437,7 +450,8 @@ export function roundPenSet(stage, pen) {
     hills.setMatrixAt(i, m4);
   }
   g.add(hills);
-  g.add(skyDome(keep));
+  const sky = skySphere(keep, 60);
+  g.add(sky);
 
   // ---------------------------------------------------------------- lumière : l'après-midi
   const hemi = new THREE.HemisphereLight(0xcfe4ff, 0x7a8a52, 0.95);
@@ -458,11 +472,46 @@ export function roundPenSet(stage, pen) {
   fill.position.set(F, 4, -F);
   g.add(fill);
 
+  // Les places des objets du jour, tout autour, dehors : au pied de la clôture, sur la lisse du haut, accrochés à un
+  // poteau (face au rond) ; ni devant la barrière, ni sur la paille et le seau. (face : vers le milieu du rond)
+  const places = [];
+  const faceIn = (a) => Math.atan2(-Math.cos(a), -Math.sin(a));
+  const nS = 28;
+  for (let i = 0; i < nS; i++) {
+    const a = (i / nS) * Math.PI * 2 + 0.05;
+    const dG = Math.abs(Math.atan2(Math.sin(a - gateA), Math.cos(a - gateA)));
+    const dB = Math.abs(Math.atan2(Math.sin(a - ba), Math.cos(a - ba)));
+    if (dG < gateW * 1.2 || dB < 0.35) continue;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    places.push({ kind: 'floor', p: [c * (F + 0.6), 0, sn * (F + 0.6)], face: faceIn(a) });
+    places.push({ kind: 'perch', p: [c * (F - 0.05), 0.92 * fH + railR, sn * (F - 0.05)], face: faceIn(a) + Math.PI / 2 });
+    // (appuyée contre la clôture, dehors : le pied s'écarte de la clôture, placeExtras)
+    places.push({ kind: 'lean', p: [c * (F + 0.12), 0, sn * (F + 0.12)], face: faceIn(a) + Math.PI });
+  }
+  for (let i = 0; i < nP; i++) {
+    const a = (i / nP) * Math.PI * 2;
+    if (Math.abs(Math.atan2(Math.sin(a - gateA), Math.cos(a - gateA))) < gateW * 1.2) continue;
+    // (accroché au poteau, côté rond, entre la lisse du bas et celle du milieu)
+    places.push({ kind: 'hang', p: [Math.cos(a) * (F - 0.13), 0.3 * fH + 0.06, Math.sin(a) * (F - 0.13)], face: faceIn(a) });
+  }
+  // (le réverbère de la nuit : dehors, à côté de la paille)
+  const lampSpot = V(Math.cos(ba - 0.3) * (F + 0.8), 0, Math.sin(ba - 0.3) * (F + 0.8));
+
   return {
     group: g,
     props: {},
     dims: { R, F, fenceH: fH, trackW: w },
     kind: 'roundPen',
+    outdoor: true,
+    skyMesh: sky,
+    ground: [grassMat, sandMat, tuftMat, hillMat],
+    spots: places,
+    lampSpot,
+    lampFace: faceIn(ba - 0.3),
+    // (la pluie, la neige : sur tout le rond, la caméra en fait le tour ; la brume plus loin, ses arbres tout autour)
+    weatherBox: { x0: -F - 2.5, x1: F + 2.5, z0: -F - 2.5, z1: F + 2.5, top: Math.max(3.5, 2.6 * u + 1.5) },
+    fogScale: (F * 4 + 40) / 36,
     layout() {},
     /** Le ciel, la brume, les reflets du pré (à rendre au départ : voir lunge3d.js). */
     sky(st) {

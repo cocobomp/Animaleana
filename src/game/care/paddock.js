@@ -5,12 +5,15 @@
 //
 // Le terrain du jeu dessiné (400 × 165, fun.js ballGame) est posé sur l'herbe devant nous : yard = { xC (milieu, x),
 // half (demi-largeur, m), zFar (bord du fond), depth (profondeur, m) }. Même forme que les autres décors (stallSet,
-// barnSet) : { group, dims, props, layout, update, dispose }.
+// barnSet) : { group, dims, props, layout, update, dispose }. Il suit l'heure, la météo et la saison du jeu (yard.season ;
+// ambience.js : le ciel recolorable, le sol que la pluie mouille et que la neige blanchit, l'herbe cachée sous la neige)
+// et reçoit les objets du jour (spots : le long de la clôture du fond, derrière le terrain).
 
 import * as THREE from 'three';
 import { canvasTex, rng } from './textures.js';
 import { bag, barnWood, strawBale, lumpy } from './barnProps.js';
 import { limeWallTexture } from './farmBarn.js';
+import { farAway, skySphere, GRASS_TINT } from './outdoor.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -106,6 +109,7 @@ export function paddockSet(stage, yard) {
   const high = stage.high;
   const u = stage.marks?.u ?? 0.7;
   const { xC, half, zFar, depth } = yard;
+  const season = yard.season ?? 'summer';
   const zNear = zFar + depth;
   // (la clôture autour du terrain, un peu plus loin que lui ; on se tient devant, côté +z, sans clôture)
   const F = { x0: xC - half - 0.9, x1: xC + half + 0.9, z0: zFar - 0.9, z1: zNear + 1.6 };
@@ -122,7 +126,9 @@ export function paddockSet(stage, yard) {
   // ---------------------------------------------------------------- sol : l'herbe, la terre battue devant la porte
   const grass = keep(grassTexture());
   grass.repeat.set(16, 16);
-  mesh(new THREE.PlaneGeometry(60, 60), keep(new THREE.MeshStandardMaterial({ map: grass, roughness: 1, color: 0xdfe8cf })), [xC, 0, zFar], [-Math.PI / 2, 0, 0], false);
+  const groundMat = keep(new THREE.MeshStandardMaterial({ map: grass, roughness: 1, color: GRASS_TINT[season] ?? 0xdfe8cf }));
+  groundMat.userData.main = true;
+  mesh(new THREE.PlaneGeometry(60, 60), groundMat, [xC, 0, zFar], [-Math.PI / 2, 0, 0], false);
   const door = V(F.x0 + 1.6, 0, F.z0 - 0.35);
   mesh(new THREE.PlaneGeometry(2.6, 2.2), keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 })), [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
 
@@ -130,7 +136,8 @@ export function paddockSet(stage, yard) {
   const tuftTex = keep(tuftTexture());
   const tuftGeo = keep(new THREE.PlaneGeometry(1, 1));
   tuftGeo.translate(0, 0.5, 0);
-  const tuftMat = keep(new THREE.MeshStandardMaterial({ map: tuftTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9 }));
+  const tuftMat = keep(new THREE.MeshStandardMaterial({ map: tuftTex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9, color: season === 'autumn' ? 0xe8dcb0 : season === 'winter' ? 0xd8d8c4 : 0xffffff }));
+  tuftMat.userData.tuft = true;
   const nT = high ? 420 : 260;
   const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, nT * 2);
   const r = rng(12);
@@ -156,6 +163,7 @@ export function paddockSet(stage, yard) {
   }
   tufts.count = k;
   tufts.receiveShadow = true;
+  tufts.userData.grass = true; // (sous la neige, l'herbe disparaît : ambience.js)
   g.add(tufts);
   // pâquerettes : un cœur jaune, des pétales blancs (une seule petite forme)
   const daisy = new THREE.Group();
@@ -175,6 +183,10 @@ export function paddockSet(stage, yard) {
     hearts.setMatrixAt(i, m4);
   }
   daisy.add(petals, hearts);
+  petals.userData.grass = true;
+  hearts.userData.grass = true;
+  // (pas de pâquerettes l'hiver)
+  daisy.visible = season !== 'winter';
   g.add(daisy);
 
   // ---------------------------------------------------------------- la clôture (poteaux et trois lisses)
@@ -184,11 +196,13 @@ export function paddockSet(stage, yard) {
   const railMat = keep(new THREE.MeshStandardMaterial({ map: rail, roughness: 0.85, color: 0xe6d6bc }));
   const fH = Math.max(1.0, 1.1 * u + 0.3);
   const postGeo = keep(lumpy(new THREE.BoxGeometry(0.11, fH + 0.1, 0.11, 1, 3, 1), 0.006, 3));
+  const backPosts = [];
   const side = (a, b) => {
     const len = a.distanceTo(b);
     const n = Math.max(1, Math.round(len / 1.7));
     for (let i = 0; i <= n; i++) {
       const p = a.clone().lerp(b, i / n);
+      if (Math.abs(a.z - F.z0) < 1e-6 && Math.abs(b.z - F.z0) < 1e-6) backPosts.push(p);
       const m = new THREE.Mesh(postGeo, postMat);
       m.position.set(p.x, (fH + 0.1) / 2 - 0.05, p.z);
       m.rotation.y = (r() - 0.5) * 0.2;
@@ -285,35 +299,12 @@ export function paddockSet(stage, yard) {
   bale.rotation.y = 1.2;
   g.add(bale);
 
-  // ---------------------------------------------------------------- au loin : arbres et collines
-  const trunkMat = keep(new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 }));
-  const leafMats = [0x4f7a34, 0x5d8a3c, 0x46702f].map((c) => keep(new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true })));
-  const crown = keep(lumpy(new THREE.IcosahedronGeometry(1, 2), 0.16, 4, 2.4));
-  const trunkGeo = keep(new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8));
-  for (let i = 0; i < 9; i++) {
-    const x = xC + (i - 4) * 3.2 + (r() - 0.5) * 1.4;
-    const z = F.z0 - 6 - r() * 6;
-    const sc = 1 + r() * 0.8;
-    const t = new THREE.Mesh(trunkGeo, trunkMat);
-    t.position.set(x, 0.9 * sc, z);
-    t.scale.setScalar(sc);
-    g.add(t);
-    for (let j = 0; j < 3; j++) {
-      const c = new THREE.Mesh(crown, leafMats[(i + j) % 3]);
-      c.position.set(x + (r() - 0.5) * 1.1 * sc, (2.2 + r() * 0.9) * sc, z + (r() - 0.5) * 0.8);
-      c.scale.setScalar((0.9 + r() * 0.5) * sc);
-      c.castShadow = false;
-      g.add(c);
-    }
-  }
-  const hillMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c9f5c, roughness: 1 }));
-  for (let i = 0; i < 5; i++) {
-    const h = new THREE.Mesh(keep(new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2)), hillMat);
-    h.scale.set(10 + r() * 6, 2 + r() * 2.5, 6);
-    h.position.set(xC + (i - 2) * 11 + (r() - 0.5) * 4, -0.2, F.z0 - 20 - r() * 4);
-    g.add(h);
-  }
-  g.add(skyDome(keep));
+  // ---------------------------------------------------------------- au loin : arbres et collines (de la saison), le ciel
+  const far = farAway(keep, { xC, zFar: F.z0 - 6, season, seed: 12, n: 9, spread: 3.2 });
+  far.group.scale.set(1, 1.25, 1);
+  g.add(far.group);
+  const sky = skySphere(keep);
+  g.add(sky);
 
   // ---------------------------------------------------------------- lumière : l'après-midi, de notre côté
   const hemi = new THREE.HemisphereLight(0xcfe4ff, 0x6f8a4a, 0.95);
@@ -334,11 +325,44 @@ export function paddockSet(stage, yard) {
   fill.position.set(xC + 4, 3, zFar - 2);
   g.add(fill);
 
+  // Les places des objets du jour : au sol devant la clôture du fond et sur sa lisse du haut (derrière le terrain : la
+  // balle ne roule pas jusque-là), accrochés à ses poteaux ; ni devant la porte ni sur le touret.
+  const spots = [];
+  const topY = 0.92 * fH + 0.05;
+  for (let x = F.x0 + 3.7; x <= F.x1 - 2 * sR - 0.6; x += 0.35) {
+    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.32] });
+    spots.push({ kind: 'perch', p: [x, topY, F.z0 + 0.07], face: 0 });
+  }
+  for (const p of backPosts) if (p.x > F.x0 + 3.6 && p.x < F.x1 - 0.2) spots.push({ kind: 'hang', p: [p.x, 0.32 * fH + 0.06, F.z0 + 0.06], face: 0 });
+  for (let z = F.z0 + 2 * sR + 1; z <= zNear; z += 0.35) spots.push({ kind: 'perch', p: [F.x1 - 0.07, topY, z], face: -Math.PI / 2 });
+  // (le long du mur chaulé de la chèvrerie, de part et d'autre de la porte : au pied du mur, appuyé, accroché)
+  const wallZ = F.z0 - 0.4;
+  for (let x = bx - 0.3; x <= F.x0 + 3.2; x += 0.3) {
+    if (Math.abs(x - door.x) < dW / 2 + 0.3) continue;
+    spots.push({ kind: 'floor', p: [x, 0, wallZ + 0.3] });
+    spots.push({ kind: 'lean', p: [x, 0, wallZ + 0.04] });
+    spots.push({ kind: 'hang', p: [x, Math.min(1.25, wallH - 0.6), wallZ + 0.005], face: 0 });
+  }
+  // (le long de la clôture de gauche et de droite, hors du terrain : au sol, sur la lisse du haut ; pas sur la paille)
+  for (let z = F.z0 + 0.8; z <= zNear + 0.2; z += 0.35) {
+    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z] }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
+    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z] });
+  }
+  // (le réverbère de la nuit : contre la clôture du fond, à côté de la porte)
+  const lampSpot = V(F.x0 + 2.9, 0, F.z0 - 0.3);
+
   return {
     group: g,
     props: {},
     dims: { ...F, halfW: half, back: zFar, front: zNear },
     kind: 'pre',
+    outdoor: true,
+    skyMesh: sky,
+    ground: [groundMat, tuftMat, ...far.mats],
+    spots,
+    lampSpot,
+    // (la pluie, la neige : sur tout le terrain, pas seulement autour de la chèvre)
+    weatherBox: { x0: F.x0 - 1.5, x1: F.x1 + 1.5, z0: F.z0 - 2, z1: F.z1 + 2.5, top: Math.max(3, 3 * u + 1) },
     layout() {},
     /** Le ciel, la brume, les reflets du pré (à rendre au départ : voir goatPlay3d.js). */
     sky(st) {

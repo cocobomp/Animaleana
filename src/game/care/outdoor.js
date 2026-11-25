@@ -12,9 +12,9 @@ import { grassTexture, tuftTexture } from './paddock.js';
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 /** Couleur de l'herbe selon la saison (multipliée par la texture). */
-const GRASS_TINT = { spring: 0xe8f4cf, summer: 0xdfe8cf, autumn: 0xe0d8ae, winter: 0xcfd2bf };
+export const GRASS_TINT = { spring: 0xe8f4cf, summer: 0xdfe8cf, autumn: 0xe0d8ae, winter: 0xcfd2bf };
 /** Couleurs du feuillage selon la saison (l'hiver : des arbres nus, quelques sapins). */
-const LEAVES = { spring: [0x6a9a3e, 0x7aa848, 0xe8b8c8], summer: [0x4f7a34, 0x5d8a3c, 0x46702f], autumn: [0xc8782c, 0xd8a03a, 0x9a4a28], winter: [0x2f5a3a, 0x355f40, 0x2a5236] };
+export const LEAVES = { spring: [0x6a9a3e, 0x7aa848, 0xe8b8c8], summer: [0x4f7a34, 0x5d8a3c, 0x46702f], autumn: [0xc8782c, 0xd8a03a, 0x9a4a28], winter: [0x2f5a3a, 0x355f40, 0x2a5236] };
 
 /**
  * L'herbe : un grand sol, des touffes (cartes en croix, une seule instance) et des fleurs. o : { x0, x1, z0, z1 }
@@ -27,12 +27,14 @@ export function grassField(keep, { x0 = -6, x1 = 6, z0 = -6, z1 = 4, keepOut = n
   const tex = keep(grassTexture());
   tex.repeat.set(size / 3.6, size / 3.6);
   const groundMat = keep(new THREE.MeshStandardMaterial({ map: tex, roughness: 1, color: GRASS_TINT[season] ?? GRASS_TINT.summer }));
+  groundMat.userData.main = true; // (le sol lui-même : en voyage, il devient sable ou terre rouge, away.js)
   const ground = new THREE.Mesh(keep(new THREE.PlaneGeometry(size, size)), groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2);
   ground.receiveShadow = true;
   g.add(ground);
   const tuftMat = keep(new THREE.MeshStandardMaterial({ map: keep(tuftTexture()), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9, color: season === 'autumn' ? 0xe8dcb0 : season === 'winter' ? 0xd8d8c4 : 0xffffff }));
+  tuftMat.userData.tuft = true;
   const tuftGeo = keep(new THREE.PlaneGeometry(1, 1));
   tuftGeo.translate(0, 0.5, 0);
   const nT = high ? 360 : 220;
@@ -137,6 +139,7 @@ export function fenceLine(keep, into, mats, a, b, { h = 1.2, rails = 3, seed = 3
 /** Au loin : des arbres (feuillage de la saison) et des collines. xC : le milieu ; zFar : la ligne des arbres. */
 export function farAway(keep, { xC = 0, zFar = -8, season = 'summer', seed = 7, n = 9, spread = 3.2 } = {}) {
   const g = new THREE.Group();
+  g.userData.far = true; // (en voyage, le fond du lieu les remplace : away.js)
   const r = rng(seed);
   const trunkMat = keep(new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 }));
   const leafMats = (LEAVES[season] ?? LEAVES.summer).map((c) => keep(new THREE.MeshStandardMaterial({ color: c, roughness: 1, flatShading: true })));

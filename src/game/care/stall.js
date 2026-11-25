@@ -419,6 +419,15 @@ export function stallSet(stage, opts = {}) {
       spots.push({ kind: 'perch', p: [x, back.top + 0.02, backZ], face: 0 });
     }
     for (const p of back.posts) if (p.x < S.halfW - 0.4) spots.push({ kind: 'lean', p: [p.x + 0.15, 0, backZ + 0.08] });
+    // (accrochés à un poteau de la clôture du fond, sous la lisse du haut ; ou à ceux de droite, loin du coin repas)
+    // (entre deux lisses, sur un poteau ; ou cloué à la lisse du milieu)
+    const hy = back.rails[0] + 0.05;
+    for (const p of back.posts) if (p.x < S.halfW - 0.3) spots.push({ kind: 'hang', p: [p.x, hy, backZ + 0.06], face: 0 });
+    for (let x = -3.2; x <= S.halfW - 0.4; x += 0.35) spots.push({ kind: 'hang', p: [x, back.rails[1] - 0.085, backZ + 0.025], face: 0 });
+    for (const p of right.posts) {
+      if (Math.abs(p.z - feedAt.z) < 0.7 || Math.abs(p.z - netAt.z) < 0.5) continue;
+      spots.push({ kind: 'hang', p: [S.halfW + 0.0, right.rails[0] + 0.05, p.z], face: -Math.PI / 2 });
+    }
     for (let z = 0.6; z <= S.front - 0.2; z += 0.4) spots.push({ kind: 'floor', p: [-S.halfW - 0.3, 0, z] });
     // (sur la lisse du haut de la clôture de droite, loin du coin repas : on la voit derrière sa tête)
     for (let z = S.back - 1.2; z <= S.front + 1.8; z += 0.3) {
@@ -485,6 +494,11 @@ function boxSpots(S) {
   for (const dx of [-0.3, 0, 0.3]) spots.push({ kind: 'perch', p: [-0.55 + dx, 1.95 - 0.375 - 0.045, S.back + 0.09], face: 0 });
   for (let z = S.back + 0.3; z < 0.4; z += 0.3) spots.push({ kind: 'perch', p: [-S.halfW + 0.02, S.low + 0.09, z], face: Math.PI / 2 });
   for (let x = -S.halfW + 0.3; x <= S.halfW - 0.6; x += 0.5) spots.push({ kind: 'lean', p: [x, 0.06, S.back + 0.06] });
+  // (accrochés au mur du fond, sous la fenêtre et la plaque ; à la cloison de gauche, sous sa lisse)
+  for (let x = -S.halfW + 0.35; x <= S.halfW - 0.45; x += 0.3) spots.push({ kind: 'hang', p: [x, 1.0, S.back + 0.01], face: 0 });
+  for (let z = S.back + 0.35; z < 0.6; z += 0.3) spots.push({ kind: 'hang', p: [-S.halfW + 0.03, S.low - 0.62, z], face: Math.PI / 2 });
+  // (et à la cloison de droite, celle du coin repas : loin de la mangeoire et du seau, placeExtras y veille)
+  for (let z = S.back + 0.3; z < S.front - 0.3; z += 0.3) spots.push({ kind: 'hang', p: [S.halfW - 0.03, S.low - 0.62, z], face: -Math.PI / 2 });
   return spots;
 }
 

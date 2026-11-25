@@ -10,6 +10,7 @@ import { initUpdates } from './ui/updates.js'; // bandeau « nouvelle version pr
 import { startCloud, syncNow, onCloudChange } from './cloud/account.js'; // compte Google facultatif (src/cloud/)
 import { chooseClaims } from './ui/cloudAccount.js';
 import { markOpen, markClosed, openElsewhere, newTabId, BEAT_MS } from './sim/openGames.js'; // parties ouvertes (onglets)
+import { startFeedback } from './cloud/feedback.js'; // 💌 les avis gardés sur l'appareil repartent
 
 setLang(getLang());
 
@@ -50,6 +51,9 @@ startCloud({
   appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev',
   backupName: (p) => t('cloud_backupName', { name: p.name, date: new Date().toLocaleDateString(getLang() === 'fr' ? 'fr-CH' : 'en-GB', { day: '2-digit', month: '2-digit' }) }),
 });
+// 💌 Les avis gardés sur l'appareil (hors ligne, règles pas encore publiées…) repartent un peu après le démarrage et
+// quand le réseau revient (src/cloud/feedback.js). Rien n'est chargé s'il n'y en a pas.
+startFeedback();
 // Retour au menu : la partie est vraiment arrêtée (Game.stop prévient en dernier), puis on synchronise.
 game.on('stop', () => {
   markClosed(tab);

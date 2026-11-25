@@ -77,6 +77,7 @@ l'écran dit les touches utiles (à pied, en selle) ; **H** ouvre la carte « Le
 - **Métiers** (💼) aussi : **guide de randonnée** 🧭 (des cavaliers à emmener en balade, la liste à cocher avant de partir) et **concours de beauté** (inscription par classe, préparation, tresses, juge) ; concours de saut et de dressage à l'extérieur ; école vétérinaire
 - Animaux **réalistes** (chevaux, chiens race par race, chats, lapins, moutons, chèvres, vaches) et cavalier assis en selle, pieds aux étriers ; un vrai saut d'obstacles (appel, bascule, réception)
 - **Sauvegarde en ligne** facultative (compte Google) pour retrouver ses parties sur tous ses appareils ; sinon on joue en invité, tout reste sur l'appareil
+- « 💌 **Ton avis** » (dans ⋯ Plus, ⚙️ Réglages et l'écran des profils du jeu en ligne) : un smiley, une idée, un bug ou un « j'aime » et un petit mot pour le développeur, envoyés sans prénom ni compte (gardés sur l'appareil et renvoyés plus tard sans Internet) ; où les lire : [docs/HEBERGEMENT.md](docs/HEBERGEMENT.md#-les-avis-des-joueurs)
 - Installable sur téléphone (« Ajouter à l'écran d'accueil ») et jouable sans réseau après la première ouverture
 
 Les règles du jeu sont décrites dans [docs/GDD.md](docs/GDD.md).

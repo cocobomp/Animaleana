@@ -1,6 +1,7 @@
 // Les règles de firestore.rules, testées dans l'émulateur Firestore (vrai moteur de règles) : rev + 1
 // obligatoire, rev 1 à la création, gen (identité du document) fixé à la création, pierre tombale « gone », un
-// compte ne touche jamais aux parties d'un autre, champs et tailles contrôlés.
+// compte ne touche jamais aux parties d'un autre, champs et tailles contrôlés. 💌 Les avis des joueurs (feedback) :
+// écrits sans compte, exactement le message du jeu (src/cloud/feedback.js), jamais relus, changés ni effacés.
 // Sans émulateur, ces tests sont sautés. Pour les lancer (voir docs/HEBERGEMENT.md) :
 //   npx firebase-tools emulators:start --only firestore   (avec firebase.json → firestore.rules)
 //   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npx vitest run tests/firestoreRules.test.js
@@ -14,6 +15,7 @@ describe.skipIf(!HOST)('firestore.rules (émulateur)', () => {
   let lea;
   let tom;
   let anon;
+  let avisMsg; // (un avis tel que le jeu le construit : src/cloud/feedback.js)
   const apps = [];
   const base = () => `http://${HOST}/v1/projects/${PROJECT}/databases/(default)/documents`;
   const save = (rev, extra = {}) => ({ data: JSON.stringify({ id: 'p1', name: 'Léa' }), updatedAt: 1760000000000, rev, gen: 'g1', name: 'Léa', saveVersion: 1, appVersion: '0.4.0', ...extra });
@@ -30,6 +32,11 @@ describe.skipIf(!HOST)('firestore.rules (émulateur)', () => {
   beforeAll(async () => {
     const { initializeApp, deleteApp } = await import('firebase/app');
     fs = await import('firebase/firestore');
+    const { buildMessage } = await import('../src/cloud/feedback.js');
+    avisMsg = buildMessage({ mood: 'love', kind: 'idea', text: 'Plus de chevaux !' }, {
+      lang: 'fr', version: '0.5.0+abc1234', device: 'phone', orientation: 'portrait', mode: 'manage', level: 4, day: 12,
+      place: 'maison/stable', screen: 'panel:animal ride',
+    });
     const [host, port] = HOST.split(':');
     const db = (name, sub) => {
       const app = initializeApp({ projectId: PROJECT, apiKey: 'x' }, name);
@@ -127,6 +134,47 @@ describe.skipIf(!HOST)('firestore.rules (émulateur)', () => {
     expect(await ok(fs.deleteDoc(ref(lea, 'lea', 'r')))).toBe(true);
     expect(await ok(fs.setDoc(ref(lea, 'lea', 'r'), save(1, { gen: 'second' })))).toBe(true);
     expect((await fs.getDoc(ref(lea, 'lea', 'r'))).data()).toMatchObject({ rev: 1, gen: 'second' });
+  });
+
+  // 💌 Les avis des joueurs.
+  const avis = (extra = {}) => ({ ...avisMsg, createdAt: fs.serverTimestamp(), ...extra });
+
+  it('💌 avis : sans compte (comme le jeu) ou avec, le message construit par le jeu ; createdAt = heure du serveur', async () => {
+    expect(await ok(fs.addDoc(fs.collection(anon, 'feedback'), avis()))).toBe(true);
+    expect(await ok(fs.addDoc(fs.collection(lea, 'feedback'), avis()))).toBe(true);
+    expect(await ok(fs.addDoc(fs.collection(anon, 'feedback'), avis({ text: '', mood: 'love' })))).toBe(true); // (un smiley seul)
+    expect(await ok(fs.addDoc(fs.collection(anon, 'feedback'), avis({ text: 'x'.repeat(500) })))).toBe(true);
+    // 500 comme les compte la zone de texte (UTF-16) : accents et emojis compris
+    expect(await ok(fs.addDoc(fs.collection(anon, 'feedback'), avis({ text: `${'é😍'.repeat(166)}ab` })))).toBe(true);
+  });
+
+  it('💌 avis : exactement les champs prévus ; listes, types, tailles et heure contrôlés', async () => {
+    const col = fs.collection(anon, 'feedback');
+    const bad = [
+      { name: 'Léa' }, { uid: 'u1' }, { email: 'a@b.ch' }, { text: 'x'.repeat(501) }, { text: 3 }, { mood: 'angry' },
+      { kind: 'spam' }, { text: '', mood: 'none' }, { lang: 'de' }, { version: '' }, { version: 'v'.repeat(41) },
+      { device: 'fridge' }, { orientation: 'up' }, { mode: 'admin' }, { level: 1.5 }, { level: -1 }, { level: 1001 },
+      { day: '3' }, { day: 1000001 }, { place: 'p'.repeat(31) }, { screen: 's'.repeat(41) },
+      { createdAt: fs.Timestamp.fromMillis(Date.now()) }, { createdAt: 5 },
+    ];
+    for (const b of bad) expect(await denied(fs.addDoc(col, avis(b))), JSON.stringify(b)).toBe(true);
+    for (const k of ['text', 'mood', 'kind', 'version', 'screen', 'createdAt']) {
+      const { [k]: gone, ...rest } = avis();
+      expect(gone, k).not.toBeUndefined();
+      expect(await denied(fs.addDoc(col, rest)), `sans ${k}`).toBe(true);
+    }
+  });
+
+  it('💌 avis : personne ne les relit, ne les change ni ne les efface depuis le jeu', async () => {
+    const ref = await fs.addDoc(fs.collection(anon, 'feedback'), avis());
+    for (const db of [anon, lea]) {
+      const mine = fs.doc(db, 'feedback', ref.id);
+      expect(await denied(fs.getDoc(mine))).toBe(true);
+      expect(await denied(fs.getDocs(fs.collection(db, 'feedback')))).toBe(true);
+      expect(await denied(fs.updateDoc(mine, { text: 'changé' }))).toBe(true);
+      expect(await denied(fs.setDoc(mine, avis()))).toBe(true);
+      expect(await denied(fs.deleteDoc(mine))).toBe(true);
+    }
   });
 
   it('le propriétaire peut tout effacer (« effacer mes parties en ligne »)', async () => {

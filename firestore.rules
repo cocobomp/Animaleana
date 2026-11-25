@@ -3,7 +3,8 @@ rules_version = '2';
 // Règles de la base des sauvegardes (Firestore, région europe-west6 = Zurich).
 // Chaque compte Google ne peut lire et écrire QUE ses propres parties :
 //   users/{uid}/saves/{profileId}  (une partie = un document)
-// Tout le reste est fermé. Mise en ligne : npx firebase-tools deploy --only firestore:rules
+// 💌 Les avis des joueurs : feedback/{id}, écrits sans compte, jamais relus depuis le jeu.
+// Tout le reste est fermé. Mise en ligne : npx firebase-tools deploy --only firestore:rules --project lafermeamadichelle
 // Tests : tests/firestoreRules.test.js (avec l'émulateur, voir docs/HEBERGEMENT.md).
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -47,6 +48,37 @@ service cloud.firestore {
       allow update: if isOwner(uid) && validId(profileId) && validSave()
         && request.resource.data.rev == resource.data.get('rev', 0) + 1
         && (!('gen' in resource.data) || request.resource.data.gen == resource.data.gen);
+    }
+
+    // 💌 Un avis de joueur (src/cloud/feedback.js) : exactement les champs prévus, rien de personnel (ni prénom, ni
+    // partie, ni compte, ni e-mail). Un texte court (500 caractères au plus), une humeur et une sorte (dans leurs
+    // listes), et de quoi le comprendre : langue, version du jeu, appareil, sens de l'écran, mode, niveau, jour du jeu,
+    // lieu, ce qui était ouvert. createdAt : l'heure du serveur (serverTimestamp), jamais celle de l'appareil.
+    function validFeedback() {
+      let d = request.resource.data;
+      let fields = ['text', 'mood', 'kind', 'lang', 'version', 'device', 'orientation', 'mode', 'level', 'day', 'place', 'screen', 'createdAt'];
+      return d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+        && d.text is string && d.text.size() <= 500
+        && d.mood in ['love', 'happy', 'meh', 'sad', 'none']
+        && (d.text.size() > 0 || d.mood != 'none')
+        && d.kind in ['idea', 'bug', 'like', 'other']
+        && d.lang in ['fr', 'en']
+        && d.version is string && d.version.size() >= 1 && d.version.size() <= 40
+        && d.device in ['phone', 'tablet', 'computer']
+        && d.orientation in ['portrait', 'landscape']
+        && d.mode in ['sandbox', 'manage', 'none']
+        && d.level is int && d.level >= 0 && d.level <= 1000
+        && d.day is int && d.day >= 0 && d.day <= 1000000
+        && d.place is string && d.place.size() <= 30
+        && d.screen is string && d.screen.size() <= 40
+        && d.createdAt == request.time;
+    }
+
+    // N'importe qui peut en écrire un (avec ou sans compte : le jeu l'envoie sans). Personne ne peut les lire, les
+    // modifier ni les effacer depuis le jeu : le développeur les lit dans la console Firebase.
+    match /feedback/{id} {
+      allow create: if validFeedback();
+      allow read, update, delete: if false;
     }
 
     match /{document=**} {

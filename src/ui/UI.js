@@ -17,6 +17,8 @@ import { nbsp } from './minigames/frame.js'; // typographie française des messa
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
+import { openFeedback } from './feedbackWindow.js'; // 💌 ton avis
+import { feedbackAvailable } from '../cloud/feedback.js'; // (seulement dans le jeu en ligne)
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
@@ -381,8 +383,9 @@ export class UI {
   }
 
   /**
-   * « ⋯ Plus » (téléphone) : Vue d'ensemble, Activités, Avatar, Aide et Réglages dans une petite feuille. Sur ordinateur,
-   * c'est le menu d'Échap (src/ui/controls.js) : en plus, ⌨️ les touches, 📖 le journal et ⏸ la pause, avec leur touche.
+   * « ⋯ Plus » (téléphone) : Vue d'ensemble, Activités, Avatar, Aide, Réglages et 💌 Ton avis dans une petite feuille. Sur
+   * ordinateur, c'est le menu d'Échap (src/ui/controls.js) : en plus, ⌨️ les touches, 📖 le journal et ⏸ la pause, avec leur
+   * touche.
    */
   openMore() {
     const g = this.game;
@@ -402,7 +405,9 @@ export class UI {
         item('🏆', t('actv_hud'), () => this.openActivities()),
         item('👕', t('avatar'), () => this.showAvatarEditor(g.profile, () => this.clearScreen())),
         item('❓', t('help'), () => openHelp(this)),
-        item('⚙️', t('settings'), () => this.openSettings())),
+        item('⚙️', t('settings'), () => this.openSettings()),
+        // (pas dans la version « à emporter » : le message n'en partirait jamais)
+        feedbackAvailable() ? item('💌', t('fb_btn'), () => openFeedback(this)) : null),
       // (data-escape : Échap ferme le menu, comme il l'a ouvert)
       h('div', { class: 'row end' }, h('button', { 'data-escape': true, onClick: () => this.hideModal() }, t('cancel'))),
     ]);

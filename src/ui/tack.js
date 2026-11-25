@@ -134,14 +134,16 @@ function toolsList(ui) {
   // (pas de tondeuse ni de seau à traire tant que moutons, chèvres et vaches ne sont pas proposés : toolShown)
   return h('div', { class: 'cards' }, h('p', { class: 'note' }, t('toolsHelp')), Object.entries(TOOLS).filter(([tool]) => toolShown(p, tool)).map(([tool, def]) => {
     const have = hasTool(p, tool);
-    return h('div', { class: 'card' },
+    // 🐷 trop cher pour l'instant : en faire son objectif, sur sa propre ligne sous la carte (à côté du bouton
+    // « Acheter », il élargissait la carte au téléphone et la liste défilait sur le côté)
+    const goal = !have && !sandbox && !canAfford(p, def.price) ? goalButton(ui, { kind: 'tool', id: tool }) : null;
+    return h('div', { class: `card ${goal ? 'tk-tool-goal' : ''}` },
       h('span', { class: 'card-emoji' }, def.emoji),
       h('span', { class: 'card-main' }, h('b', {}, t(`tool_${tool}`)), h('small', {}, t(`toold_${tool}`))),
       have ? h('span', { class: 'card-side' }, '✅')
         : h('span', { class: 'card-side tk-tool-buy' },
-          h('button', { class: 'primary', onClick: () => { g.buyTool(tool); ui.renderPanel(); } }, sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`),
-          // 🐷 trop cher pour l'instant : en faire son objectif
-          !sandbox && !canAfford(p, def.price) ? goalButton(ui, { kind: 'tool', id: tool }) : null));
+          h('button', { class: 'primary', onClick: () => { g.buyTool(tool); ui.renderPanel(); } }, sandbox ? t('buy') : `${t('buy')} · ${def.price} 🪙`)),
+      goal ? h('span', { class: 'tk-tool-goal-row' }, goal) : null);
   }));
 }
 

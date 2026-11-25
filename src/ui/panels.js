@@ -13,7 +13,7 @@ import { createAnimal, freeName, namesInUse } from '../sim/animal.js';
 import { PLACES, PLACE_IDS, distanceKm, TRAVEL_MODES } from '../sim/places.js';
 import { OBJECTIVES, objectiveShown, objectiveParams } from '../sim/objectives.js';
 import { canAfford, isSandbox } from '../sim/profile.js';
-import { JOB_HOURS, jobBlock, availableJobs } from '../game/Game.js';
+import { JOB_HOURS, jobBlock, availableJobs, jobsStillToday } from '../game/Game.js';
 import { jobPayout, goalStatus, streakOn, streakAlive, streakBonus, JOB_STREAK, FULL_DAY_BONUS } from '../sim/piggyBank.js'; // 🐷 tirelire
 import { goalCard, goalButton } from './piggy.js'; // 🐷 carte de la tirelire, bouton « 🎯 Mon objectif »
 import { EQUIPMENT, HELPERS, canProduce, equipmentShown, helperShown } from '../sim/farm.js';
@@ -39,7 +39,9 @@ import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton 
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { albumView } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
-import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { todayChallenge, challengeDef, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { dailyState, DAILY } from '../sim/dailyChallenges.js'; // 🎯 les défis du jour de la ferme et le coffre
+import { wellDoneToday, WELL_DONE } from '../sim/wellDone.js'; // ⭐ la prime du travail bien fait
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 import { keycaps, openKeysCard, stripWanted, setStripWanted } from './controls.js'; // ⌨️ les touches sur ordinateur
 import { controlsHelp } from './keys.js';
@@ -623,6 +625,8 @@ export function openJobs(ui) {
       const hours = { from: fmtHour(JOB_HOURS.from), to: fmtHour(JOB_HOURS.to) };
       // (needs : un petit boulot avec une espèce pas encore proposée n'est pas affiché)
       const jobs = availableJobs(p);
+      // 🏡 Le compteur 🪙 ouvre ce panneau partout ; les voisins, eux, sont à la maison (même garde dans Game.doJob).
+      const away = !g.isHome;
       return [
         sandbox ? h('p', { class: 'note' }, t('jobsSandbox')) : null,
         h('p', { class: 'note' }, t('jobsRule', hours)),
@@ -630,7 +634,8 @@ export function openJobs(ui) {
         sandbox ? null : goalCard(ui),
         // (une fois par jour chacun, en journée : src/game/Game.js, jobBlock)
         h('div', { class: 'cards' }, jobs.map((j) => {
-          const why = jobBlock(p, j, g.day, g.hour);
+          const block = jobBlock(p, j, g.day, g.hour);
+          const why = block !== 'done' && away ? 'away' : block; // (déjà fait : ✅, même en voyage)
           const pay = jobPayout(p, j, g.day, jobs);
           // Ce que ce boulot change pour l'objectif : « 🎯 encore 95 🪙 » ou « 🎯 assez ! ».
           const after = !why && !sandbox ? goalStatus(p, pay.total) : null;
@@ -644,25 +649,31 @@ export function openJobs(ui) {
               ...extra.map((x) => h('small', { class: 'job-bonus' }, x))));
         })),
         // (sous les boulots : ils restent en haut, même en paysage ; leur bonus 🔥 est déjà écrit sur chacun)
-        sandbox ? null : jobStreakCard(p, g.day, jobs),
+        sandbox ? null : jobStreakCard(p, g.day, g.hour, jobs),
+        dailyCard(p, g.day, sandbox), // 🎯 les défis du jour et le coffre (bac à sable : sans pièces)
+        sandbox ? null : wellDoneLine(p, g.day), // ⭐ les primes Bravo du jour
       ];
     },
   });
 }
 
-/** 🔥 La série des petits boulots et ⭐ la journée complète (src/sim/piggyBank.js). */
-function jobStreakCard(p, day, jobs) {
+/**
+ * 🔥 La série des petits boulots et ⭐ la journée complète (src/sim/piggyBank.js). Rien n'est promis « aujourd'hui »
+ * quand il est trop tard (jobsStillToday) : « demain dans le jeu », le temps du jeu ne passe que quand on joue.
+ */
+function jobStreakCard(p, day, hour, jobs) {
   const s = streakOn(p.jobStreak, day);
   const alive = streakAlive(p.jobStreak, day);
-  const done = p.jobsToday?.day === day ? jobs.filter((j) => p.jobsToday.done.includes(j.id)).length : 0;
+  const done = Array.isArray(p.jobsToday?.done) && p.jobsToday.day === day ? jobs.filter((j) => p.jobsToday.done.includes(j.id)).length : 0;
+  const still = jobsStillToday(p, jobs, day, hour);
   let title;
   let help;
   if (!s.first) { // déjà un boulot aujourd'hui
     title = t('streak_days', { n: s.n });
     help = t('streak_tomorrow', { n: streakBonus(s.n + 1) });
-  } else if (alive) { // série d'hier : le premier boulot d'aujourd'hui la continue
+  } else if (alive) { // série d'hier : le premier boulot d'aujourd'hui la continue (s'il en reste un avant 18 h)
     title = t('streak_days', { n: alive });
-    help = t('streak_today', { n: streakBonus(s.n) });
+    help = still.any ? t('streak_today', { n: streakBonus(s.n) }) : t('streak_late');
   } else {
     title = t('streak_start');
     help = t('streak_help', { n: streakBonus(JOB_STREAK.max + 1) });
@@ -675,7 +686,45 @@ function jobStreakCard(p, day, jobs) {
       h('span', { class: 'streak-dots', 'aria-hidden': 'true' }, Array.from({ length: JOB_STREAK.max + 1 }, (_, i) => h('span', { class: `streak-dot ${i < flames ? 'on' : ''}` }))),
       h('small', {}, help),
       jobs.length > 1 ? h('small', { class: done >= jobs.length ? 'streak-full done' : 'streak-full' },
-        done >= jobs.length ? `✅ ${t('job_fullDone')}` : `⭐ ${t('job_fullHelp', { n: FULL_DAY_BONUS, done, total: jobs.length })}`) : null));
+        done >= jobs.length ? `✅ ${t('job_fullDone')}`
+          : still.all ? `⭐ ${t('job_fullHelp', { n: FULL_DAY_BONUS, done, total: jobs.length })}` : `⭐ ${t('job_fullLate')}`) : null));
+}
+
+/**
+ * 🎯 Les défis du jour (src/sim/dailyChallenges.js) : les défis de la ferme (⬜/✅, où tu en es, +10 🪙), le 🎁 coffre
+ * surprise, et en lecture seule le défi de ton cheval (+30 🪙). Rien n'est tiré ici (dailyTick et challengeTick s'en
+ * chargent, avec leur annonce du matin) : pas encore tirés aujourd'hui, pas de ligne. Bac à sable : sans pièces.
+ */
+function dailyCard(p, day, sandbox) {
+  const st = dailyState(p, day);
+  // (le défi du cheval : seulement celui que challengeTick a déjà tiré aujourd'hui, sinon on volerait son annonce)
+  const horse = p.challenge?.day === day ? challengeDef(p.challenge.id) : null;
+  if (!st && !horse) return null;
+  const pay = (n) => (sandbox ? null : h('b', { class: 'dc-pay' }, `+${n} 🪙`));
+  const row = (ok, text, have, n, coins) => h('div', { class: `dc-row ${ok ? 'done' : ''}` },
+    h('span', { class: 'dc-box', 'aria-hidden': 'true' }, ok ? '✅' : '⬜'),
+    h('span', { class: 'dc-text' }, text, ok ? null : h('small', {}, ` (${have}/${n})`)),
+    pay(coins));
+  const rows = st ? st.list.map((x) => row(x.done || x.have >= x.def.n, `${x.def.icon} ${t(`dc_${x.def.id}`)}`, x.have, x.def.n, DAILY.coins)) : [];
+  const opened = st && st.chest !== null;
+  const chest = !st ? null : h('small', { class: `dc-chest ${opened ? 'open' : ''}` },
+    opened ? `🎁 ${t('dc_chestOpened')}${sandbox ? '' : ` +${st.chest} 🪙`}` : `🎁 ${t('dc_chestHelp')}`);
+  let horseRow = null;
+  if (horse) {
+    const have = Math.max(0, Math.min(horse.n, (p.stats?.[horse.stat] ?? 0) - (Number.isFinite(p.challenge.base) ? p.challenge.base : 0)));
+    horseRow = row(!!p.challenge.done || have >= horse.n, `🐴 ${t(`ch_${horse.id}`)}`, have, horse.n, CHALLENGE_REWARD.coins);
+  }
+  return h('div', { class: `piggy-card daily ${opened ? 'ready' : ''}` },
+    h('div', { class: 'piggy-main' }, h('b', {}, t('dc_title')), ...rows, chest, horseRow));
+}
+
+/** ⭐ « Primes Bravo aujourd'hui : 10/20 🪙 » (src/sim/wellDone.js) : ce que rapportent les étoiles des soins et corvées. */
+function wellDoneLine(p, day) {
+  const got = wellDoneToday(p, day).coins;
+  const full = got >= WELL_DONE.perDay;
+  return h('p', { class: 'note wd-line' },
+    h('b', {}, t('wd_today', { n: got, max: WELL_DONE.perDay })), ' ',
+    full ? t('wd_full') : t('wd_help', { a: WELL_DONE.pay[3], b: WELL_DONE.pay[2] }));
 }
 
 // ---------------------------------------------------------------- réglages
@@ -1020,7 +1069,8 @@ export function openShop(ui) {
       }, sandbox ? `🛒 ${t('buy')}` : `🛒 ${t('buy')} · ${price} 🪙`),
       // 🐷 Pas assez de pièces : combien il manque, et en faire son objectif (la tirelire du HUD se remplit vers lui).
       !canAfford(g.profile, price) ? h('p', { class: 'note goal-short' }, t('tk_missing', { n: price - (g.profile.money ?? 0) })) : null,
-      !canAfford(g.profile, price) ? goalButton(ui, { kind: 'animal', species: st.species, breed: st.breed, stage: st.stage }, { cls: 'big-goal' }) : null,
+      // (à l'élevage d'un voyage, l'objectif garde le lieu : la tirelire dira où revenir l'acheter)
+      !canAfford(g.profile, price) ? goalButton(ui, { kind: 'animal', species: st.species, breed: st.breed, stage: st.stage, place: g.isHome ? undefined : g.profile.place }, { cls: 'big-goal' }) : null,
     ];
   };
   ui.openPanel({ title: `🛒 ${g.isHome ? t('bld_petshop') : t('breeder')}`, render });

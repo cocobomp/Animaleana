@@ -45,20 +45,33 @@ describe('quoi de neuf', () => {
     expect(news.maybeShowNews(seen)).toBe(false);
   });
 
-  it('la fenêtre montre ce qui est venu depuis la dernière liste vue (« cheval7 » : aussi la bulle, les étoiles…)', () => {
+  it('la fenêtre montre ce qui est venu depuis la dernière liste vue (« cheval8 » : aussi la bulle, le conseil des jambes…)', () => {
     const keys = (seen) => news.freshNews(seen).map((n) => n.key);
+    const v10 = ['money'];
     const v9 = ['wishTap', 'rideCard', 'praise', 'legMud', 'starsFelt'];
-    const v8 = ['wish', 'stars', 'lucky', 'breath', 'photos', 'halloween'];
-    expect(keys('cheval8')).toEqual(v9);
-    expect(keys('cheval7')).toEqual([...v9, ...v8]);
+    expect(news.NEWS_ID).toBe('cheval10');
+    expect(keys('cheval9')).toEqual(v10);
+    expect(keys('cheval8')).toEqual([...v10, ...v9]);
     // (plus ancienne, ou jamais vue : au plus les deux dernières listes, pas un mur de texte)
-    expect(keys('cheval6')).toEqual([...v9, ...v8]);
-    expect(keys('cheval2')).toEqual([...v9, ...v8]);
-    expect(keys(undefined)).toEqual([...v9, ...v8]);
+    expect(keys('cheval7')).toEqual([...v10, ...v9]);
+    expect(keys('cheval2')).toEqual([...v10, ...v9]);
+    expect(keys(undefined)).toEqual([...v10, ...v9]);
     expect(keys(news.NEWS_ID)).toEqual([]);
   });
 
-  it('une partie restée à « cheval7 » : la fenêtre s\'ouvre une fois, avec les onze nouveautés', () => {
+  it('🪙 la tirelire, le « Bravo » qui rapporte, les défis du jour et le coffre, en mots d\'enfant (FR et EN)', () => {
+    const { t, setLang } = i18n;
+    setLang('fr');
+    const fr = `${t('news_money')} ${t('news_money_d')}`;
+    for (const w of ['tirelire', 'objectif', '★★★', '« Bravo »', '+5 🪙', '2 défis', 'coffre surprise']) expect(fr).toContain(w);
+    expect(fr).not.toMatch(/\S[!?:;]/); // (espace avant « ! ? : ; »)
+    setLang('en');
+    const en = `${t('news_money')} ${t('news_money_d')}`;
+    for (const w of ['piggy bank', 'goal', '★★★', '+5 🪙', '2 challenges', 'surprise chest']) expect(en).toContain(w);
+    setLang('fr');
+  });
+
+  it('une partie restée à « cheval8 » : la fenêtre s\'ouvre une fois, avec les six nouveautés', () => {
     // (un tout petit DOM pour h() : src/ui/dom.js)
     class El {
       constructor(tag) { Object.assign(this, { tag, children: [], style: {}, className: '' }); }
@@ -70,10 +83,10 @@ describe('quoi de neuf', () => {
     Object.assign(globalThis.document, { createElement: (tag) => new El(tag), createTextNode: (data) => ({ data }) });
     const find = (els, cls) => els.flat(Infinity).map((e) => (e?.className === cls ? e : e?.children && find(e.children, cls))).find(Boolean);
     const shown = [];
-    const ui = { game: { profile: { animals: [{}], newsSeen: 'cheval7' } }, showModal: (c) => shown.push(c), hideModal() {} };
+    const ui = { game: { profile: { animals: [{}], newsSeen: 'cheval8' } }, showModal: (c) => shown.push(c), hideModal() {} };
     expect(news.maybeShowNews(ui)).toBe(true);
     expect(shown).toHaveLength(1);
-    expect(find(shown[0], 'news-list').children).toHaveLength(11); // (les 5 de « cheval9 » et les 6 de « cheval8 »)
+    expect(find(shown[0], 'news-list').children).toHaveLength(6); // (celle de « cheval10 » et les 5 de « cheval9 »)
     expect(ui.game.profile.newsSeen).toBe(news.NEWS_ID);
     expect(news.maybeShowNews(ui)).toBe(false);
   });

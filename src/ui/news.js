@@ -8,8 +8,9 @@ import { h } from './dom.js';
 import { t } from '../i18n.js';
 
 /** Change quand une nouvelle liste arrive : elle est montrée une fois de plus (ses nouveautés : since, son numéro). */
-export const NEWS_ID = 'cheval9';
+export const NEWS_ID = 'cheval10';
 export const NEWS = [
+  { icon: '🪙', key: 'money', since: 10 }, // 🐷 la tirelire, le « Bravo » qui rapporte, les défis du jour et le coffre
   { icon: '👆', key: 'wishTap', since: 9 },
   { icon: '🏇', key: 'rideCard', since: 9 },
   { icon: '🤚', key: 'praise', since: 9 },

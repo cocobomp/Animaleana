@@ -7,11 +7,12 @@ import { formatClock } from '../sim/time.js';
 import { WEATHER_EMOJI } from '../sim/places.js';
 import * as panels from './panels.js';
 import { openTackItem } from './tack.js'; // sellerie : fiche d'un objet
-import { updateCoinChip } from './piggy.js'; // 🐷 tirelire : compteur de pièces, objectif, pièces qui volent
+import { updateCoinChip, celebrate, resetCoins } from './piggy.js'; // 🐷 tirelire : compteur de pièces, objectif, pièces qui volent, mots de fête
 import { openVet } from './vet.js';
 import { openVetSchool } from './vetSchool.js'; // 🎓 école vétérinaire
 import { openGalops, openFactAlbum } from './galops.js'; // 🎓 les Galops, 🃏 les cartes « Le savais-tu ? »
 import { runMinigame, runChoreGame } from './minigames.js';
+import { careKey } from '../sim/wellDone.js'; // ⭐ la prime du travail bien fait
 import { nbsp } from './minigames/frame.js'; // typographie française des messages
 import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
@@ -292,6 +293,7 @@ export class UI {
   }
 
   onStart(game) {
+    resetCoins(this); // (une partie ouverte, ou rouverte après une synchro : rien n'a été gagné, rien ne vole)
     this.clearScreen();
     this.hud.hidden = false;
     this.camBtn.hidden = false;
@@ -1395,12 +1397,17 @@ export class UI {
     if (!check.ok) return this.toast(ta(check.reason === 'money' ? 'r_money' : `r_${check.reason}`, a));
     const opts = {}; // (le mini-jeu y écrit ce qu'il a vu : le pansage, les pieds curés — opts.out.hooves)
     opts.legMudTip = !g.profile.legMudTip; // 🧦 (le pansage : le conseil des chaussettes de boue, une fois)
+    // ⭐ La prime du travail bien fait (src/sim/wellDone.js) : seulement tes animaux (pas un animal confié, ni celui
+    // d'un client, ni un chien en éducation : a.client, a.guest) ; le cadre y écrit les étoiles de sa carte de fin.
+    const wd = g.wellDoneFor?.(careKey(a, action), !a.client && !a.guest) ?? null;
+    if (wd) opts.wellDone = wd;
     const quality = await runMinigame(this, a, action, opts);
     // 🧦 Ses jambes brossées : le conseil, une fois, en message après le mini-jeu (le temps de le lire ; dans le jeu,
     // la ligne d'aide le remplaçait en quelques secondes)
     const tip = !!opts.out?.legMudTip;
     if (tip) g.profile.legMudTip = true;
     const done = quality === null ? null : g.care(a, action, quality, opts.out ?? {}); // (fermé avec ✕ : rien n'est appliqué)
+    if (done?.ok) g.wellDone?.(wd); // ⭐ payée seulement APRÈS le soin réussi (et seulement s'il y a eu des étoiles)
     if (tip) this.toast(`🧦 ${t('mg_pansage_legmud_tip')}`, 9000, { now: true }); // (en selle au téléphone : pas en file, coupé à 5 s)
     return done;
   }
@@ -1456,6 +1463,12 @@ export class UI {
   openJournal(tab) { panels.openJournal(this, tab); this.game?.emit('panel', 'journal'); }
   openCareers() { openCareers(this); } // 💼 métiers (src/ui/careers.js)
   openJobs() { panels.openJobs(this); }
+
+  /**
+   * 🎉 Un moment fêté (src/ui/piggy.js celebrate) : opts { word, big, from }. Le mot part de l'endroit touché et
+   * accompagne jusqu'au compteur les pièces gagnées juste avant ; sans pièces : le mot seul.
+   */
+  celebrate(opts) { celebrate(this, opts); }
   openSettings() { panels.openSettings(this); this.game?.emit('panel', 'settings'); }
   openFarm() { panels.openFarm(this); this.game?.emit('panel', 'farm'); }
   openTack(opts) { panels.openTack(this, opts); } // sellerie : catalogue (src/ui/tack.js)
@@ -1475,12 +1488,13 @@ export class UI {
   /**
    * Point d'entrée de chaque corvée (curer un box, balayer, ranger…) : lance son mini-jeu
    * (src/ui/minigames/chores.js) et renvoie la qualité (0,4 à 1), ou null si on abandonne
-   * (Interiors.chore n'applique alors rien). Une corvée sans mini-jeu renvoie 1.
+   * (Interiors.chore n'applique alors rien). Une corvée sans mini-jeu renvoie 1. wellDone : Game.wellDoneFor (le cadre y
+   * écrit les étoiles de sa carte de fin).
    */
-  async choreWithGame(kind, target = null) {
+  async choreWithGame(kind, target = null, wellDone = null) {
     const g = this.game;
     if (g?.blockedByPause()) return null;
-    const o = {};
+    const o = { wellDone }; // (⭐ la prime du travail bien fait : seulement Interiors.chore la donne, src/sim/wellDone.js)
     // Dans un box : son nom en sous-titre, et le cheval qui y habite regarde faire.
     if ((kind === 'muck' || kind === 'straw') && Number.isInteger(target) && g?.interiors) {
       o.subtitle = g.interiors.boxLabel(target);

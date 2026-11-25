@@ -20,6 +20,7 @@ import {
   stallDirt, houseDirt, penDirt, hasUpgrade,
 } from '../sim/facilities.js';
 import { droppingsAt } from '../sim/droppings.js';
+import { choreKey } from '../sim/wellDone.js'; // ⭐ la prime du travail bien fait (une par corvée et par box)
 import { addStat } from '../sim/profile.js';
 import { SPECIES } from '../sim/species.js';
 import { isNight } from '../sim/time.js';
@@ -435,7 +436,9 @@ export class Interiors {
       g.ui.toast(t(`fac_r_${pre.reason}`));
       return pre;
     }
-    const quality = await g.ui.choreWithGame(kind, target);
+    // ⭐ La prime du travail bien fait (src/sim/wellDone.js) : une par corvée et par box chaque jour, payée après.
+    const wd = g.wellDoneFor?.(choreKey(kind, target, g.profile.place)) ?? null;
+    const quality = await g.ui.choreWithGame(kind, target, wd);
     if (quality === null || quality === false || !g.profile) return null;
     const r = doChore(g.profile, kind, target);
     if (!r.ok) {
@@ -459,6 +462,7 @@ export class Interiors {
     g.ui.toast(t(`fac_done_${kind}`), 3500);
     this.refreshVisuals();
     g.ui.refresh();
+    g.wellDone?.(wd); // ⭐ après la corvée réussie (les étoiles de sa carte de fin ; sans mini-jeu : rien)
     return r;
   }
 

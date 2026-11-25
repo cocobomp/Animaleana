@@ -989,6 +989,19 @@ const HANG_Y = { fer: [0.6, 2.7], licol: [0.9, 2.3], cloche: [0.6, 2.5], nichoir
 
 // ---------------------------------------------------------------- les rayons sur l'animal, sans tout tester
 
+/** Le temps que la vie des gros plans peut prendre à chaque image (ms) : le reste attend l'image suivante. */
+const BUDGET = 1.5;
+let clockFn = null;
+const msNow = () => clockFn?.() ?? globalThis.performance?.now?.() ?? Date.now();
+
+/**
+ * L'horloge qui borne le travail de chaque image (tests) : fn() → des millisecondes ; null, la vraie. Une horloge
+ * arrêtée (() => 0) : tout se fait d'un coup, les parties jouées sont les mêmes d'une machine à l'autre.
+ */
+export function extrasClock(fn = null) {
+  clockFn = fn;
+}
+
 /** Le rayon (o, d : direction unitaire) touche-t-il le triangle t ? Sa distance (des deux côtés), ou Infinity. */
 function triHit(P, I, t, o, d) {
   const a = I[3 * t] * 3;
@@ -1184,7 +1197,10 @@ function overlap(a, b, m = 0) {
  * dispose() }. Les objets attendent la caméra posée pour choisir leur place (dans l'image, pas devant l'animal ni sur
  * ce qu'on lui tend), puis apparaissent doucement. Quand le jeu recadre, chacun est revu : ce qui n'aura plus sa place
  * s'efface avant que la caméra arrive, ce qui passerait devant l'animal disparaît tout de suite, et une fois la caméra
- * posée, ce qui manque reprend une place dans la nouvelle image (ce qui est bien placé ne bouge pas).
+ * posée, ce qui manque reprend une place dans la nouvelle image (ce qui est bien placé ne bouge pas). Sur un téléphone,
+ * rien de tout cela ne doit faire sauter une image : la recherche des places avance image après image, jamais plus de
+ * BUDGET ms par image ; la copie figée de l'animal n'est refaite que s'il a bougé ; les rayons sur lui ne testent que
+ * les triangles qu'ils traversent (gridOf) ; ce que voient les rayons sur le décor est gardé pour la même caméra.
  *
  * life (pickLife) : le petit plus du lieu, essayé dans l'ordre tant qu'il y a moins de min choses à voir (un gros plan
  * laisse peu de sol dans l'image) : des choses accrochées au mur ou à un poteau, un vol d'oiseaux qui traverse le ciel
@@ -1312,19 +1328,19 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
 
   /**
    * Ce qui ne change pas pendant une série d'essais : la boîte de l'animal et son rectangle dans l'image, sa tête, ce
-   * qu'on lui tend. Refait la copie figée de l'animal pour les rayons (au plus deux fois par seconde : elle coûte).
+   * qu'on lui tend. Ne refait pas la copie figée de l'animal (freshen s'en charge, seulement s'il le faut) : si elle a
+   * pris du retard, sa tête où elle est maintenant (son repère) compte aussi dans sa boîte.
    */
   function survey(st) {
     st.camera.updateMatrixWorld?.();
     decor.group.updateMatrixWorld(true);
-    const P = st.proxy;
-    if (P?.bake && (st.time ?? 0) - (P.at ?? -Infinity) > 0.5) {
-      P.at = st.time ?? 0;
-      P.bake();
-    }
     box = freshBox(st);
-    const S = { obs: obstacles(st), arect: st.view && !anywhere ? rectOf(st, box) : null, hc: null, hr: 0, head: null, hm: 0 };
     const hd = st.live?.('head');
+    if (hd && st.proxy?.bake && stale(st)) {
+      const R = 0.25 * Math.max(0.25, box.max.y - box.min.y);
+      box.union(new THREE.Box3(hd.clone().addScalar(-R), hd.clone().addScalar(R)));
+    }
+    const S = { obs: obstacles(st), arect: st.view && !anywhere ? rectOf(st, box) : null, hc: null, hr: 0, head: null, hm: 0 };
     if (hd && st.view && !anywhere) {
       const H = Math.max(0.25, box.max.y - box.min.y);
       S.hc = st.project(hd);
@@ -1378,7 +1394,66 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     return Math.hypot(dx, dy) < S.hr * (k < 1 ? 0.85 : k > 1 ? 1.15 : 1);
   }
 
-  // ---------------------------------------------------------------- les rayons sur l'animal
+  // ---------------------------------------------------------------- la copie figée de l'animal, seulement s'il le faut
+
+  /** Ce que la vie des gros plans a coûté (tests) : essais de pose, copies figées, rayons sur l'animal. */
+  const stats = { place: 0, bake: 0, rays: 0 };
+  const verOf = (P) => P?.geo?.attributes?.position?.version ?? -1;
+  let probes = null;
+  let staleAt = { t: -1, ver: -2, v: true };
+  const _pr = V();
+  /**
+   * La copie figée a-t-elle pris du retard sur l'animal (plus de 2 cm, moins pour un petit animal) ? Une soixantaine de
+   * ses sommets, répartis sur tout le corps, refaits avec ses os du moment : quelques centièmes de milliseconde, au
+   * lieu de toute la copie. Une fois par image.
+   */
+  function stale(st) {
+    const P = st.proxy;
+    if (!P?.parts || !P.pos) return true;
+    if (staleAt.t === clock && staleAt.ver === verOf(P)) return staleAt.v;
+    if (!probes) {
+      probes = [];
+      const every = Math.max(1, Math.floor(P.pos.length / 3 / 64));
+      let o = 0;
+      for (const { m, list } of P.parts) for (const v of list) if (o++ % every === 0) probes.push({ m, v, o: o - 1 });
+    }
+    const H = box ? box.max.y - box.min.y : 1;
+    const tol = Math.min(0.02, 0.06 * H);
+    let v = false;
+    for (const { m, v: k, o } of probes) {
+      _pr.fromBufferAttribute(m.geometry.attributes.position, k);
+      if (m.isSkinnedMesh) m.applyBoneTransform(k, _pr);
+      _pr.applyMatrix4(m.matrixWorld);
+      if ((_pr.x - P.pos[3 * o]) ** 2 + (_pr.y - P.pos[3 * o + 1]) ** 2 + (_pr.z - P.pos[3 * o + 2]) ** 2 > tol * tol) {
+        v = true;
+        break;
+      }
+    }
+    staleAt = { t: clock, ver: verOf(P), v };
+    return v;
+  }
+
+  /**
+   * Refait la copie figée de l'animal si elle a pris du retard — au plus une fois par seconde : elle coûte des
+   * millisecondes sur un téléphone. S'il ne bouge pas, jamais. Refaite par le jeu (le doigt sur lui) : gardée.
+   * true si elle vient d'être refaite (le reste attend alors l'image suivante, si possible).
+   */
+  function freshen(st) {
+    const P = st.proxy;
+    if (!P?.bake || (P.parts && !stale(st))) return false;
+    if (P.parts && (st.time ?? 0) - (P.at ?? -Infinity) < 1) return false;
+    P.at = st.time ?? 0;
+    P.bake();
+    stats.bake++;
+    worked = true;
+    return true;
+  }
+
+  /** Refaire la copie figée coûterait-il maintenant (il a bougé, et la dernière date d'au moins une seconde) ? */
+  function wantsBake(st) {
+    const P = st.proxy;
+    return !!P?.bake && (!P.parts || (stale(st) && (st.time ?? 0) - (P.at ?? -Infinity) >= 1));
+  }
 
   let grid = null;
   let gridVer = -2;
@@ -1386,21 +1461,38 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   /** Le premier point de l'animal (sa copie figée) sur le rayon de la caméra vers q : sa distance, ou Infinity. */
   function coatHit(st, q) {
     const P = st.proxy;
+    if (!P.parts) freshen(st);
     const cam = st.camera.position;
     _dir.subVectors(q, cam);
     const d = _dir.length();
     if (d < 1e-6) return Infinity;
     _dir.divideScalar(d);
-    // (refaite à chaque nouvelle copie figée : sa version)
-    const ver = P.geo?.attributes?.position?.version ?? -1;
-    if (ver !== gridVer) {
-      gridVer = ver;
+    if (verOf(P) !== gridVer) {
+      gridVer = verOf(P);
       grid = gridOf(P);
+      worked = true;
     }
+    stats.rays++;
     if (grid) return gridHit(grid, cam, _dir);
     const h = P.hit(new THREE.Ray(cam.clone(), _dir.clone()), -9, 1e9);
     return h ? h.point.distanceTo(cam) : Infinity;
   }
+
+  /** La caméra, au millimètre : ce qu'elle voit du décor ne change pas tant qu'elle ne bouge pas. */
+  function camAt(st) {
+    const c = st.camera.position;
+    return `${c.x.toFixed(3)},${c.y.toFixed(3)},${c.z.toFixed(3)}`;
+  }
+  const memo = new Map();
+  /** Ce que des rayons sur le décor ont répondu pour cette place et cette caméra, gardé (ils ne changent pas). */
+  function remember(key, fn) {
+    if (memo.has(key)) return memo.get(key);
+    if (memo.size > 4000) memo.clear();
+    const v = fn();
+    memo.set(key, v);
+    return v;
+  }
+  const keyOf = (q) => `${q.x.toFixed(3)},${q.y.toFixed(3)},${q.z.toFixed(3)}`;
 
   // ---------------------------------------------------------------- le mur, ce qu'on voit
 
@@ -1425,14 +1517,16 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const d = q.distanceTo(cam);
     if (st.proxy?.hit && coatHit(st, q) < d - 0.05) return false;
     if (!walls) return true;
-    rc.set(cam, q.clone().sub(cam).normalize());
-    rc.near = 0.05;
-    rc.far = d - 0.05;
-    for (const o of solidList()) {
-      if (!o.parent || !shown(o)) continue;
-      if (rc.intersectObject(o, false).length) return false;
-    }
-    return true;
+    return remember(`vu|${camAt(st)}|${keyOf(q)}`, () => {
+      rc.set(cam, q.clone().sub(cam).normalize());
+      rc.near = 0.05;
+      rc.far = d - 0.05;
+      for (const o of solidList()) {
+        if (!o.parent || !shown(o)) continue;
+        if (rc.intersectObject(o, false).length) return false;
+      }
+      return true;
+    });
   }
 
   const nearWall = new Map();
@@ -1463,19 +1557,21 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
 
   /** Derrière tout l'objet accroché, le mur est-il là, nu (ni fenêtre, ni poteau, ni plaque, ni rien d'autre dessus) ? */
   function bare(st, p, rad, h, A) {
-    const cam = st.camera.position;
-    const list = wallList(A).filter((o) => o.parent && shown(o));
-    for (const [du, dy] of [[0, 0.5], [-1, 0.06], [1, 0.06], [-1, 0.94], [1, 0.94]]) {
-      const q = A.axis === 'z' ? tmp.set(p.x + du * rad, p.y + dy * h, A.at) : tmp.set(A.at, p.y + dy * h, p.z + du * rad);
-      const dir = q.clone().sub(cam);
-      const d = dir.length();
-      rc.set(cam, dir.normalize());
-      rc.near = 0.05;
-      rc.far = d + 0.2;
-      const hit = rc.intersectObjects(list, false)[0];
-      if (!hit || Math.abs(hit.distance - d) > 0.03) return false;
-    }
-    return true;
+    return remember(`nu|${camAt(st)}|${keyOf(p)}|${rad}|${h}|${decor.hangAreas.indexOf(A)}`, () => {
+      const cam = st.camera.position;
+      const list = wallList(A).filter((o) => o.parent && shown(o));
+      for (const [du, dy] of [[0, 0.5], [-1, 0.06], [1, 0.06], [-1, 0.94], [1, 0.94]]) {
+        const q = A.axis === 'z' ? tmp.set(p.x + du * rad, p.y + dy * h, A.at) : tmp.set(A.at, p.y + dy * h, p.z + du * rad);
+        const dir = q.clone().sub(cam);
+        const d = dir.length();
+        rc.set(cam, dir.normalize());
+        rc.near = 0.05;
+        rc.far = d + 0.2;
+        const hit = rc.intersectObjects(list, false)[0];
+        if (!hit || Math.abs(hit.distance - d) > 0.03) return false;
+      }
+      return true;
+    });
   }
 
   /**
@@ -1551,15 +1647,24 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     if (box && over && p.z + rad > box.min.z + 0.1 * (box.max.z - box.min.z)) return no('devant');
     // (ne cache jamais l'animal : entre la caméra et chacun de ses points, pas de peau plus loin derrière l'objet ;
     // inutile s'il n'est pas sur lui dans l'image, ou tout entier derrière lui)
-    // (les rayons coûtent : un nombre d'essais compté à chaque fois qu'on pose, le reste attend son tour — place())
-    if (placing) budget--;
     const cam = st.camera.position;
     const behind = box && cam.z > box.max.z && p.z + rad < box.min.z;
     if (st.proxy?.hit && over && !behind) {
-      // (le contour de l'objet, à plusieurs hauteurs : un petit sapin ne déborde pas sur son poitrail)
-      const ring = [];
-      for (const k of [0.25, 0.6, 0.9]) for (const [dx, dz] of [[rad, 0], [-rad, 0], [0, rad], [0, -rad]]) ring.push(p.clone().add(V(dx * (1.1 - k * 0.5), h * k, dz * (1.1 - k * 0.5))));
-      for (const q of [...pts, ...ring]) if (coatHit(st, q) > q.distanceTo(cam) - 0.02) return no('devant');
+      // (sa place déjà vérifiée pendant que la caméra bouge : si ni lui ni la caméra n'ont bougé depuis, la même
+      // réponse, sans rayon ; s'il a bougé, sa copie figée refaite d'abord)
+      const mine = mode === 'safe' && p === it.at;
+      // (copie refaite à l'instant : les rayons à l'image suivante, l'une et l'autre coûtent sur un téléphone)
+      if (mine && freshen(st)) again = true;
+      const key = mine ? `${verOf(st.proxy)}|${camAt(st)}` : null;
+      if (mine && again) {
+        // (rien : la vérification revient à l'image suivante)
+      } else if (!mine || it.safe !== key) {
+        // (le contour de l'objet, à plusieurs hauteurs : un petit sapin ne déborde pas sur son poitrail)
+        const ring = [];
+        for (const k of [0.25, 0.6, 0.9]) for (const [dx, dz] of [[rad, 0], [-rad, 0], [0, rad], [0, -rad]]) ring.push(p.clone().add(V(dx * (1.1 - k * 0.5), h * k, dz * (1.1 - k * 0.5))));
+        for (const q of [...pts, ...ring]) if (coatHit(st, q) > q.distanceTo(cam) - 0.02) return no('devant');
+        if (mine && !stale(st)) it.safe = key;
+      }
     }
     if (mode === 'safe') return true;
     // (accroché à un pan de mur : le mur est là, nu, derrière lui — aussi aux places fixes du décor sur ce mur : un
@@ -1611,14 +1716,18 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
    */
   function wallInView(st) {
     const v = st.view;
-    if (!v || !st.rayAt || !decor.hangAreas?.length) return [];
-    const out = [];
+    const areas = decor.hangAreas ?? [];
+    if (!v || !st.rayAt || !areas.length) return [];
+    const open = areas.map((A) => !A.wall || shown(A.wall));
+    // (un rayon par point de l'image, pour tous les pans à la fois ; les places rangées pan par pan)
+    const per = areas.map(() => []);
     const keys = new Set();
-    for (const A of decor.hangAreas) {
-      if (A.wall && !shown(A.wall)) continue;
-      for (let gy = 0.04; gy <= 0.96; gy += 0.05) {
-        for (let gx = 0.04; gx <= 0.96; gx += 0.05) {
-          const ray = st.rayAt(v.x0 + gx * (v.x1 - v.x0), v.y0 + gy * (v.y1 - v.y0));
+    for (let gy = 0.04; gy <= 0.96; gy += 0.05) {
+      for (let gx = 0.04; gx <= 0.96; gx += 0.05) {
+        const ray = st.rayAt(v.x0 + gx * (v.x1 - v.x0), v.y0 + gy * (v.y1 - v.y0));
+        for (const [n, A] of areas.entries()) {
+          if (!open[n]) continue;
+          const out = per[n];
           const dk = A.axis === 'z' ? ray.direction.z : ray.direction.x;
           const ok = A.axis === 'z' ? ray.origin.z : ray.origin.x;
           if (Math.abs(dk) < 1e-4) continue;
@@ -1631,7 +1740,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
           // (sur une grille de 10 cm : la même place d'une fois à l'autre)
           const us = Math.round(u * 10) / 10;
           const ys = Math.round(p.y * 10) / 10;
-          const key = `${decor.hangAreas.indexOf(A)}|${us}|${ys}`;
+          const key = `${n}|${us}|${ys}`;
           if (keys.has(key)) continue;
           keys.add(key);
           // (p : le milieu de l'objet ; placeExtras le descend de sa demi-hauteur, à la bonne hauteur pour lui)
@@ -1640,7 +1749,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
         }
       }
     }
-    return out;
+    return per.flat();
   }
 
   // ---------------------------------------------------------------- au loin : derrière lui, rien ne le cache
@@ -1699,47 +1808,60 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     poulailler: [V(0, 0.55, 0), V(0.9, 0.3, 0.5), V(-0.6, 0.3, 0)],
   };
 
-  function farPlace(st, it, S, taken = []) {
+  /**
+   * Une place au loin, ou un trajet dans le ciel : true (trouvé), false (rien). J : l'essai de pose en cours — le
+   * rouge-gorge et les poules reprennent là où le temps de l'image s'est arrêté (null : la suite à l'image suivante).
+   */
+  function farPlace(st, it, S, taken = [], J = null) {
     const v = st.view;
     if (!v || !st.rayAt || !box) return false;
     const W = v.x1 - v.x0;
     const H = v.y1 - v.y0;
-    const r = seeded(hashSeed(`${seed}|${it.kind}|loin|${it.tries = (it.tries ?? 0) + 1}`));
     if (it.kind === 'poulailler' || it.kind === 'rougegorge') {
       // (les poules : loin dans le pré ; le rouge-gorge : sur l'herbe juste derrière lui, il sautille et picore — ou
       // dans la paille du box, de l'étable : l'hiver, il y entre)
       const robin = it.kind === 'rougegorge';
       if (!decor.outdoor && !robin) return false;
-      const A = decor.outdoor ? null : decor.area;
-      const [zn, zf] = robin ? [0.3, 2.2] : [2.2, 7.5];
-      const gy0 = decor.area?.y ?? 0;
-      const cands = [];
-      for (let gy = 0.12; gy <= 0.8; gy += 0.05) {
-        for (let gx = 0.08; gx <= 0.92; gx += 0.06) {
-          const ray = st.rayAt(v.x0 + gx * W, v.y0 + gy * H);
-          if (ray.direction.y > -1e-3) continue;
-          const p = ray.origin.clone().addScaledVector(ray.direction, (gy0 - ray.origin.y) / ray.direction.y);
-          if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
-          if (A && (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1)) continue;
-          cands.push({ p, v: r() });
+      let C = J && it.cur?.J === J ? it.cur : null;
+      if (!C) {
+        const r = seeded(hashSeed(`${seed}|${it.kind}|loin|${it.tries = (it.tries ?? 0) + 1}`));
+        const A = decor.outdoor ? null : decor.area;
+        const [zn, zf] = robin ? [0.3, 2.2] : [2.2, 7.5];
+        const gy0 = decor.area?.y ?? 0;
+        const cands = [];
+        for (let gy = 0.12; gy <= 0.8; gy += 0.05) {
+          for (let gx = 0.08; gx <= 0.92; gx += 0.06) {
+            const ray = st.rayAt(v.x0 + gx * W, v.y0 + gy * H);
+            if (ray.direction.y > -1e-3) continue;
+            const p = ray.origin.clone().addScaledVector(ray.direction, (gy0 - ray.origin.y) / ray.direction.y);
+            if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
+            if (A && (p.x < A.x0 || p.x > A.x1 || p.z < A.z0 || p.z > A.z1)) continue;
+            cands.push({ p, v: r() });
+          }
         }
+        cands.sort((a, b) => a.v - b.v);
+        C = { J, cands, n: 0, r };
+        if (J) it.cur = C;
       }
-      cands.sort((a, b) => a.v - b.v);
-      let n = 0;
-      for (const { p } of cands) {
-        if (++n > 80) break;
+      for (; C.n < Math.min(80, C.cands.length); C.n++) {
+        if (J && late()) return null;
+        worked = true;
+        const p = C.cands[C.n].p;
         // (pas sur ce qui est déjà posé : la botte de paille, l'oiseau du jour descendu dans la paille)
         const me = spaceOf(it, p);
         if (taken.some((q) => clash(me, q))) continue;
         if (!farSpotOk(st, it, p, S, FAR_EXT[it.kind])) continue;
         it.at = p;
         it.m.position.copy(p);
-        it.m.rotation.y = (r() - 0.5) * 1.5;
+        it.m.rotation.y = (C.r() - 0.5) * 1.5;
+        it.cur = null;
         return true;
       }
+      it.cur = null;
       it.why.loin = (it.why.loin ?? 0) + 1;
       return false;
     }
+    const r = seeded(hashSeed(`${seed}|${it.kind}|loin|${it.tries = (it.tries ?? 0) + 1}`));
     // un vol d'oiseaux (dehors), une hirondelle (dedans) : d'un bord de l'image à l'autre, loin derrière lui
     const out = !!decor.outdoor;
     const bfly = it.kind === 'papillons';
@@ -1798,86 +1920,141 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     return it.order;
   }
 
-  let budget = 0;
+  // (le temps de cette image : à partir de begun, jusqu'à until ; worked : quelque chose a déjà été fait)
+  let begun = 0;
+  let until = Infinity;
+  let worked = false;
+  /** Le temps de cette image est-il passé ? Pas avant le premier essai : sur un téléphone lent, rien n'avancerait. */
+  const late = () => worked && msNow() > until;
+  /** Un gros morceau (plus d'une demi-milliseconde) peut-il commencer : rien encore, ou presque, dans cette image ? */
+  const roomy = () => !worked || msNow() - begun < BUDGET * 0.2;
+  // (la vérification pendant que la caméra bouge reprend à l'image suivante : la copie figée vient d'être refaite)
+  let again = false;
+
+  let job = null;
   /**
-   * Pose ce qui n'a pas encore de place (ou plus), sans toucher à ce qui est bien placé. tries : combien de places
-   * peuvent aller jusqu'aux rayons sur le décor (le téléphone ne doit pas s'arrêter de dessiner).
+   * Un essai de pose pour un cadrage : pose, où va la caméra ; now, où elle est encore (ce qui est posé ne doit pas y
+   * gêner non plus). Il avance image après image, jamais plus de BUDGET ms par image (stepJob), puis s'arrête.
    */
-  function place(st, tries = 24, now = null) {
+  function startJob(pose, now = null) {
     tried = true;
-    budget = tries;
-    const S = survey(st);
-    // (posé pour la caméra qui arrive : il ne doit pas non plus gêner là où elle est encore)
-    let Snow = null;
-    const safeNow = (it, p, s) => {
-      if (!now?.target) return true;
-      return atPose(st, now, () => {
-        Snow ??= survey(st);
-        return fits(st, it, p, [], Snow, s, 'safe');
-      });
-    };
-    const live = items.filter((i) => i.at && !i.fade);
-    // (ce qui s'en va en rapetissant est encore là : sa place n'est libre qu'une fois parti)
-    const taken = items.filter((i) => i.at && !i.path).map((i) => spaceOf(i, i.at, i.spot));
-    let count = live.length;
-    const seenFloor = anywhere ? [] : floorInView(st);
-    const seenWall = anywhere ? [] : wallInView(st);
-    for (const it of items) {
-      if (it.at || it.cool > clock) continue;
-      // (le petit plus : seulement s'il manque encore de quoi voir)
-      if (it.life && count >= min) continue;
-      if (it.where === 'far') {
-        if (farPlace(st, it, S, taken)) {
-          count++;
-          if (!it.path) {
-            appear(it);
-            taken.push(spaceOf(it, it.at));
-          }
-        }
-        continue;
-      }
-      // (là où le dernier essai s'est arrêté faute de temps, pour le même cadrage : pas toujours les mêmes places)
-      const order = orderOf(it, seenFloor, seenWall);
-      const from = it.resume?.pose === placedFor && it.resume.n === order.length ? it.resume.k : 0;
-      it.resume = null;
-      for (let j = 0; j < order.length; j++) {
-        const k = (from + j) % order.length;
-        const s = order[k];
-        if (budget <= 0) {
-          it.resume = { pose: placedFor, n: order.length, k };
-          break;
-        }
-        const p = V(...s.p);
-        const [, h] = SIZE[it.kind] ?? [0.2, 0.3];
-        if (s.area) {
-          // (sur un pan de mur : centré sur le point vu, à une hauteur qui lui va — plus bas près d'un petit animal, une
-          // cloche à hauteur de mouton ; un tableau jamais au ras du sol)
-          const [lo0, hi] = HANG_Y[it.kind] ?? [0.5, 2.5];
-          const lo = it.kind === 'cadre' ? lo0 : Math.min(lo0, 0.45 * (box ? box.max.y - box.min.y : 2));
-          const ya = Math.max(s.area.y0, lo);
-          const yb = Math.min(s.area.y1 - h, hi);
-          if (yb < ya) continue;
-          p.y = Math.min(yb, Math.max(ya, p.y - h / 2));
-        }
-        if (it.where === 'air') p.y += 0.35 + 0.25 * Math.min(1.5, box ? box.max.y : 1);
-        // (appuyée contre le mur : le pied un peu en avant, le haut contre le mur)
-        if (it.where === 'lean') p.add(V(Math.sin(s.face ?? 0) * 0.3, 0, Math.cos(s.face ?? 0) * 0.3));
-        if (!fits(st, it, p, taken, S, s) || !safeNow(it, p, s)) continue;
-        it.at = p;
-        it.spot = s;
-        it.m.position.copy(p);
-        // (face à nous, avec un petit angle ; posé sur une lisse, le long de celle-ci ; accroché : face au dehors du mur)
-        const r = seeded(hashSeed(`${it.kind}|${s.p.join(',')}`));
-        it.m.rotation.y = s.face ?? (it.where === 'lean' ? (r() - 0.5) * 0.3 : it.kind === 'brouette' || it.kind === 'botte' ? (r() - 0.5) * 0.6 : (r() - 0.5) * 1.2);
-        if (it.kind === 'chat' || it.kind === 'oiseau' || it.kind === 'mouette') it.m.rotation.y = (s.face ?? 0) + (r() - 0.5) * 0.5 + (it.kind !== 'chat' ? Math.PI / 2 : 0);
-        if (it.where === 'hang') it.m.rotation.y = s.face ?? 0;
-        appear(it);
-        taken.push(spaceOf(it, p, s));
-        count++;
-        break;
-      }
+    job = { pose, now, S: null, Snow: null, floor: null, wall: null, taken: null, count: 0, put: 0 };
+    stats.place++;
+  }
+
+  /**
+   * Avance l'essai de pose : ce qui n'a pas encore de place (ou plus) en cherche une, sans toucher à ce qui est bien
+   * placé. true quand tout a été essayé.
+   */
+  function stepJob(st) {
+    const J = job;
+    // (les gros morceaux — la copie figée de l'animal s'il a bougé, ses triangles rangés pour les rayons, les places
+    // au mur — chacun en début d'image, sinon à l'image suivante ; puis les places, tant qu'il reste du temps)
+    if (!J.S) {
+      if (!anywhere && wantsBake(st) && !roomy()) return false;
+      if (!anywhere) freshen(st);
+      J.S = survey(st);
+      // (ce qui s'en va en rapetissant est encore là : sa place n'est libre qu'une fois parti)
+      J.taken = items.filter((i) => i.at && !i.path).map((i) => spaceOf(i, i.at, i.spot));
+      J.count = items.filter((i) => i.at && !i.fade).length;
+      worked = true;
     }
+    if (!anywhere && st.view && st.proxy?.pos && verOf(st.proxy) !== gridVer) {
+      if (!roomy()) return false;
+      gridVer = verOf(st.proxy);
+      grid = gridOf(st.proxy);
+      worked = true;
+    }
+    if (!J.floor) {
+      if (late()) return false;
+      J.floor = anywhere ? [] : floorInView(st);
+      worked = true;
+    }
+    if (!J.wall) {
+      if (!anywhere && !roomy()) return false;
+      J.wall = anywhere ? [] : wallInView(st);
+      worked = true;
+    }
+    for (const it of items) {
+      if (it.at || it.cool > clock || it.job === J) continue;
+      // (le petit plus : seulement s'il manque encore de quoi voir)
+      if (it.life && J.count >= min) continue;
+      const r = it.where === 'far' ? farPlace(st, it, J.S, J.taken, J) : spotPlace(st, it, J);
+      if (r === null) return false;
+      it.job = J;
+      if (!r) continue;
+      if (it.where === 'far' && !it.path) appear(it);
+      if (!it.path) J.taken.push(spaceOf(it, it.at, it.spot));
+      J.count++;
+      J.put++;
+    }
+    return true;
+  }
+
+  /**
+   * L'essai est fini : rien de posé, le prochain attend de plus en plus (2 s, 4 s, 8 s) ; quelque chose, 2 s. Sa tête,
+   * où elle était : si elle bouge beaucoup, une place qu'elle prenait a pu se libérer (watch).
+   */
+  function endJob(st) {
+    const put = job.put;
+    job = null;
     listPlaced();
+    if (put) wait = 2;
+    next = clock + wait;
+    if (!put) wait = Math.min(8, wait * 2);
+    headAt = st?.live?.('head') ?? null;
+  }
+
+  /** Posé pour la caméra qui arrive : il ne doit pas non plus gêner là où elle est encore. */
+  function safeNow(st, it, p, s, J) {
+    if (!J.now?.target) return true;
+    return atPose(st, J.now, () => {
+      J.Snow ??= survey(st);
+      return fits(st, it, p, [], J.Snow, s, 'safe');
+    });
+  }
+
+  /**
+   * Une place pour cet objet, aux places de l'image puis à celles du décor, en reprenant là où le temps de l'image
+   * précédente s'est arrêté : true (posé), false (aucune), null (la suite à l'image suivante).
+   */
+  function spotPlace(st, it, J) {
+    if (it.cur?.J !== J) it.cur = { J, k: 0, order: orderOf(it, J.floor, J.wall) };
+    const C = it.cur;
+    for (; C.k < C.order.length; C.k++) {
+      if (late()) return null;
+      worked = true;
+      const s = C.order[C.k];
+      const p = V(...s.p);
+      const [, h] = SIZE[it.kind] ?? [0.2, 0.3];
+      if (s.area) {
+        // (sur un pan de mur : centré sur le point vu, à une hauteur qui lui va — plus bas près d'un petit animal, une
+        // cloche à hauteur de mouton ; un tableau jamais au ras du sol)
+        const [lo0, hi] = HANG_Y[it.kind] ?? [0.5, 2.5];
+        const lo = it.kind === 'cadre' ? lo0 : Math.min(lo0, 0.45 * (box ? box.max.y - box.min.y : 2));
+        const ya = Math.max(s.area.y0, lo);
+        const yb = Math.min(s.area.y1 - h, hi);
+        if (yb < ya) continue;
+        p.y = Math.min(yb, Math.max(ya, p.y - h / 2));
+      }
+      if (it.where === 'air') p.y += 0.35 + 0.25 * Math.min(1.5, box ? box.max.y : 1);
+      // (appuyée contre le mur : le pied un peu en avant, le haut contre le mur)
+      if (it.where === 'lean') p.add(V(Math.sin(s.face ?? 0) * 0.3, 0, Math.cos(s.face ?? 0) * 0.3));
+      if (!fits(st, it, p, J.taken, J.S, s) || !safeNow(st, it, p, s, J)) continue;
+      it.at = p;
+      it.spot = s;
+      it.m.position.copy(p);
+      // (face à nous, avec un petit angle ; posé sur une lisse, le long de celle-ci ; accroché : face au dehors du mur)
+      const r = seeded(hashSeed(`${it.kind}|${s.p.join(',')}`));
+      it.m.rotation.y = s.face ?? (it.where === 'lean' ? (r() - 0.5) * 0.3 : it.kind === 'brouette' || it.kind === 'botte' ? (r() - 0.5) * 0.6 : (r() - 0.5) * 1.2);
+      if (it.kind === 'chat' || it.kind === 'oiseau' || it.kind === 'mouette') it.m.rotation.y = (s.face ?? 0) + (r() - 0.5) * 0.5 + (it.kind !== 'chat' ? Math.PI / 2 : 0);
+      if (it.where === 'hang') it.m.rotation.y = s.face ?? 0;
+      appear(it);
+      it.cur = null;
+      return true;
+    }
+    it.cur = null;
+    return false;
   }
 
   /** Il apparaît doucement à sa place. */
@@ -1901,6 +2078,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   function gone(it) {
     it.at = null;
     it.spot = null;
+    it.safe = null;
     it.fade = 0;
     it.m.visible = false;
     dirty = true;
@@ -1912,7 +2090,11 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     for (const it of items) if (it.at && !it.fade) placed.push(it.kind);
   }
 
-  /** Les objets posés ont-ils toujours leur place ? Ceux qui ne l'ont plus s'en vont (mode : voir fits). */
+  /**
+   * Les objets posés ont-ils toujours leur place ? Ceux qui ne l'ont plus s'en vont (mode : voir fits). La copie figée
+   * de l'animal n'est refaite que si un objet posé sur lui dans l'image en a besoin, et qu'il a bougé (fits) : la
+   * caméra qui bouge ne change rien à sa pose.
+   */
   function recheck(st, mode) {
     const S = survey(st);
     for (const it of items) {
@@ -1964,10 +2146,15 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   let placedFor = null;
   let lastTry = 0;
   let dirty = false;
+  // (sans rien de neuf dans l'image : le prochain essai de pose, pas avant next ; puis wait, de plus en plus long)
+  let next = 0;
+  let wait = 2;
+  let headAt = null;
   /**
    * Toutes les 0,2 s : le cadrage qui vient (ce qui n'y aura plus sa place s'efface déjà) ; la caméra en chemin et
-   * l'animal qui bouge (ce qui passerait devant lui disparaît tout de suite) ; la caméra arrivée, ou presque — une
-   * caméra qui suit sa tête ne se pose jamais tout à fait — : ce qui manque reprend une place, là où elle va.
+   * l'animal qui bouge (ce qui passerait devant lui disparaît tout de suite) ; et ce qui manque reprend une place, là
+   * où va la caméra : seulement pour un nouveau cadrage ou quand un objet s'en est allé, sinon de moins en moins
+   * souvent (la tête a bougé, une place a pu se libérer) — un essai qui ne pose rien ne se refait pas sans fin.
    */
   function watch(dt, st) {
     since += dt;
@@ -1978,22 +2165,42 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       goalSeen = goal;
       atPose(st, goal, () => recheck(st, 'keep'));
     }
+    again = false;
     recheck(st, 'safe');
+    if (again) since = 0.2;
+    // (fresh : un autre cadrage ; big : tout autre — de sa tête à son sabot, ou le téléphone tourné)
+    const fresh = gap(goal, placedFor) > 0.1;
+    const big = gap(goal, placedFor) > 0.4;
+    // (un essai en cours pour ce cadrage : il continue, image après image)
+    if (job && !fresh && !dirty) return;
     const live = items.filter((i) => i.at && !i.fade).length;
     if (!dirty && live >= min) return;
     if (!items.some((i) => !i.at && !(i.cool > clock))) return;
-    // (une fois par nouveau cadrage, ou quand un objet s'en est allé ; sinon, de temps en temps : la tête a bougé) —
-    // tout de suite, sans attendre que la caméra arrive : une caméra qui suit sa tête met des secondes à se poser
-    if (clock - lastTry < 0.6) return;
-    const behind = items.some((i) => i.resume);
-    if (dirty || gap(goal, placedFor) > 0.1 || clock - lastTry > (behind ? 0.6 : 2)) {
-      dirty = false;
-      // (le même cadrage : on reprend là où on s'était arrêté)
-      if (gap(goal, placedFor) > 0.1) placedFor = goal;
-      lastTry = clock;
-      const now = poseOf(st, false);
-      atPose(st, goal, () => place(st, 16, gap(now, goal) > 0.05 ? now : null));
+    // (tout de suite pour un tout autre cadrage, ou quand un objet s'en est allé, sans attendre que la caméra arrive :
+    // une caméra qui suit sa tête met des secondes à se poser ; pas plus d'un essai par seconde ; la caméra qui
+    // glisse doucement, en suivant le sabot ou la main, attend son tour comme si rien n'avait changé ; sa tête qui a
+    // beaucoup bougé depuis le dernier essai, toutes les 2 s au plus)
+    const hd = headAt && st.live?.('head');
+    const stirred = !!hd && box && hd.distanceTo(headAt) > 0.08 * (box.max.y - box.min.y);
+    if (clock - lastTry < 1 || (!big && !dirty && clock < next && !(stirred && clock - lastTry >= 2))) return;
+    if (fresh) placedFor = goal;
+    if (big) wait = 2;
+    dirty = false;
+    lastTry = clock;
+    const now = poseOf(st, false);
+    startJob(goal, gap(now, goal) > 0.05 ? now : null);
+  }
+
+  /** L'essai de pose en cours avance, dans le temps qu'il reste à cette image (là où va la caméra). */
+  function runJob(st) {
+    const J = job;
+    // (le téléphone a tourné : cet essai était pour une autre image ; le suivant part de la nouvelle)
+    if (J.pose && J.pose.key !== `${st.size?.w}|${st.size?.h}|${st.view?.x0}|${st.view?.y0}`) {
+      job = null;
+      return;
     }
+    const done = J.pose ? atPose(st, J.pose, () => stepJob(st)) : stepJob(st);
+    if (done && job === J) endJob(st);
   }
 
   /** Le vol : traverse l'image en quelques secondes, attend, repart (dans l'autre sens pour l'hirondelle). */
@@ -2011,6 +2218,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     // passage cette fois)
     if (cyc !== it.cyc && st?.view && !anywhere) {
       it.cyc = cyc;
+      freshen(st);
       const S = survey(st);
       it.skip = false;
       if (!pathOk(st, it, it.path, S)) {
@@ -2052,26 +2260,39 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     wallInView: (st) => wallInView(st),
     /** Ce qu'il ne faut jamais cacher, et où c'est dans l'image (essais). */
     survey: (st) => survey(st),
-    /** Choisit les places maintenant (essais ; le jeu attend la caméra posée). */
+    /** Ce que la vie des gros plans a coûté depuis l'ouverture (tests) : essais de pose, copies figées, rayons. */
+    stats,
+    /** Un essai de pose est-il en cours, pas encore fini (tests) ? */
+    get busy() {
+      return !!job;
+    },
+    /** Choisit les places maintenant, d'un coup (essais ; le jeu attend la caméra posée, puis prend son temps). */
     placeNow(st) {
-      place(st);
+      startJob(null);
+      // (sans compter le temps)
+      begun = until = Infinity;
+      while (!stepJob(st));
+      endJob(st);
       for (const it of items) if (it.at && !it.path) it.m.scale.setScalar(1);
     },
     update(dt, st) {
       // (quelques images après l'ouverture : la caméra est à sa place, pas à l'origine ; sans caméra fixe, tout de suite)
       // (une caméra qui ne se pose jamais tout à fait — la friandise suit la main — : on place quand même après ~3 s)
       clock += dt;
+      begun = msNow();
+      until = begun + BUDGET;
+      worked = false;
       if (!tried) {
         if (st.ready) waited += dt;
         if (anywhere || (st.ready && ++frames > 3 && ((st.settled?.(0.02) ?? true) || waited > 3))) {
           // (à la place où va la caméra : une caméra qui ne se pose jamais tout à fait y est presque)
           const goal = anywhere ? null : poseOf(st, true);
           placedFor = goalSeen = goal;
-          if (goal) atPose(st, goal, () => place(st));
-          else place(st);
           lastTry = clock;
+          startJob(goal);
         }
       } else if (!anywhere && st.view) watch(dt, st);
+      if (job) runJob(st);
       for (const it of items) {
         if (!it.at) continue;
         if (it.path) {

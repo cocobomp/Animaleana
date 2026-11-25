@@ -53,6 +53,7 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Base des sauvegardes | ✅ créée à **Zurich** (`europe-west6`) | Une partie = un document `users/<compte>/saves/<partie>` |
 | Règles de sécurité | ✅ en ligne (fichier `firestore.rules` du dépôt) | Chaque compte ne lit et n'écrit que ses propres parties ; sans compte, rien ; taille limitée |
 | Règles des avis des joueurs (`feedback`) | ⚠️ à publier à la main | Tant qu'elles ne sont pas en ligne, les avis restent sur les appareils et repartent plus tard (voir « Les avis des joueurs ») |
+| Un mail à chaque avis | ⚠️ à installer (une fois, 5 minutes) | Un petit script Google dans le compte propriétaire du projet, gratuit (voir « Recevoir un mail à chaque avis ») |
 | Hébergement | ✅ en ligne | https://lafermeamadichelle.web.app |
 | Mise en ligne automatique depuis GitHub | ✅ à chaque mise à jour de `main` | Sans clé : GitHub prouve à Google que c'est ce dépôt (Workload Identity Federation) |
 
@@ -160,6 +161,7 @@ https://console.firebase.google.com/project/lafermeamadichelle/firestore/databas
 (ou https://console.firebase.google.com/project/lafermeamadichelle/firestore → `feedback`). Un avis = un document,
 `createdAt` dit quand il est arrivé. Le jeu ne peut ni les relire ni les effacer : une fois lus, on les efface dans la
 console (sélectionner le document → **Supprimer le document**).
+Ou les recevoir par mail, au plus une fois par heure : voir « 📧 Recevoir un mail à chaque avis » plus bas.
 
 **Publier les règles (une fois, à la main)** : l'action GitHub ne publie que les fichiers du jeu, pas les règles.
 Tant que les règles avec `feedback` ne sont pas en ligne, la base refuse les avis : le jeu les garde sur l'appareil
@@ -197,6 +199,89 @@ ajouter App Check.
 
 **Version « à emporter » (fichier)** : « 💌 Ton avis » n'y est pas proposé (comme le compte Google) : elle ne se
 connecte jamais à Internet et son stockage n'est pas celui du site, un avis n'en partirait jamais.
+
+## 📧 Recevoir un mail à chaque avis
+
+Plutôt que d'aller voir la console : un petit script Google, collé **une fois** dans ton compte Google, regarde toutes
+les heures s'il y a de nouveaux avis et t'envoie **un** mail qui les récapitule. Rien de neuf : pas de mail. Code :
+`tools/avis-mail/Code.gs` et `tools/avis-mail/appsscript.json` ; tests : `tests/avis-mail.test.js`.
+
+- **Gratuit**, sans plan Blaze ni carte bancaire : le script tourne chez Google (Apps Script), le mail part de ton Gmail
+  vers toi-même. Chaque passage compte au moins une lecture dans Firestore (même quand il n'y a rien) : 24 par jour,
+  loin des 50 000 lectures gratuites par jour. Au plus 24 mails par jour (Gmail en permet 100 à un script).
+- **Rien dans le dépôt** : ni mot de passe, ni clé, ni adresse e-mail. Le script lit les avis avec tes droits Google de
+  propriétaire du projet, comme la console ; les règles de `firestore.rules` (« personne ne relit les avis ») ne valent
+  que pour le jeu.
+- **Il ne fait que lire** : il n'écrit, ne change ni n'efface rien dans la base.
+
+**D'abord** : les règles avec `feedback` doivent être publiées (« Publier les règles », plus haut). Sinon, aucun avis
+n'arrive dans la base, et donc aucun mail.
+
+**L'installer** (une fois, sur un ordinateur, 5 minutes) :
+
+1. Ouvrir https://script.google.com avec le **compte Google propriétaire du projet Firebase** (celui qui ouvre
+   https://console.firebase.google.com/project/lafermeamadichelle). Si plusieurs comptes Google sont ouverts, vérifier
+   la photo en haut à droite.
+2. **Nouveau projet** (en haut à gauche). Cliquer sur « Projet sans titre » et l'appeler `Avis de la ferme`.
+3. Dans le fichier `Code.gs` déjà ouvert, tout effacer (`function myFunction() { }`), puis coller **tout** le fichier
+   [`tools/avis-mail/Code.gs`](../tools/avis-mail/Code.gs) du dépôt (sur GitHub : ouvrir le fichier, puis le bouton
+   « Copy raw file », deux petits carrés, en haut à droite du code).
+4. ⚙️ **Paramètres du projet** (roue dentée, dans la barre de gauche) → cocher **Afficher le fichier manifeste
+   « appsscript.json » dans l'éditeur**. Revenir à l'**Éditeur** (`< >`, barre de gauche), cliquer sur
+   `appsscript.json`, tout effacer et coller le fichier [`tools/avis-mail/appsscript.json`](../tools/avis-mail/appsscript.json)
+   (l'heure suisse et la liste exacte des autorisations).
+5. **Enregistrer** (l'icône 💾, ou Ctrl+S, Cmd+S sur Mac).
+6. En haut, dans la liste des fonctions (à droite de « Déboguer »), choisir `installer`, puis **Exécuter**.
+7. **Autoriser** (la première fois seulement) : « Autorisation nécessaire » → **Examiner les autorisations** → choisir
+   son compte. Google affiche alors **« Google n'a pas validé cette application »** : c'est normal, c'est **ton propre
+   script** (Google le dit de tout script personnel : sa vérification est faite pour les applications publiques).
+   Cliquer sur **Paramètres avancés** (en bas à gauche), puis **Accéder à Avis de la ferme (non sécurisé)**. Accepter
+   ensuite les autorisations (s'il y a des cases à cocher : **Tout sélectionner**) → **Continuer** / **Autoriser**.
+   Ce que chacune permet (les mots exacts de Google peuvent changer un peu) :
+
+   | Autorisation | Pour quoi faire |
+   |---|---|
+   | Afficher et gérer vos données dans Google Cloud Datastore | Lire les avis (Firestore n'a pas d'autorisation « lecture seule » ; le script, lui, ne fait que lire) |
+   | Se connecter à un service externe | Parler à Firestore (`firestore.googleapis.com`, la seule adresse appelée) |
+   | Envoyer des e-mails en votre nom | Le mail, à toi seulement |
+   | Autoriser l'application à s'exécuter en votre absence | Le passage toutes les heures |
+   | Voir votre adresse e-mail principale | Savoir à qui envoyer le mail : à toi |
+
+8. En bas, le **Journal d'exécution** dit « Installé : les avis seront vérifiés toutes les heures. », puis « 2 nouveaux
+   avis : mail envoyé. » ou « Aucun nouvel avis : pas de mail. ». Une ligne rouge « Installé, mais la lecture des avis
+   ne marche pas encore… » : voir « Si ça ne marche pas » plus bas.
+9. Choisir `essai` → **Exécuter** : un mail « ✅ La ferme à Madichelle : mail d'essai » arrive dans ta boîte. Il dit si
+   la lecture des avis marche et si le passage horaire est bien installé.
+
+**Ce que tu reçois** : au plus un mail par heure, seulement quand il y a de nouveaux avis. Sujet « 💌 La ferme à
+Madichelle : 2 nouveaux avis » ; pour chaque avis, le smiley, la sorte (💡 idée, 🐞 bug, ❤️ j'aime, ✉️ autre), le
+texte de l'enfant, la langue, l'appareil, la version du jeu, le mode, le niveau et le jour du jeu, le lieu, ce qui
+était ouvert, l'heure d'arrivée (heure suisse) et un lien vers l'avis dans la console. Le tout premier mail contient
+les avis déjà dans la base. 50 avis au plus par mail, et 100 Ko au plus (Google refuse d'envoyer un mail de plus de
+200 Ko ; des avis très longs, écrits hors du jeu, le dépasseraient) : la suite arrive l'heure suivante, le mail le
+dit. Le texte des enfants est montré tel quel, mais rien de ce qu'ils écrivent ne peut devenir une mise en forme ou
+un lien dans le mail.
+
+**Si ça ne marche pas** : le script réessaie toutes les heures sans rien perdre (les avis attendent dans la base et
+arrivent dans le mail suivant). Après 6 heures d'échecs de suite, **un seul** mail d'alerte, avec l'erreur :
+« ⚠️ La ferme à Madichelle : les avis ne peuvent plus être lus » (la lecture dans Firestore ne marche pas) ou
+« ⚠️ La ferme à Madichelle : le mail des avis ne part plus » (les avis sont lus, mais Google refuse d'envoyer le
+mail) ; plus d'alerte ensuite tant que ça ne remarche pas.
+
+- Erreur 403, `PERMISSION_DENIED` : le script ne tourne pas avec le compte propriétaire du projet Firebase, ou une
+  autorisation a été refusée. Recommencer avec le bon compte, ou relancer `installer` (il redemande les autorisations).
+- Le détail de chaque passage : barre de gauche → **Exécutions**.
+
+**L'arrêter** : choisir `desinstaller` → **Exécuter** (plus de passage, plus de mail). Le script se souvient du dernier
+avis envoyé : relancé plus tard avec `installer`, il reprend là où il s'était arrêté (les avis arrivés entre-temps
+viennent dans le premier mail). Pour tout enlever : supprimer le projet dans https://script.google.com, puis retirer
+son accès dans https://myaccount.google.com/permissions (« Avis de la ferme » → **Supprimer l'accès**).
+
+**Le mettre à jour** (si `tools/avis-mail/Code.gs` change dans le dépôt) : recoller le fichier dans `Code.gs` et
+enregistrer ; le passage horaire continue tout seul. Si `appsscript.json` change aussi, le recoller et relancer
+`installer` (pour accepter une nouvelle autorisation).
+
+Les avis lus restent dans la base : les effacer dans la console se fait toujours à la main.
 
 ## Mise en ligne automatique
 

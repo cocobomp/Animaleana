@@ -430,6 +430,7 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
   let UI;
   let panels;
   let screens;
+  let FB; // src/cloud/feedback.js, celui que la fenêtre, le menu, les réglages et l'écran des profils lisent (l'interrupteur)
 
   beforeAll(async () => {
     installFakeDom({ width: 360, height: 740 });
@@ -440,7 +441,11 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
     ({ UI } = await import('../src/ui/UI.js'));
     panels = await import('../src/ui/panels.js');
     screens = await import('../src/ui/screens.js');
+    FB = await import('../src/cloud/feedback.js');
   }, 120000);
+  afterEach(() => {
+    FB.FEEDBACK.on = false; // (en veille, comme dans le jeu)
+  });
   beforeEach(() => {
     vi.stubGlobal('localStorage', fakeStorage({ 'animaleana.profiles': JSON.stringify([{ id: 'p1', name: 'Léa' }]) }));
     vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
@@ -632,7 +637,30 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
     expect(JSON.stringify(item)).not.toMatch(/Léa|Dupont|"p1"/);
   });
 
-  it('ouverte depuis « ⋯ Plus », ⚙️ Réglages et l\'écran des profils', async () => {
+  it('en veille (on: false) : pas de 💌 dans ⋯ Plus, ⚙️ Réglages, l\'écran des profils ni l\'Aide, même en ligne', async () => {
+    expect(FB.FEEDBACK.on, 'le bouton est en veille').toBe(false);
+    expect(FB.feedbackShown({ protocol: 'https:' })).toBe(false);
+    const flat = (x) => [x].flat(Infinity).filter(Boolean).flatMap((n) => [n, ...(n.children ? flat(n.children) : [])]);
+    const shown = [];
+    UI.prototype.openMore.call({ game: { paused: false, profile: {} }, showModal: (c) => shown.push(c), hideModal: () => {} });
+    expect(flat(shown[0]).some((n) => /Ton avis|💌/.test(n.textContent ?? ''))).toBe(false);
+    let spec = null;
+    const ui = fakeUi({ running: true, profile: { settings: {}, mode: 'manage', place: 'maison' }, rig: { mode: 'third' }, quality: 'high' });
+    Object.assign(ui, { openPanel: (s2) => { spec = s2; }, onScreenControls: () => true, tutorial: null });
+    panels.openSettings(ui);
+    expect(flat(spec.render()).some((n) => n.tagName === 'BUTTON' && n.textContent.includes('Ton avis'))).toBe(false);
+    const pui = fakeUi();
+    pui.screen = document.createElement('div');
+    pui.toast = () => {};
+    screens.showProfiles(pui);
+    expect(pui.screen.findAll('fb-open')).toEqual([]);
+    globalThis.document = globalThis.document ?? { documentElement: {} };
+    const { searchHelp } = await import('../src/ui/help.js');
+    expect(searchHelp('donner mon avis').map((x) => x.id)).not.toContain('feedback');
+  });
+
+  it('allumé (on: true) : ouverte depuis « ⋯ Plus », ⚙️ Réglages et l\'écran des profils', async () => {
+    FB.FEEDBACK.on = true;
     // ⋯ Plus
     const shown = [];
     const self = { game: { paused: false, profile: {} }, showModal: (c) => shown.push(c), hideModal: () => {} };
@@ -664,6 +692,7 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
   });
 
   it('version « à emporter » (fichier) : pas de 💌 dans ⋯ Plus, ⚙️ Réglages ni l\'écran des profils ; ouverte quand même, une phrase vraie et rien de gardé', async () => {
+    FB.FEEDBACK.on = true; // (allumé : c'est la version fichier qui le cache)
     vi.stubGlobal('location', { protocol: 'file:' });
     const flat = (x) => [x].flat(Infinity).filter(Boolean).flatMap((n) => [n, ...(n.children ? flat(n.children) : [])]);
     // ⋯ Plus
@@ -706,6 +735,8 @@ describe('❓ l\'aide en parle', () => {
   it('« donner une idée », « signaler un bug » : la fiche 💌 (seulement dans le jeu en ligne)', async () => {
     globalThis.document = globalThis.document ?? { documentElement: {} };
     const { searchHelp } = await import('../src/ui/help.js');
+    const FB = await import('../src/cloud/feedback.js'); // (celui que l'Aide lit)
+    FB.FEEDBACK.on = true; // (allumé : la fiche n'est là que quand le bouton y est)
     vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
     for (const q of ['donner mon avis', 'j\'ai une idée pour le jeu', 'signaler un bug', 'report a bug', 'I have an idea']) {
       expect(searchHelp(q)[0].id, q).toBe('feedback');
@@ -716,6 +747,10 @@ describe('❓ l\'aide en parle', () => {
     vi.stubGlobal('location', { protocol: 'file:' });
     expect(searchHelp('donner mon avis').map((x) => x.id)).not.toContain('feedback');
     expect(searchHelp('').map((x) => x.id)).not.toContain('feedback');
+    // En veille : la fiche n'y est pas non plus, même en ligne.
+    vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
+    FB.FEEDBACK.on = false;
+    expect(searchHelp('donner mon avis').map((x) => x.id)).not.toContain('feedback');
   });
 });
 

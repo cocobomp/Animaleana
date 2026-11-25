@@ -18,7 +18,7 @@ import { showProfiles, showAvatarEditor } from './screens.js';
 import { openBuilding, openAnimalActions } from './actions.js';
 import { openHelp } from './help.js';
 import { openFeedback } from './feedbackWindow.js'; // 💌 ton avis
-import { feedbackAvailable } from '../cloud/feedback.js'; // (seulement dans le jeu en ligne)
+import { feedbackShown } from '../cloud/feedback.js'; // (en veille, et seulement dans le jeu en ligne)
 import { openFacility, openBox, openBed } from './facilitiesPanel.js'; // bâtiments à entretenir
 import { tripChips } from './trip.js'; // voyages réalistes
 import { openActivities } from './activities.js';
@@ -407,7 +407,7 @@ export class UI {
         item('❓', t('help'), () => openHelp(this)),
         item('⚙️', t('settings'), () => this.openSettings()),
         // (pas dans la version « à emporter » : le message n'en partirait jamais)
-        feedbackAvailable() ? item('💌', t('fb_btn'), () => openFeedback(this)) : null),
+        feedbackShown() ? item('💌', t('fb_btn'), () => openFeedback(this)) : null),
       // (data-escape : Échap ferme le menu, comme il l'a ouvert)
       h('div', { class: 'row end' }, h('button', { 'data-escape': true, onClick: () => this.hideModal() }, t('cancel'))),
     ]);

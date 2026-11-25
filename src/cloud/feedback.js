@@ -322,6 +322,18 @@ function noteSent(now) {
  */
 export const feedbackAvailable = (loc = globalThis.location) => cloudSupported(loc);
 
+/**
+ * ⏸️ L'interrupteur du bouton « 💌 Ton avis » : EN VEILLE (on: false). Le bouton n'est montré nulle part (⋯ Plus, ⚙️
+ * Réglages, écran des profils, Aide) tant que les règles Firestore qui acceptent les avis ne sont pas publiées
+ * (docs/HEBERGEMENT.md, « Publier les règles ») : sinon un enfant écrirait des messages qui ne partent jamais. Tout le
+ * reste est prêt : publier les règles, puis mettre on: true. (Les avis déjà gardés sur un appareil repartent tout
+ * seuls dès que les règles le permettent : startFeedback.)
+ */
+export const FEEDBACK = { on: false };
+
+/** Le bouton « 💌 Ton avis » est-il montré ? Interrupteur allumé et jeu en ligne (pas la version fichier). */
+export const feedbackShown = (loc = globalThis.location) => FEEDBACK.on && feedbackAvailable(loc);
+
 /** On peut essayer d'envoyer : vraie adresse Internet (pas la version fichier) et réseau présent. */
 export function canSendNow(loc = globalThis.location, nav = globalThis.navigator) {
   return feedbackAvailable(loc) && nav?.onLine !== false;

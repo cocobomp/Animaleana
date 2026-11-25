@@ -9,6 +9,7 @@ import { newsList } from './news.js'; // 🐴 quoi de neuf ?
 import { moveKeys } from './keys.js'; // ⌨️ ({move} : Z Q S D sur un clavier français, W A S D ailleurs)
 import { keycaps, openKeysCard } from './controls.js';
 import { cloudSupported } from '../cloud/firebase.js'; // (fiches web : seulement dans le jeu en ligne)
+import { feedbackShown } from '../cloud/feedback.js'; // (la fiche 💌 : seulement quand le bouton est là)
 
 // where : bâtiment ('refuge', 'petshop', 'stable', 'tackroom', 'pen', 'paddock', 'kennel', 'hutch', 'vet', 'house', 'jobs')
 //         ou bouton de l'écran ('hud:farm', 'hud:travel', 'hud:journal', 'hud:animals', 'hud:time')
@@ -154,7 +155,7 @@ const TOPICS = [
     keys: 'dormir nuit lit maison sleep night bed house',
     steps: { fr: ['Va à la maison le soir (à partir de 19 h).', 'Touche « Dormir jusqu\'au matin ».'], en: ['Go to the house in the evening (from 7 pm).', 'Tap "Sleep until morning".'] } },
   // 💌 Ton avis (src/ui/feedbackWindow.js)
-  { id: 'feedback', icon: '💌', where: null, web: true,
+  { id: 'feedback', icon: '💌', where: null, web: true, feedback: true,
     title: { fr: 'Donner mon avis sur le jeu', en: 'Give my feedback on the game' },
     keys: 'avis idée idées bug bogue suggestion proposer développeur créateur feedback opinion idea ideas suggest developer creator',
     steps: { fr: ['Touche ⚙️ Réglages (ou ⋯ Plus) → 💌 Ton avis.', 'Choisis un smiley, ce que c\'est (une idée, un bug…) et écris un petit mot.', 'Touche « Envoyer ». Sans Internet, il partira tout seul plus tard.'],
@@ -181,7 +182,7 @@ const norm = (str) => str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const STOP = new Set(['les', 'des', 'une', 'mon', 'mes', 'ton', 'tes', 'est', 'sont', 'comment', 'faire', 'pour', 'avec', 'que', 'qui', 'quoi', 'the', 'how', 'and', 'can', 'est-ce', 'faut', 'peux', 'veux']);
 
 /** La fiche est-elle montrée dans cette partie ? (needs : espèces pas encore proposées qu'on n'a pas ; web : en ligne) */
-const topicShown = (topic, profile) => (!topic.web || cloudSupported()) && (!profile || anyAvailable(profile, topic.needs));
+const topicShown = (topic, profile) => (!topic.web || cloudSupported()) && (!topic.feedback || feedbackShown()) && (!profile || anyAvailable(profile, topic.needs));
 
 /** Les étapes d'une fiche, avec l'étape en plus (more) si ses espèces comptent pour la partie. */
 export function topicSteps(topic, profile = null) {

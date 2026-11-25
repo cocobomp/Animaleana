@@ -49,7 +49,7 @@ import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
 import { quirksOf, knows, FEAR_CALM } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 import { starsView, starHowKey, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
 import { openFeedback } from './feedbackWindow.js'; // 💌 ton avis
-import { feedbackAvailable } from '../cloud/feedback.js'; // (seulement dans le jeu en ligne)
+import { feedbackShown } from '../cloud/feedback.js'; // (en veille, et seulement dans le jeu en ligne)
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -843,7 +843,7 @@ export function openSettings(ui) {
         // Revoir le tutoriel guidé (src/ui/tutorial.js).
         ui.tutorial ? h('button', { class: 'big', onClick: () => ui.tutorial.replay() }, `🎓 ${t('tuto_replay')}`) : null,
         // 💌 Ton avis : un petit message pour le développeur (src/ui/feedbackWindow.js ; pas dans la version « à emporter »).
-        feedbackAvailable() ? h('button', { class: 'big', onClick: () => openFeedback(ui) }, `💌 ${t('fb_btn')}`) : null,
+        feedbackShown() ? h('button', { class: 'big', onClick: () => openFeedback(ui) }, `💌 ${t('fb_btn')}`) : null,
         // Mise à jour du jeu installé (src/ui/updates.js) : cherche, puis bandeau « Recharger » si une version est prête.
         h('button', {
           class: 'big',

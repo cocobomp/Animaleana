@@ -501,6 +501,54 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     sc.dispose();
   }, 120000);
 
+  it('le lapin en voyage : sa caisse de transport ne rentre jamais dans son pelage, et rien du jour n\'est posé dedans', () => {
+    // (la caisse, plus grande que la maisonnette, rentrait dans l'arrière-train du nain, du bélier et du rex ; un
+    // coquillage du jour était posé dedans)
+    for (const [breed, ageDays] of [['nain', 900], ['belier', 900], ['rex', 900], ['geant_flandres', 900], ['belier', 2]]) {
+      for (const act of ['feed', 'brush']) {
+        const set = C.decorFor('rabbit', 'ailleurs', { amb, look: 'plage', kinds: ['coquillage', 'crabe', 'seau'], seed: 2 });
+        const { a, sc } = P.makePetStage({ species: 'rabbit', breed, ageDays, set });
+        const D = sc.decor;
+        let crate = null;
+        D.group.traverse((o) => {
+          if (o.userData?.crate) crate = o;
+        });
+        expect(crate, breed).toBeTruthy();
+        // (la boîte de la caisse dans son repère : de biais, elle n'est pas alignée sur la scène)
+        const local = new THREE.Box3();
+        crate.traverse((o) => {
+          if (!o.isMesh || o.isInstancedMesh) return;
+          o.geometry.computeBoundingBox();
+          local.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrix));
+        });
+        // (son fond contre le grillage, pas au travers)
+        sc.scene.updateMatrixWorld(true);
+        expect(new THREE.Box3().setFromObject(crate).min.z, `${breed} : la caisse dans le grillage`).toBeGreaterThan(D.room.back);
+        const ctx = P.ctxFor(a, sc);
+        const game = H.pets.rabbit[act](ctx);
+        const m = sc.model.coatMesh;
+        const v = new THREE.Vector3();
+        let inside = 0;
+        for (let f = 0; f < 90; f++) {
+          P.run(ctx, game, sc, 1 / 30);
+          if (f % 15) continue;
+          const inv = crate.matrixWorld.clone().invert();
+          for (let i = 0; i < m.geometry.attributes.position.count; i++) {
+            if (local.containsPoint(m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld).applyMatrix4(inv))) inside++;
+          }
+        }
+        expect(inside, `${breed} (${ageDays} j) ${act} : sommets du pelage dans la caisse`).toBe(0);
+        // (ni place des objets du jour ni objet posé dans son emprise)
+        const [b] = D.blocks;
+        const inBox = (x, z) => x > b.min.x && x < b.max.x && z > b.min.z && z < b.max.z;
+        for (const s of D.spots) if (s.kind === 'floor' || s.kind === 'lean') expect(inBox(s.p[0], s.p[2] + (s.kind === 'lean' ? 0.3 : 0)), `${breed} : place ${s.kind} dans la caisse`).toBe(false);
+        for (const it of D.extras.items) if (it.at) expect(inBox(it.at.x, it.at.z), `${breed} : ${it.kind} dans la caisse`).toBe(false);
+        game.destroy?.();
+        sc.dispose();
+      }
+    }
+  }, 120000);
+
   /** Le rectangle de o dans l'image touche-t-il le cercle de sa tête (même mesure que away.js, un peu de marge) ? */
   function behindHead(sc, o) {
     sc.scene.updateMatrixWorld(true);

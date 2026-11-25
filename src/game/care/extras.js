@@ -834,6 +834,9 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
 
   let box = null;
   const tmp = V();
+  /** Ce point (à rad près) tombe-t-il dans ce qui occupe le sol (decor.blocks : la caisse de transport en voyage, les
+   * choses du pays posées près de lui — away.js) ? Au-dessus, il est libre. */
+  const blocked = (p, rad) => (decor.blocks ?? []).some((b) => p.y < b.max.y && p.x > b.min.x - rad && p.x < b.max.x + rad && p.z > b.min.z - rad && p.z < b.max.z + rad);
   /** La place p convient-elle à cet objet (dans l'image, rien de gênant) ? */
   function fits(st, it, p, taken) {
     const no = (why) => {
@@ -842,6 +845,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     };
     const [rad, h] = SIZE[it.kind] ?? [0.2, 0.3];
     for (const q of taken) if (q.distanceTo(p) < rad + 0.25) return no('pris');
+    if (blocked(p, rad)) return no('occupé');
     // (ni sur ce qu'on lui tend : mangeoire, seau, gamelles, filet…)
     for (const pr of Object.values(decor.props ?? {})) {
       const o = pr?.group;
@@ -983,6 +987,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
           const p = ray.origin.clone().addScaledVector(ray.direction, (gy0 - ray.origin.y) / ray.direction.y);
           if (p.z > box.min.z - zn || p.z < box.min.z - zf) continue;
           if (robin && Object.values(decor.props ?? {}).some((pr) => pr?.group?.visible && pr.group.parent && pr.group.getWorldPosition(V()).distanceTo(p) < 0.4)) continue;
+          if (blocked(p, robin ? 0.1 : 0.9)) continue;
           cands.push({ p, v: r() });
         }
       }

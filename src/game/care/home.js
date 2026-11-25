@@ -27,7 +27,8 @@ const STYLE = {
 };
 
 /**
- * Le coin de la maison. stage : la scène (marks, double). Renvoie { group, props, layout, update, restore, dispose }.
+ * Le coin de la maison. stage : la scène (marks, double). Renvoie { group, props, layout, update, restore, dispose }
+ * (blocks : les boîtes au sol où rien ne se pose, sa caisse de transport en voyage).
  * opts.outdoor : le jardin, au pied de la maison (l'animal est dehors) — la pelouse, la façade avec sa porte-fenêtre
  * (allumée le soir), une clôture et une haie, le ciel ; ses gamelles au même endroit. opts.season : la saison.
  * opts.travel (dehors, en voyage) : ni la façade de la maison ni sa niche — une clôture basse derrière lui, sa caisse de
@@ -248,12 +249,16 @@ export function homeSet(stage, opts = {}) {
     g.add(niche);
   }
   // En voyage : sa caisse de transport (la porte grillagée vers nous).
+  const blocks = [];
   if (travel) {
     // (à sa taille, sans être énorme dans l'image ; à gauche, derrière sa queue : elle ne cache pas le lieu derrière lui)
     const cs = THREE.MathUtils.clamp(H * 1.2, 0.42, 0.8);
     const crate = travelCrate(keep, cs, sp === 'cat' ? 0xc85a6a : 0x3f74b8);
     crate.position.set(Math.max(R.left + 0.4 + cs / 2, L.tail.x - 1.2 - cs / 2), 0, R.back + cs * 0.4 + 0.12);
     g.add(crate);
+    // (sa place au sol : ni objet du jour ni chose du pays dedans — extras.js, away.js)
+    crate.updateMatrixWorld(true);
+    blocks.push(new THREE.Box3().setFromObject(crate));
   }
   {
     const fab = keep(fabricTexture(sp === 'cat' ? 'velvet' : 'plaid', ST.bed, sp === 'cat' ? 4 : 6));
@@ -559,6 +564,7 @@ export function homeSet(stage, opts = {}) {
     sky,
     ground: field ? [...field.mats, ...(far?.mats ?? [])] : [],
     spots,
+    blocks,
     area: { x0: R.left + 0.4, x1: R.side - 0.25, z0: R.back + 0.25, z1: 1.8, y: out ? 0.02 : 0 },
     anchors: { eat, drink },
     layout,
@@ -638,6 +644,7 @@ function kennelModel(keep, size = 0.8) {
  */
 export function travelCrate(keep, size = 0.6, color = 0x3f74b8) {
   const g = new THREE.Group();
+  g.userData.crate = true;
   const w = size;
   const h = size * 0.62;
   const d = size * 0.72;

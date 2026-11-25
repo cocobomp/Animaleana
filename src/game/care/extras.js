@@ -956,14 +956,15 @@ export function animalBox(stage) {
 /**
  * La taille de chaque objet (rayon au sol, hauteur), pour le placer. Ce qui bouge compte toute sa course : la poule va
  * et vient de RANGE.poule de part et d'autre de sa place, plus son bec et sa queue (0,23 m) ; le papillon volette en
- * rond, plus ses ailes ; le crabe marche de côté.
+ * rond, plus ses ailes ; le crabe marche de côté ; le rouge-gorge (deux fois la taille de l'oiseau) sautille autour
+ * de sa place ; les deux poules au loin se promènent chacune d'un demi-mètre (farHens).
  */
 const SIZE = {
   brouette: [0.75, 0.7], fourche: [0.2, 1.5], chat: [0.12, 0.33], oiseau: [0.06, 0.11], fleurs: [0.14, 0.3], seau: [0.2, 0.3],
   poule: [0.6, 0.45], botte: [0.5, 0.42], arrosoir: [0.2, 0.32], balle: [0.06, 0.1], papillon: [0.33, 0.26], pot: [0.13, 0.35],
   coquillage: [0.12, 0.05], crabe: [0.2, 0.07], mouette: [0.12, 0.2], rocher: [0.3, 0.26], sapin: [0.33, 0.9], lanterne: [0.15, 0.7],
   amphore: [0.17, 0.52], fer: [0.08, 0.17], licol: [0.12, 0.5], nichoir: [0.09, 0.23], cadre: [0.16, 0.25], cloche: [0.08, 0.33],
-  carottes: [0.08, 0.21], souris: [0.15, 0.06], escargot: [0.08, 0.05],
+  carottes: [0.08, 0.21], souris: [0.15, 0.06], escargot: [0.08, 0.05], rougegorge: [0.17, 0.28], poulailler: [1.9, 0.6],
 };
 /** La course de ce qui bouge autour de sa place (m), déjà comptée dans SIZE. */
 const RANGE = { poule: 0.3, papillon: 0.24, souris: 0.06, escargot: 0.03 };
@@ -1296,6 +1297,27 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   }
 
   /**
+   * La place qu'un objet prend (p : où il est posé, s : la place du décor) : son milieu au sol (une fourche appuyée va
+   * de son pied jusqu'au mur), son rayon, et de quelle hauteur à quelle hauteur.
+   */
+  function spaceOf(it, p, s = null) {
+    const [r, h] = SIZE[it.kind] ?? [0.2, 0.3];
+    const c = p.clone();
+    if (it.where === 'lean' && s) c.add(V(-Math.sin(s.face ?? 0) * 0.15, 0, -Math.cos(s.face ?? 0) * 0.15));
+    return { p, c, r, y0: p.y, y1: p.y + h };
+  }
+
+  /**
+   * Deux places se gênent-elles (a : la nouvelle) ? Trop près l'une de l'autre, ou l'une au-dessus de l'autre quand
+   * leurs hauteurs se croisent : le licol pendu sous le chat perché sur la cloison, la fourche dressée sous lui.
+   */
+  function clash(a, b) {
+    const room = Math.max(a.r + 0.25, a.r + b.r);
+    if (a.p.distanceTo(b.p) < room) return true;
+    return Math.hypot(a.c.x - b.c.x, a.c.z - b.c.z) < room && a.y0 < b.y1 + 0.1 && b.y0 < a.y1 + 0.1;
+  }
+
+  /**
    * La place p convient-elle à cet objet ? s : la place du décor (son mur). mode : 'place' (une nouvelle place),
    * 'keep' (un objet déjà posé, quand le cadrage change : un peu de marge, pour ne pas le faire clignoter), 'safe'
    * (pendant que la caméra bouge : seulement ce qui ne doit jamais arriver, cacher l'animal ou ce qu'on lui tend).
@@ -1308,7 +1330,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     const placing = mode === 'place';
     const [rad, h] = SIZE[it.kind] ?? [0.2, 0.3];
     // (pas sur un autre objet du jour : la poule qui se promène ne passe pas dans le seau)
-    if (placing) for (const q of taken) if (q.p.distanceTo(p) < Math.max(rad + 0.25, rad + q.r)) return no('pris');
+    if (placing) {
+      const me = spaceOf(it, p, s);
+      for (const q of taken) if (clash(me, q)) return no('pris');
+    }
     // (accroché, perché, appuyé : à un mur, une clôture qu'on voit — le décor cache ceux qui passent devant la caméra)
     if (s?.wall && !shown(s.wall)) return no('mur caché');
     // (ni sur ce qu'on lui tend — mangeoire, seau, gamelles, filet, notre main — ni sur la plaque à son nom : leur
@@ -1492,11 +1517,11 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   }
   const FAR_EXT = {
     // (le rouge-gorge : sa tête, sa queue, ses petits sauts, dans tous les sens)
-    rougegorge: [V(0, 0.25, 0), V(0.17, 0.05, 0.17), V(-0.17, 0.05, -0.17)],
+    rougegorge: [V(0, 0.28, 0), V(0.17, 0.05, 0.17), V(-0.17, 0.05, -0.17)],
     poulailler: [V(0, 0.55, 0), V(0.9, 0.3, 0.5), V(-0.6, 0.3, 0)],
   };
 
-  function farPlace(st, it, S) {
+  function farPlace(st, it, S, taken = []) {
     const v = st.view;
     if (!v || !st.rayAt || !box) return false;
     const W = v.x1 - v.x0;
@@ -1525,6 +1550,9 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       let n = 0;
       for (const { p } of cands) {
         if (++n > 80) break;
+        // (pas sur ce qui est déjà posé : la botte de paille, l'oiseau du jour descendu dans la paille)
+        const me = spaceOf(it, p);
+        if (taken.some((q) => clash(me, q))) continue;
         if (!farSpotOk(st, it, p, S, FAR_EXT[it.kind])) continue;
         it.at = p;
         it.m.position.copy(p);
@@ -1611,7 +1639,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       });
     };
     const live = items.filter((i) => i.at && !i.fade);
-    const taken = live.filter((i) => !i.path).map((i) => ({ p: i.at, r: (SIZE[i.kind] ?? [0.2])[0] }));
+    // (ce qui s'en va en rapetissant est encore là : sa place n'est libre qu'une fois parti)
+    const taken = items.filter((i) => i.at && !i.path).map((i) => spaceOf(i, i.at, i.spot));
     let count = live.length;
     const seenFloor = anywhere ? [] : floorInView(st);
     const seenWall = anywhere ? [] : wallInView(st);
@@ -1620,9 +1649,12 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       // (le petit plus : seulement s'il manque encore de quoi voir)
       if (it.life && count >= min) continue;
       if (it.where === 'far') {
-        if (farPlace(st, it, S)) {
+        if (farPlace(st, it, S, taken)) {
           count++;
-          if (!it.path) appear(it);
+          if (!it.path) {
+            appear(it);
+            taken.push(spaceOf(it, it.at));
+          }
         }
         continue;
       }
@@ -1662,7 +1694,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
         if (it.kind === 'chat' || it.kind === 'oiseau' || it.kind === 'mouette') it.m.rotation.y = (s.face ?? 0) + (r() - 0.5) * 0.5 + (it.kind !== 'chat' ? Math.PI / 2 : 0);
         if (it.where === 'hang') it.m.rotation.y = s.face ?? 0;
         appear(it);
-        taken.push({ p, r: (SIZE[it.kind] ?? [0.2])[0] });
+        taken.push(spaceOf(it, p, s));
         count++;
         break;
       }

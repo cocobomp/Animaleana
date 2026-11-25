@@ -3,7 +3,8 @@
 // le mur (un fer, un licol, une cloche, deux tableaux, une botte de carottes), un rouge-gorge, une souris, un
 // escargot, un vol d'oiseaux loin derrière, une hirondelle sous le toit (setting.js : pickLife ; extras.js :
 // placeExtras). Quand le jeu recadre, ce qui n'a plus sa place s'en va et revient ailleurs. Jamais devant l'animal, sa
-// tête, sa bouche, ni ce qu'on lui tend, à aucun moment, en portrait comme en paysage.
+// tête, sa bouche, ni ce qu'on lui tend, à aucun moment, en portrait comme en paysage ; jamais deux objets l'un dans
+// l'autre.
 //
 // Les parties sont jouées en entier, avec ce que le jeu a posé lui-même (rien n'est reposé après coup), et chaque
 // image est vérifiée par des rayons, la copie figée de l'animal refaite à chaque fois.
@@ -94,10 +95,11 @@ describe('le petit plus de chaque lieu (pur)', () => {
 });
 
 describe('ce qui bouge tient toute sa course dans la place vérifiée', () => {
-  it('la poule, le papillon, la souris, l\'escargot, le crabe : jamais plus loin de leur place que leur taille', () => {
+  it('la poule, le papillon, la souris, l\'escargot, le crabe, le rouge-gorge, les poules au loin : jamais plus loin de leur place que leur taille', () => {
     const keep = bag();
     const b = new THREE.Box3();
-    for (const kind of ['poule', 'papillon', 'souris', 'escargot', 'crabe']) {
+    // (le rouge-gorge et les poules au loin : les autres objets les comptent à leur vraie taille, sauts et promenade compris)
+    for (const kind of ['poule', 'papillon', 'souris', 'escargot', 'crabe', 'rougegorge', 'poulailler']) {
       const m = extraModel(kind, keep, 3);
       // (la course que le jeu lui donne)
       if (extraRange(kind)) m.userData.range = extraRange(kind);
@@ -192,6 +194,28 @@ function overCoat(sc, it) {
 }
 
 /**
+ * Les objets posés (pas ce qui vole) qui entrent l'un dans l'autre : leurs boîtes monde, rentrées d'un centimètre, se
+ * chevauchent (le rouge-gorge dans la botte de paille). Les poules au loin : chacune sa boîte, pas celle des deux.
+ */
+function inEachOther(live) {
+  const boxes = [];
+  for (const it of live) {
+    if (it.path) continue;
+    const parts = it.kind === 'poulailler' ? it.m.children : [it.m];
+    for (const o of parts) boxes.push([it, new THREE.Box3().setFromObject(o).expandByScalar(-0.01)]);
+  }
+  const out = [];
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const [a, A] = boxes[i];
+      const [b, B] = boxes[j];
+      if (a !== b && !A.isEmpty() && !B.isEmpty() && A.intersectsBox(B)) out.push([a.kind, b.kind]);
+    }
+  }
+  return out;
+}
+
+/**
  * Joue la partie en entier (steps : [secondes, étape, ce qu'on fait à la fin]) puis la carte de fin, et vérifie chaque
  * image. head() : les points de sa tête et de sa bouche ; offered() : ce qu'on lui tend. Renvoie le bilan.
  */
@@ -226,6 +250,7 @@ function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
     sc.proxy.bake();
     sc.proxy.at = sc.time;
     for (const p of head()) for (const b of blockers(sc, X, p)) rep.bad.push(`${b} devant sa tête (${phase})`);
+    for (const [a, b] of inEachOther(live)) rep.bad.push(`${a} dans ${b} (${phase})`);
     for (const [name, o] of offered()) for (const p of boxPoints(o)) for (const b of blockers(sc, X, p)) rep.bad.push(`${b} devant ${name} (${phase})`);
     for (const it of live) {
       if (it.path) {
@@ -363,6 +388,12 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
     ['water', 'pre', 844, 390, 'pluie', 5, null, 0.5, null],
     ['treat', 'box', 390, 600, 'jour', 2, null, 0.6, null, [844, 390]],
     ['feed', 'box', 844, 390, 'jour', 4, null, 0.6, null, [390, 600]],
+    // (le rouge-gorge se posait dans la botte de paille, ou sur l'oiseau du jour posé par terre ; le chat perché sur la
+    // cloison, au-dessus du licol pendu ou de la fourche dressée — tous comptés comme des choses à voir)
+    ['treat', 'box', 390, 600, 'jour', 5, null, 0.5, null],
+    ['treat', 'box', 390, 600, 'jour', 9, null, 0.5, null],
+    ['bridle', 'box', 390, 600, 'jour', 5, null, 0.3, null],
+    ['shoe', 'box', 844, 390, 'jour', 2, null, 0.5, null],
   ];
   for (const [game, place, w, h, amb, day, look, min, phase, turn] of CASES) {
     it(`${game} ${place}${look ? ` (${look})` : ''} ${w} × ${h}${turn ? ` puis ${turn[0]} × ${turn[1]}` : ''}, ${amb}, jour ${day} : une chose posée à voir, jamais devant lui`, () => {

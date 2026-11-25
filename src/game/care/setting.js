@@ -155,12 +155,20 @@ export const AWAY_LOOKS = {
   cottage: { ground: 'herbe', trees: 'feuillu', far: ['collines'], landmark: 'cottage', extras: ['oiseau', 'fleurs', 'botte', 'seau', 'papillon', 'poule'] },
   // (le Kentucky : les clôtures blanches, une grande écurie à clocheton)
   haras: { ground: 'herbe', trees: 'feuillu', far: ['collines'], landmark: 'haras', extras: ['botte', 'brouette', 'seau', 'oiseau', 'fleurs', 'papillon'] },
+  // (la Normandie, quand on y part de chez soi : le bocage, ses haies, les pommiers, une longère à colombages au toit de
+  // chaume, des vaches au loin)
+  normandie: { ground: 'herbe', trees: 'pommier', far: ['collines', 'vaches'], landmark: 'longere', extras: ['poule', 'botte', 'seau', 'oiseau', 'fleurs', 'papillon', 'brouette'] },
 };
+
+/** Les familles où l'hiver est blanc même sans neige qui tombe (la neige reste sur les hauteurs). */
+export const WHITE_WINTER = new Set(['montagne', 'volcan', 'rocheuses']);
 
 /** La famille de décor d'un lieu de voyage (AWAY_LOOKS), ou null (lieu inconnu : le décor dehors habituel). */
 export function awayLook(placeId) {
   const P = PLACES[placeId];
   if (!P) return null;
+  // (la Normandie : la ferme de départ ; on n'y est « en voyage » que quand on habite ailleurs)
+  if (placeId === 'maison') return 'normandie';
   if (placeId === 'angleterre') return 'cottage';
   if (placeId === 'kentucky') return 'haras';
   switch (P.biome) {

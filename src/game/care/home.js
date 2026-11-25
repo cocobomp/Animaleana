@@ -30,9 +30,12 @@ const STYLE = {
  * Le coin de la maison. stage : la scène (marks, double). Renvoie { group, props, layout, update, restore, dispose }.
  * opts.outdoor : le jardin, au pied de la maison (l'animal est dehors) — la pelouse, la façade avec sa porte-fenêtre
  * (allumée le soir), une clôture et une haie, le ciel ; ses gamelles au même endroit. opts.season : la saison.
+ * opts.travel (dehors, en voyage) : ni la façade de la maison ni sa niche — une clôture basse derrière lui, sa caisse de
+ * transport, et loin derrière, le fond du lieu du voyage (away.js).
  */
 export function homeSet(stage, opts = {}) {
   const out = !!opts.outdoor;
+  const travel = out && !!opts.travel;
   const g = new THREE.Group();
   const own = [];
   const keep = (x) => {
@@ -82,12 +85,13 @@ export function homeSet(stage, opts = {}) {
   // ---------------------------------------------------------------- sol
   let field = null;
   if (out) {
-    field = grassField(keep, { x0: -4, x1: R.side + 2.5, z0: R.back - 4, z1: 3, season: opts.season ?? 'summer', high, flowers: 40, size: 30, keepOut: { x0: L.tail.x - 0.2, x1: R.side, z0: R.back, z1: 0.6 } });
+    // (en voyage, le sol va jusqu'au fond du lieu, loin derrière)
+    field = grassField(keep, { x0: -4, x1: R.side + 2.5, z0: R.back - 4, z1: 3, season: opts.season ?? 'summer', high, flowers: 40, size: travel ? 60 : 30, keepOut: { x0: L.tail.x - 0.2, x1: R.side, z0: R.back, z1: 0.6 } });
     g.add(field.group);
-    // (des dalles devant la façade : on y pose les gamelles)
+    // (des dalles devant la façade : on y pose les gamelles ; en voyage, ni façade ni dalles)
     const slab = keep(new THREE.MeshStandardMaterial({ map: keep(noiseTexture('#c8bca8', 0.08, 3)), roughness: 0.85 }));
     const rs = rng(8);
-    for (let x = R.left + 0.4; x < R.side; x += 0.62) {
+    for (let x = R.left + 0.4; x < (travel ? R.left : R.side); x += 0.62) {
       for (const z of [R.back + 0.32, R.back + 0.95]) {
         const m = mesh(new THREE.BoxGeometry(0.56 + rs() * 0.04, 0.03, 0.56), slab, [x + rs() * 0.03, 0.006, z + rs() * 0.03], [0, (rs() - 0.5) * 0.05, 0], false);
         m.receiveShadow = true;
@@ -108,7 +112,8 @@ export function homeSet(stage, opts = {}) {
   const winX = Math.min(L.tail.x - 0.1, -0.25 - 0.3 * len) + 0.1;
   const wx0 = winX - winW / 2 - 0.06;
   const wx1 = winX + winW / 2 + 0.06;
-  into = walls.back;
+  // (en voyage : pas de façade — construite, jamais montrée — mais une clôture basse : plus bas)
+  into = travel ? new THREE.Group() : walls.back;
   const wainMat = keep(new THREE.MeshStandardMaterial({ map: wains, roughness: 0.6 }));
   if (out) {
     // (dehors : un soubassement en pierre et un crépi clair)
@@ -171,16 +176,21 @@ export function homeSet(stage, opts = {}) {
   // tringle
   mesh(new THREE.CylinderGeometry(0.01, 0.01, winW + 0.9, 10), brass, [winX + 0.2, winH + 0.17, R.back + 0.09], [0, 0, Math.PI / 2]);
 
-  // Mur de côté (le coin de la pièce, derrière ses gamelles). Dehors : une clôture en bois et une haie.
+  // Mur de côté (le coin de la pièce, derrière ses gamelles). Dehors : une clôture en bois et une haie (en voyage, la
+  // clôture seule : le fond du lieu se voit au-delà).
   into = walls.side;
   let sideFence = null;
+  let backFence = null;
   if (out) {
     const fm = fenceMats(keep);
     sideFence = fenceLine(keep, walls.side, fm, v3(R.side + 0.05, 0, R.back), v3(R.side + 0.05, 0, 2.4), { h: 0.95, seed: 9, postEvery: 1.2 });
+    // (en voyage, derrière lui : une clôture basse à deux lisses à la place de la façade ; la caméra penchée sur lui
+    // voit le lieu par-dessus et entre les lisses)
+    if (travel) backFence = fenceLine(keep, walls.back, fm, v3(R.left, 0, R.back), v3(R.side + 0.05, 0, R.back), { h: 0.6, rails: 2, seed: 11, postEvery: 1.2 });
     const hedgeMat = keep(new THREE.MeshStandardMaterial({ color: opts.season === 'autumn' ? 0x6a7a34 : 0x3f6a32, roughness: 1, flatShading: true }));
     const bush = keep(new THREE.IcosahedronGeometry(0.45, 1));
     const rh = rng(4);
-    for (let z = R.back - 0.2; z < 2.6; z += 0.55) {
+    for (let z = R.back - 0.2; z < (travel ? R.back - 0.2 : 2.6); z += 0.55) {
       const b = new THREE.Mesh(bush, hedgeMat);
       b.position.set(R.side + 0.65 + rh() * 0.1, 0.55 + rh() * 0.15, z);
       b.scale.set(1, 1.3 + rh() * 0.3, 1.1);
@@ -232,10 +242,18 @@ export function homeSet(stage, opts = {}) {
   g.add(bed);
   // Dehors : son panier (et l'arbre à chat) restent dans la maison ; le chien a sa niche.
   bed.visible = !out;
-  if (out && sp === 'dog') {
+  if (out && sp === 'dog' && !travel) {
     const niche = kennelModel(keep, Math.max(0.5, bedR * 2.4));
     niche.position.set(bedX - bedR * 0.4, 0, R.back + Math.max(0.5, bedR * 2.4) * 0.55 + 0.05);
     g.add(niche);
+  }
+  // En voyage : sa caisse de transport (la porte grillagée vers nous).
+  if (travel) {
+    // (à sa taille, sans être énorme dans l'image ; à gauche, derrière sa queue : elle ne cache pas le lieu derrière lui)
+    const cs = THREE.MathUtils.clamp(H * 1.2, 0.42, 0.8);
+    const crate = travelCrate(keep, cs, sp === 'cat' ? 0xc85a6a : 0x3f74b8);
+    crate.position.set(Math.max(R.left + 0.4 + cs / 2, L.tail.x - 1.2 - cs / 2), 0, R.back + cs * 0.4 + 0.12);
+    g.add(crate);
   }
   {
     const fab = keep(fabricTexture(sp === 'cat' ? 'velvet' : 'plaid', ST.bed, sp === 'cat' ? 4 : 6));
@@ -407,14 +425,17 @@ export function homeSet(stage, opts = {}) {
   into = walls.back;
   // la plaque à son nom, au-dessus de son panier, accrochée par une cordelette
   const plateTex = keep(namePlateTexture(stage.a?.name ?? ''));
-  const plateY = Math.max(0.55, Math.min(1.25, bedR * 2.2 + 0.35));
-  const plateMesh = mesh(new THREE.BoxGeometry(0.4, 0.13, 0.015), keep(new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.6 })), [bedX, plateY, R.back + 0.02]);
+  // (en voyage : accrochée à la clôture, sous la lisse du haut, à côté de sa caisse)
+  const plateY = travel ? Math.max(0.3, backFence.top - 0.22) : Math.max(0.55, Math.min(1.25, bedR * 2.2 + 0.35));
+  const plateX = travel ? bedX + bedR + 0.3 : bedX;
+  const plateZ = R.back + (travel ? 0.04 : 0.02);
+  const plateMesh = mesh(new THREE.BoxGeometry(0.4, 0.13, 0.015), keep(new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.6 })), [plateX, plateY, plateZ]);
   const twine = keep(new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 1 }));
   for (const s of [-1, 1]) {
-    const c = mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.16, 4), twine, [bedX + s * 0.08, plateY + 0.11, R.back + 0.02], [0, 0, s * 0.85], false);
+    const c = mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.16, 4), twine, [plateX + s * 0.08, plateY + 0.11, plateZ], [0, 0, s * 0.85], false);
     c.castShadow = false;
   }
-  mesh(new THREE.SphereGeometry(0.008, 8, 6), brass, [bedX, plateY + 0.17, R.back + 0.02], null, false);
+  mesh(new THREE.SphereGeometry(0.008, 8, 6), brass, [plateX, plateY + 0.17, plateZ], null, false);
   into = g;
 
   // ---------------------------------------------------------------- ses gamelles (à son nom), sur un petit set
@@ -515,8 +536,13 @@ export function homeSet(stage, opts = {}) {
   for (let x = R.left + 0.5; x <= R.side - 0.4; x += 0.4) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.06] });
   // (accrochés au mur du fond, de part et d'autre de la porte-fenêtre : un tableau dedans, un nichoir dehors)
   for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.3) {
-    if (x > wx0 - 0.2 && x < wx1 + 0.2) continue;
+    if (backFence || (x > wx0 - 0.2 && x < wx1 + 0.2)) continue;
     for (const y of [0.7, 1.05]) spots.push({ kind: 'hang', p: [x, y, R.back + 0.04], face: 0 });
+  }
+  // (en voyage : accrochés aux poteaux de la clôture du fond, posés sur sa lisse du haut)
+  if (backFence) {
+    for (const p of backFence.posts) if (p.x > R.left + 0.3 && p.x < R.side - 0.2) spots.push({ kind: 'hang', p: [p.x, backFence.rails[1], R.back + 0.07], face: 0 });
+    for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'perch', p: [x, backFence.top + 0.02, R.back], face: 0 });
   }
   if (sideFence) for (let z = R.back + 0.3; z < 1.6; z += 0.35) spots.push({ kind: 'perch', p: [R.side + 0.05, sideFence.top + 0.02, z], face: -Math.PI / 2 });
   else spots.push({ kind: 'perch', p: [winX, 0.05, R.back + 0.12], face: 0 });
@@ -603,6 +629,44 @@ function kennelModel(keep, size = 0.8) {
       o.receiveShadow = true;
     }
   });
+  return g;
+}
+
+/**
+ * Sa caisse de transport (en voyage) : une coque en plastique en deux couleurs, des fentes d'aération, une porte
+ * grillagée vers nous, une poignée sur le dessus. size : sa longueur ; color : la couleur du dessus.
+ */
+export function travelCrate(keep, size = 0.6, color = 0x3f74b8) {
+  const g = new THREE.Group();
+  const w = size;
+  const h = size * 0.62;
+  const d = size * 0.72;
+  const top = keep(new THREE.MeshStandardMaterial({ color, roughness: 0.55 }));
+  const base = keep(new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.6 }));
+  const dark = keep(new THREE.MeshStandardMaterial({ color: 0x1e1a16, roughness: 1 }));
+  const steel = keep(new THREE.MeshStandardMaterial({ color: 0xb8bec4, roughness: 0.35, metalness: 0.8 }));
+  const add = (geo, m, x, y, z) => {
+    const o = new THREE.Mesh(keep(geo), m);
+    o.position.set(x, y, z);
+    o.castShadow = true;
+    o.receiveShadow = true;
+    g.add(o);
+    return o;
+  };
+  add(new THREE.BoxGeometry(w, h * 0.5, d), base, 0, h * 0.25, 0);
+  add(new THREE.BoxGeometry(w * 1.02, h * 0.5, d * 1.02), top, 0, h * 0.75, 0);
+  // (le rebord entre les deux moitiés, la poignée)
+  add(new THREE.BoxGeometry(w * 1.06, h * 0.05, d * 1.06), base, 0, h * 0.5, 0);
+  const handle = add(new THREE.TorusGeometry(w * 0.12, w * 0.018, 6, 12, Math.PI), dark, 0, h, 0);
+  handle.castShadow = false;
+  // la porte grillagée (le noir de l'intérieur, des barreaux) et deux fentes d'aération sur le côté
+  add(new THREE.PlaneGeometry(w * 0.55, h * 0.7), dark, 0, h * 0.48, d / 2 + 0.012);
+  // (les barreaux : une seule pièce en instances)
+  const bars = new THREE.InstancedMesh(keep(new THREE.CylinderGeometry(w * 0.008, w * 0.008, h * 0.7, 5)), steel, 6);
+  const m4 = new THREE.Matrix4();
+  for (let i = 0; i < 6; i++) bars.setMatrixAt(i, m4.makeTranslation(-w * 0.25 + (i * w * 0.5) / 5, h * 0.48, d / 2 + 0.02));
+  g.add(bars);
+  add(new THREE.BoxGeometry(0.01, h * 0.16, d * 0.5), dark, w / 2 + 0.006, h * 0.7, 0);
   return g;
 }
 

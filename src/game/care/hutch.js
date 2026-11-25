@@ -15,7 +15,7 @@ import { canvasTex, rng, strawFloorTexture, hayTexture, woodTexture, noiseTextur
 import { wireMeshTexture, gardenTexture } from './petTextures.js';
 import { petBowl, FOODS, shadowed } from './petProps.js';
 import { avatarHand } from './props.js';
-import { roomEnvironment, namePlateTexture } from './home.js';
+import { roomEnvironment, namePlateTexture, travelCrate } from './home.js';
 import { grassField, skySphere } from './outdoor.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -23,8 +23,11 @@ const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 /**
  * Le clapier et son enclos. stage : la scène. Renvoie { group, props, layout, update, restore, dispose }.
  * opts.grass : dans son enclos dehors, sur l'herbe (pas la litière de paille du clapier) ; opts.season : la saison.
+ * opts.travel (sur l'herbe, en voyage) : ni le clapier de la ferme ni sa plaque, ni le jardin de la maison — un enclos
+ * grillagé bas derrière lui, sa caisse de transport, et loin derrière, le fond du lieu du voyage (away.js).
  */
 export function hutchSet(stage, opts = {}) {
+  const travel = !!opts.grass && !!opts.travel;
   const g = new THREE.Group();
   const own = [];
   const keep = (x) => {
@@ -84,7 +87,8 @@ export function hutchSet(stage, opts = {}) {
   let field = null;
   if (opts.grass) {
     // dans son enclos : l'herbe courte (il la broute), quelques fleurs
-    field = grassField(keep, { x0: R.left - 1, x1: R.side + 1, z0: R.back - 1, z1: 2.4, season: opts.season ?? 'summer', high, flowers: 30, size: 16, keepOut: { x0: L.tail.x - 0.1, x1: L.nose.x + 0.3, z0: -0.25, z1: 0.25 } });
+    // (en voyage, le sol va jusqu'au fond du lieu, loin derrière)
+    field = grassField(keep, { x0: R.left - 1, x1: R.side + 1, z0: R.back - 1, z1: 2.4, season: opts.season ?? 'summer', high, flowers: 30, size: travel ? 60 : 16, keepOut: { x0: L.tail.x - 0.1, x1: L.nose.x + 0.3, z0: -0.25, z1: 0.25 } });
     g.add(field.group);
     bed.dispose();
   } else {
@@ -95,8 +99,9 @@ export function hutchSet(stage, opts = {}) {
   g.add(sky);
 
   // ---------------------------------------------------------------- le clapier au fond : planches, toit, plaque
+  // (en voyage : construit, jamais montré — le clapier est resté à la ferme)
   const hutch = new THREE.Group();
-  g.add(hutch);
+  if (!travel) g.add(hutch);
   const plank = keep(woodTexture({ base: '#c49a66', dark: '#7a5432', vertical: false, seed: 21, boards: 7 }));
   plank.repeat.set(2, 1);
   const plankMat = keep(new THREE.MeshStandardMaterial({ map: plank, roughness: 0.85 }));
@@ -179,7 +184,13 @@ export function hutchSet(stage, opts = {}) {
   house.scale.setScalar(hs);
   house.position.set(Math.min(L.tail.x - 0.12, -len * 0.7) - 0.22 * hs, 0, R.back + 0.3 * hs + 0.05);
   house.rotation.y = 0.35;
-  g.add(house);
+  // (en voyage : sa caisse de transport à la place de sa maisonnette)
+  if (travel) {
+    const crate = travelCrate(keep, Math.max(0.4, Math.min(0.85, len * 1.3 + 0.1)), 0x6a9a4a);
+    crate.position.set(house.position.x, 0, R.back + 0.35);
+    crate.rotation.y = 0.2;
+    g.add(crate);
+  } else g.add(house);
   {
     const wood = keep(new THREE.MeshStandardMaterial({ map: keep(woodTexture({ base: '#d8b48a', dark: '#9a7350', vertical: true, seed: 31, boards: 5 })), roughness: 0.8 }));
     // façade avec une porte ronde
@@ -207,6 +218,8 @@ export function hutchSet(stage, opts = {}) {
   // ---------------------------------------------------------------- le grillage de côté (au-delà de ses gamelles), et le jardin
   const fence = new THREE.Group();
   g.add(fence);
+  const backWire = new THREE.Group();
+  if (travel) g.add(backWire);
   {
     const wm = keep(new THREE.MeshStandardMaterial({ map: meshTex.clone(), alphaTest: 0.4, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.4 }));
     wm.map.repeat.set(14, 3);
@@ -215,9 +228,11 @@ export function hutchSet(stage, opts = {}) {
     mesh(new THREE.PlaneGeometry(d, 0.75), wm, [R.side, 0.375, (R.back + 2.2) / 2], [0, -Math.PI / 2, 0], false, fence);
     for (let k = 0; k <= 3; k++) mesh(new THREE.BoxGeometry(0.05, 0.8, 0.05), postMat, [R.side, 0.4, R.back + (k / 3) * d], null, true, fence);
     mesh(new THREE.BoxGeometry(0.04, 0.04, d), postMat, [R.side, 0.78, (R.back + 2.2) / 2], null, true, fence);
-    // le jardin au-delà : massifs et haie (une grande image derrière, un peu floue)
+    // le jardin au-delà : massifs et haie (une grande image derrière, un peu floue) ; en voyage, ni le jardin ni ses
+    // touffes vertes (sur le sable, la terre rouge) : construits, jamais montrés
+    const garden = travel ? new THREE.Group() : g;
     const gt = keep(gardenTexture(5));
-    const far = mesh(new THREE.PlaneGeometry(6, 3), keep(new THREE.MeshBasicMaterial({ map: gt, toneMapped: false })), [R.side + 2.5, 1.0, 0], [0, -Math.PI / 2, 0], false);
+    const far = mesh(new THREE.PlaneGeometry(6, 3), keep(new THREE.MeshBasicMaterial({ map: gt, toneMapped: false })), [R.side + 2.5, 1.0, 0], [0, -Math.PI / 2, 0], false, garden);
     far.material.color.setScalar(0.95);
     // quelques touffes d'herbe et des fleurs le long du grillage, dehors
     const tuft = keep(new THREE.MeshStandardMaterial({ color: 0x6f9a4a, roughness: 1, side: THREE.DoubleSide }));
@@ -226,7 +241,18 @@ export function hutchSet(stage, opts = {}) {
       const t = shadowed(new THREE.Mesh(keep(new THREE.ConeGeometry(0.03 + r() * 0.03, 0.12 + r() * 0.12, 5)), tuft), false);
       t.position.set(R.side + 0.08 + r() * 0.6, 0.06, R.back + r() * d);
       t.rotation.z = (r() - 0.5) * 0.3;
-      g.add(t);
+      garden.add(t);
+    }
+    // en voyage, derrière lui : le même grillage bas, à la place du clapier (on voit le lieu par-dessus)
+    if (travel) {
+      const bw = R.side - R.left;
+      const wb = keep(new THREE.MeshStandardMaterial({ map: meshTex.clone(), alphaTest: 0.4, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.4 }));
+      wb.map.repeat.set(bw * 4, 3);
+      keep(wb.map);
+      mesh(new THREE.PlaneGeometry(bw, 0.75), wb, [(R.left + R.side) / 2, 0.375, R.back], null, false, backWire);
+      const nP = Math.max(2, Math.round(bw / 1.1));
+      for (let k = 0; k <= nP; k++) mesh(new THREE.BoxGeometry(0.05, 0.8, 0.05), postMat, [R.left + (k / nP) * bw, 0.4, R.back], null, true, backWire);
+      mesh(new THREE.BoxGeometry(bw, 0.04, 0.04), postMat, [(R.left + R.side) / 2, 0.78, R.back], null, true, backWire);
     }
   }
 
@@ -325,7 +351,9 @@ export function hutchSet(stage, opts = {}) {
   // Les places des objets du jour (extras.js) : au sol devant le clapier, sur son toit, contre ses planches.
   const spots = [];
   for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.25) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.22] });
-  for (let x = hx - hW / 2 + 0.3; x <= hx + hW / 2 - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, hH + 0.2, R.back + 0.1], face: 0 });
+  // (sur le toit du clapier ; en voyage, sur la barre du haut du grillage)
+  if (travel) for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, 0.8, R.back], face: 0 });
+  else for (let x = hx - hW / 2 + 0.3; x <= hx + hW / 2 - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, hH + 0.2, R.back + 0.1], face: 0 });
   for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.04] });
   return {
     group: g,
@@ -348,6 +376,7 @@ export function hutchSet(stage, opts = {}) {
     },
     update(dt, st) {
       hutch.visible = st.camera.position.z > R.back + 0.02;
+      backWire.visible = hutch.visible;
       // (le grillage entre la caméra et le lapin : caché, avec le biberon qui y est accroché)
       fence.visible = st.camera.position.x < R.side - 0.02;
       bottle.visible = fence.visible;

@@ -1021,7 +1021,11 @@ export function dressAway(stage, decor, look, amb = null) {
       case 'obstacle': {
         // (un obstacle de saut : deux chandeliers blancs, deux barres rouges et blanches)
         lots(keep(new THREE.BoxGeometry(1, 1, 1)), mat(0xf6f4ee), [[-1, 0.6, 0, 0.12, 1.2, 0.12], [1, 0.6, 0, 0.12, 1.2, 0.12]]);
-        const pole = keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#d03a2a')), roughness: 0.7 }));
+        // (les bandes en travers de la barre : la texture des rayures, tournée d'un quart de tour)
+        const bands = keep(stripeTexture('#d03a2a'));
+        bands.center.set(0.5, 0.5);
+        bands.rotation = Math.PI / 2;
+        const pole = keep(new THREE.MeshStandardMaterial({ map: bands, roughness: 0.7 }));
         lots(keep(new THREE.CylinderGeometry(0.04, 0.04, 2, 8)), pole, [[0, 0.55, 0.08, 1, 1, 1, 0, Math.PI / 2], [0, 0.95, 0.08, 1, 1, 1, 0, Math.PI / 2]]);
         return o;
       }

@@ -186,15 +186,16 @@ export function hutchSet(stage, opts = {}) {
   house.position.set(Math.min(L.tail.x - 0.12, -len * 0.7) - 0.22 * hs, 0, R.back + 0.3 * hs + 0.05);
   house.rotation.y = 0.35;
   // (en voyage : sa caisse de transport à la place de sa maisonnette. Plus grande qu'elle : on la cale d'après lui, son
-  // bord droit, de biais compris, à 10 cm derrière sa queue, son fond contre le grillage — elle ne rentre jamais dans
-  // son arrière-train, ni dans le grillage)
+  // bord droit, de biais compris, en retrait derrière sa queue (une fois et demie sa longueur, comme la caisse du chien
+  // et du chat : la caméra penchée sur sa gamelle voit le sol derrière lui, une chose du pays y tient — away.js), son
+  // fond contre le grillage — elle ne rentre jamais dans son arrière-train, ni dans le grillage)
   const blocks = [];
   if (travel) {
     const crate = travelCrate(keep, Math.max(0.4, Math.min(0.85, len * 1.3 + 0.1)), 0x6a9a4a);
     crate.rotation.y = 0.2;
     crate.updateMatrixWorld(true);
     const cb = new THREE.Box3().setFromObject(crate);
-    crate.position.set(Math.min(house.position.x, L.tail.x - 0.1 - cb.max.x), 0, R.back + 0.03 - cb.min.z);
+    crate.position.set(Math.min(house.position.x, L.tail.x - 0.1 - Math.max(0.5, 1.6 * len) - cb.max.x), 0, R.back + 0.03 - cb.min.z);
     g.add(crate);
     // (sa place au sol : ni objet du jour ni chose du pays dedans — extras.js, away.js)
     blocks.push(cb.translate(crate.position));

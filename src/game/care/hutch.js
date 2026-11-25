@@ -325,8 +325,11 @@ export function hutchSet(stage, opts = {}) {
   // Les places des objets du jour (extras.js) : au sol devant le clapier, sur son toit, contre ses planches.
   const spots = [];
   for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.25) spots.push({ kind: 'floor', p: [x, 0, R.back + 0.22] });
-  for (let x = hx - hW / 2 + 0.3; x <= hx + hW / 2 - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, hH + 0.2, R.back + 0.1], face: 0 });
+  for (let x = hx - hW / 2 + 0.3; x <= hx + hW / 2 - 0.3; x += 0.3) spots.push({ kind: 'perch', p: [x, hH + 0.2, R.back + 0.1], face: 0, wall: hutch });
   for (let x = R.left + 0.4; x <= R.side - 0.3; x += 0.35) spots.push({ kind: 'lean', p: [x, 0, R.back + 0.04] });
+  // (sur ses planches, là où la caméra les voit, à hauteur de lapin : une botte de carottes, un nichoir — la porte, la
+  // plaque, le râtelier, les montants y sont déjà, placeExtras les voit et les évite)
+  const hangAreas = [{ axis: 'z', at: R.back, u0: hx - hW / 2 + 0.06, u1: hx + hW / 2 - 0.06, y0: 0.03, y1: hH - 0.06, face: 0, wall: hutch }];
   return {
     group: g,
     props,
@@ -337,6 +340,7 @@ export function hutchSet(stage, opts = {}) {
     sky,
     ground: field ? field.mats : [],
     spots,
+    hangAreas,
     area: { x0: R.left + 0.3, x1: R.side - 0.25, z0: R.back + 0.2, z1: 1.4, y: 0.02 },
     anchors: { eat },
     layout,

@@ -422,17 +422,17 @@ export function stallSet(stage, opts = {}) {
     // (accrochés à un poteau de la clôture du fond, sous la lisse du haut ; ou à ceux de droite, loin du coin repas)
     // (entre deux lisses, sur un poteau ; ou cloué à la lisse du milieu)
     const hy = back.rails[0] + 0.05;
-    for (const p of back.posts) if (p.x < S.halfW - 0.3) spots.push({ kind: 'hang', p: [p.x, hy, backZ + 0.06], face: 0 });
-    for (let x = -3.2; x <= S.halfW - 0.4; x += 0.35) spots.push({ kind: 'hang', p: [x, back.rails[1] - 0.085, backZ + 0.025], face: 0 });
+    for (const p of back.posts) if (p.x < S.halfW - 0.3) spots.push({ kind: 'hang', p: [p.x, hy, backZ + 0.06], face: 0, wall: walls.back });
+    for (let x = -3.2; x <= S.halfW - 0.4; x += 0.35) spots.push({ kind: 'hang', p: [x, back.rails[1] - 0.085, backZ + 0.025], face: 0, wall: walls.back });
     for (const p of right.posts) {
       if (Math.abs(p.z - feedAt.z) < 0.7 || Math.abs(p.z - netAt.z) < 0.5) continue;
-      spots.push({ kind: 'hang', p: [S.halfW + 0.0, right.rails[0] + 0.05, p.z], face: -Math.PI / 2 });
+      spots.push({ kind: 'hang', p: [S.halfW + 0.0, right.rails[0] + 0.05, p.z], face: -Math.PI / 2, wall: walls.right });
     }
     for (let z = 0.6; z <= S.front - 0.2; z += 0.4) spots.push({ kind: 'floor', p: [-S.halfW - 0.3, 0, z] });
     // (sur la lisse du haut de la clôture de droite, loin du coin repas : on la voit derrière sa tête)
     for (let z = S.back - 1.2; z <= S.front + 1.8; z += 0.3) {
       if (Math.abs(z - feedAt.z) < 0.7 || Math.abs(z - netAt.z) < 0.5) continue;
-      spots.push({ kind: 'perch', p: [S.halfW + 0.06, right.top + 0.02, z], face: -Math.PI / 2 });
+      spots.push({ kind: 'perch', p: [S.halfW + 0.06, right.top + 0.02, z], face: -Math.PI / 2, wall: walls.right });
     }
     return { sky, ground: [...field.mats, ...far.mats], spots };
   }
@@ -445,7 +445,9 @@ export function stallSet(stage, opts = {}) {
     sky: outside?.sky ?? null,
     ground: outside?.ground ?? [],
     dims: S,
-    spots: out ? outside.spots : boxSpots(S),
+    spots: out ? outside.spots : boxSpots(S, walls),
+    // (dans le box : les pans de mur où accrocher ce qu'on veut, là où la caméra les voit — extras.js)
+    hangAreas: out ? [] : boxHangAreas(S, win, walls),
     // (le sol où l'on peut poser un objet du jour : dans le box, ou dans le pré devant la clôture du fond)
     area: out ? { x0: -5.5, x1: S.halfW - 0.3, z0: S.back + 0.2, z1: S.front + 1.5, y: 0 } : { x0: -S.halfW + 0.3, x1: S.halfW - 0.3, z0: S.back + 0.3, z1: S.front - 0.3, y: 0.06 },
     win,
@@ -485,21 +487,40 @@ export function stallSet(stage, opts = {}) {
 
 /**
  * Les places des objets du jour dans le box (extras.js) : au sol le long du mur du fond, dans le coin avant gauche ;
- * sur l'appui de la fenêtre et la lisse de la cloison de gauche ; contre le mur du fond.
+ * sur l'appui de la fenêtre et la lisse de la cloison de gauche ; contre le mur du fond. walls : les murs (une place
+ * suit le sien, caché quand la caméra passe derrière).
  */
-function boxSpots(S) {
+function boxSpots(S, walls) {
   const spots = [];
   for (let x = -S.halfW + 0.4; x <= S.halfW - 0.5; x += 0.35) spots.push({ kind: 'floor', p: [x, 0.06, S.back + 0.32] });
   for (let z = 0.5; z <= S.front - 0.4; z += 0.35) spots.push({ kind: 'floor', p: [-S.halfW + 0.35, 0.06, z] });
   for (const dx of [-0.3, 0, 0.3]) spots.push({ kind: 'perch', p: [-0.55 + dx, 1.95 - 0.375 - 0.045, S.back + 0.09], face: 0 });
-  for (let z = S.back + 0.3; z < 0.4; z += 0.3) spots.push({ kind: 'perch', p: [-S.halfW + 0.02, S.low + 0.09, z], face: Math.PI / 2 });
+  for (let z = S.back + 0.3; z < 0.4; z += 0.3) spots.push({ kind: 'perch', p: [-S.halfW + 0.02, S.low + 0.09, z], face: Math.PI / 2, wall: walls.left });
   for (let x = -S.halfW + 0.3; x <= S.halfW - 0.6; x += 0.5) spots.push({ kind: 'lean', p: [x, 0.06, S.back + 0.06] });
   // (accrochés au mur du fond, sous la fenêtre et la plaque ; à la cloison de gauche, sous sa lisse)
-  for (let x = -S.halfW + 0.35; x <= S.halfW - 0.45; x += 0.3) spots.push({ kind: 'hang', p: [x, 1.0, S.back + 0.01], face: 0 });
-  for (let z = S.back + 0.35; z < 0.6; z += 0.3) spots.push({ kind: 'hang', p: [-S.halfW + 0.03, S.low - 0.62, z], face: Math.PI / 2 });
+  for (let x = -S.halfW + 0.35; x <= S.halfW - 0.45; x += 0.3) spots.push({ kind: 'hang', p: [x, 1.0, S.back + 0.01], face: 0, wall: walls.back });
+  for (let z = S.back + 0.35; z < 0.6; z += 0.3) spots.push({ kind: 'hang', p: [-S.halfW + 0.03, S.low - 0.62, z], face: Math.PI / 2, wall: walls.left });
   // (et à la cloison de droite, celle du coin repas : loin de la mangeoire et du seau, placeExtras y veille)
-  for (let z = S.back + 0.3; z < S.front - 0.3; z += 0.3) spots.push({ kind: 'hang', p: [S.halfW - 0.03, S.low - 0.62, z], face: -Math.PI / 2 });
+  for (let z = S.back + 0.3; z < S.front - 0.3; z += 0.3) spots.push({ kind: 'hang', p: [S.halfW - 0.03, S.low - 0.62, z], face: -Math.PI / 2, wall: walls.right });
   return spots;
+}
+
+/**
+ * Les pans de mur du box où accrocher un fer, un licol, une cloche (extras.js : placeExtras y cherche une place qu'on
+ * voit, en gros plan comme de loin) : le mur du fond, tout en planches jusqu'au toit (pas sur la fenêtre) ; les
+ * planches des cloisons, sous la lisse et au-dessus des barreaux. Ce qui y est déjà (la plaque, le licol bleu, les
+ * poutres) : placeExtras le voit et l'évite.
+ */
+function boxHangAreas(S, win, walls) {
+  const side = (s, y0, y1) => ({ axis: 'x', at: s * S.halfW, u0: S.back + 0.15, u1: S.front - 0.25, y0, y1, face: -s * Math.PI / 2, wall: s < 0 ? walls.left : walls.right });
+  return [
+    { axis: 'z', at: S.back, u0: -S.halfW + 0.15, u1: S.halfW - 0.15, y0: 0.3, y1: S.roof - 0.2, face: 0, wall: walls.back,
+      holes: [[win.x - win.w / 2 - 0.12, win.x + win.w / 2 + 0.12, win.y - win.h / 2 - 0.12, win.y + win.h / 2 + 0.1]] },
+    side(-1, 0.25, S.low - 0.06),
+    side(-1, S.high + 0.07, S.roof - 0.2),
+    side(1, 0.25, S.low - 0.06),
+    side(1, S.high + 0.07, S.roof - 0.2),
+  ];
 }
 
 /** Environnement des reflets : un petit box chaud « photographié » une fois (PMREM). */

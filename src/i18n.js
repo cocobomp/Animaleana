@@ -2569,6 +2569,7 @@ const fr = {
   fb_empty: 'Choisis un smiley ou écris un petit mot 🙂',
   fb_wait: 'Attends un petit moment avant d\'en envoyer un autre 🙂',
   fb_day: 'Tu as déjà envoyé beaucoup de messages aujourd\'hui. Reviens demain 🙂',
+  fb_offsite: 'Ton avis ne peut partir que depuis le jeu en ligne 🙂',
 };
 
 const en = {
@@ -4931,6 +4932,7 @@ const en = {
   fb_empty: 'Pick a smiley or write a few words 🙂',
   fb_wait: 'Wait a little before sending another one 🙂',
   fb_day: 'You\'ve already sent lots of messages today. Come back tomorrow 🙂',
+  fb_offsite: 'Your feedback can only be sent from the online game 🙂',
 };
 
 // Dressage, concours à l'extérieur et métier de cavalière de concours (src/ui/competitionsTexts.js)

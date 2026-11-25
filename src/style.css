@@ -156,9 +156,12 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .cloud-claim .sv-pick { max-height: 50vh; overflow: auto; }
 /* ---------- 💌 Ton avis (src/ui/feedbackWindow.js) */
 /* Sans boîte à elle (comme .sv-sheet) : sa rangée Annuler / Envoyer reste collée en bas de la fenêtre, donc au-dessus
-   du clavier du téléphone (#modal se cale dans la partie visible : src/ui/viewport.js). */
+   du clavier du téléphone (#modal se cale dans la partie visible : src/ui/viewport.js). Le petit mot (.fb-status :
+   « Choisis un smiley… », « Attends un petit moment… ») est DANS cette rangée, sur sa ligne au-dessus des boutons :
+   jamais caché sous elle, même quand la fenêtre défile ou que le clavier est ouvert. */
 .fb-sheet { display: contents; }
 .modal-box > .fb-sheet > .row.end:last-child { position: sticky; bottom: -18px; z-index: 1; margin: 8px -20px -18px; padding: 6px 20px 18px; background: var(--bg); }
+.fb-sheet > .fb-foot { flex-wrap: wrap; }
 @media (max-height: 480px) {
   .modal-box > .fb-sheet > .row.end:last-child { bottom: -12px; margin: 6px -16px -12px; padding: 6px 16px 12px; }
 }
@@ -180,8 +183,10 @@ h3 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; colo
 .fb-text { display: block; width: 100%; min-height: 96px; max-height: 40vh; resize: vertical; padding: 10px 12px; font: inherit; font-size: 16px; line-height: 1.35; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .fb-text:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
 .fb-count { display: block; margin-top: 2px; text-align: right; color: var(--muted); font-size: 0.8rem; }
-.modal-box .fb-sheet .fb-status { margin: 6px 0 0; padding: 6px 10px; border-radius: 10px; background: #eef4fb; color: #24456b; font-size: 0.95rem; line-height: 1.3; }
+.modal-box .fb-sheet .fb-status { flex: 1 0 100%; min-width: 0; margin: 0; padding: 6px 10px; border-radius: 10px; background: #eef4fb; color: #24456b; font-size: 0.95rem; line-height: 1.3; overflow-wrap: anywhere; }
 .fb-status[hidden] { display: none; }
+/* Version « à emporter » (fichier) : la phrase qui dit où donner son avis. */
+.modal-box .fb-sheet .fb-offsite { margin: 6px 0 0; font-size: 1.05rem; line-height: 1.4; }
 .fb-thanks { text-align: center; padding: 8px 0 4px; }
 .fb-thanks-emoji { font-size: 3.2rem; line-height: 1.1; animation: pop 0.4s; }
 .modal-box .fb-thanks p { margin: 6px 0 0; font-size: 1.2rem; font-weight: 700; }

@@ -1,7 +1,8 @@
 // 💌 Les avis des joueurs (src/cloud/feedback.js, src/ui/feedbackWindow.js) avec un faux SDK Firebase : le message
 // (exactement les champs prévus, rien de personnel, texte nettoyé et borné), la file d'attente sur l'appareil (lecture
-// tolérante, 20 au plus, renvoi au démarrage et au retour du réseau, jamais perdu), les limites (30 s, 5 par jour),
-// la fenêtre « Ton avis » (faux DOM) et ses textes FR / EN. Les règles elles-mêmes : tests/firestoreRules.test.js.
+// tolérante, 20 au plus, renvoi au démarrage et au retour du réseau, jamais perdu, même stockage plein), les limites
+// (30 s, 5 par jour), la fenêtre « Ton avis » (faux DOM), seulement dans le jeu en ligne, et ses textes FR / EN. Les
+// règles elles-mêmes : tests/firestoreRules.test.js.
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { installFakeDom } from './helpers/fakeDom.js';
@@ -91,6 +92,22 @@ describe('💌 le message : exactement les champs prévus, rien de personnel', (
     const text = 'Je m\'appelle Léa et ma sœur LUCIE. Écris à lea.dupont@exemple.ch ou au +41 79 123 45 67 ou 0612345678 ! Mon cheval Léandre a 12 ans, niveau 7.';
     const m = F.buildMessage({ mood: 'happy', text }, CTX, { names: ['Léa', 'Lucie', ' ', 'x', null] });
     expect(m.text).toBe('Je m\'appelle [prénom] et ma sœur [prénom]. Écris à [e-mail] ou au [téléphone] ou [téléphone] ! Mon cheval Léandre a 12 ans, niveau 7.');
+  });
+
+  it('prénoms des profils : le nom entier et chacun de ses mots, quelle que soit leur forme (NFD, tiret, majuscules)', () => {
+    // (prénom et nom de famille dans le profil : « Léa » et « Dupont » seuls sont masqués aussi)
+    expect(F.cleanText('Je suis Léa, Léa Dupont, et Dupont', { names: ['Léa Dupont'] })).toBe('Je suis [prénom], [prénom], et [prénom]');
+    expect(F.cleanText('Moi c\'est marie lou, MARIE-LOU ou Marie', { names: ['Marie-Lou'] })).toBe('Moi c\'est [prénom] [prénom], [prénom] ou [prénom]');
+    // Nom de profil décomposé (NFD : une partie restaurée depuis un Mac) ou texte décomposé : reconnu quand même.
+    const nfd = 'Chloe\u0301';
+    expect(nfd).not.toBe('Chloé');
+    expect(F.cleanText('Je suis Chloé', { names: [nfd] })).toBe('Je suis [prénom]');
+    expect(F.cleanText(`Je suis ${nfd} !`, { names: ['Chloé'] })).toBe('Je suis [prénom] !');
+    expect(F.cleanText('Léa', { names: ['Le\u0301a Dupont'] })).toBe('[prénom]');
+    // Les petits mots d'un nom ne sont pas des prénoms ; un mot plus long qui commence pareil reste.
+    expect(F.cleanText('La maison de la Tour, Lou et Louise', { names: ['Lou de la Tour'] })).toBe('La maison de la [prénom], [prénom] et Louise');
+    expect(F.cleanText('Ma ferme a un âne, ma sœur aussi', { names: ['Ma ferme'] })).toBe('[prénom] a un âne, ma sœur aussi');
+    expect(F.nameParts(['Léa Dupont', ' Jo ', 'D\'Artagnan', 'x', null])).toEqual(['Léa Dupont', 'D\'Artagnan', 'Artagnan', 'Dupont', 'Léa', 'Jo']);
   });
 
   it('texte nettoyé : caractères invisibles et de contrôle retirés, espaces et lignes vides resserrés, emojis composés gardés', () => {
@@ -254,12 +271,16 @@ describe('📮 envoi, et file d\'attente sur l\'appareil', () => {
     expect(sdk.calls).toEqual([]);
   });
 
-  it('version « à emporter » (fichier) : gardé, jamais envoyé d\'ici', async () => {
+  it('version « à emporter » (fichier) : pas proposé ; rien n\'est gardé ni compté (il ne pourrait jamais partir d\'ici)', async () => {
     await load({ protocol: 'file:' });
-    expect(await F.submitFeedback({ text: 'coucou' }, CTX, { now: NOW })).toBe('kept');
+    expect(F.feedbackAvailable()).toBe(false);
+    expect(await F.submitFeedback({ mood: 'love', text: 'coucou' }, CTX, { now: NOW })).toBe('offsite');
+    expect(F.pendingFeedback()).toBe(0);
+    expect(store.m.size).toBe(0); // (ni file d'attente, ni limites)
     expect(await F.flushFeedback()).toBe(0);
     expect(sdk.calls).toEqual([]);
-    expect(F.pendingFeedback()).toBe(1);
+    await load();
+    expect(F.feedbackAvailable()).toBe(true);
   });
 
   it('règles pas encore publiées (refus) : gardé, puis parti quand le réseau revient', async () => {
@@ -299,12 +320,62 @@ describe('📮 envoi, et file d\'attente sur l\'appareil', () => {
     expect(sdk.docs.map((d) => d.data.text)).toEqual(['un', 'deux', 'trois']);
   });
 
-  it('sans stockage (navigation privée d\'un vieux navigateur) : un essai direct, jamais d\'erreur', async () => {
+  it('stockage plein ou bloqué : gardé en mémoire pour de vrai (pas perdu), renvoyé au retour du réseau ; les limites tiennent', async () => {
     await load();
+    F.startFeedback({ delayMs: 60000 });
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => { throw new Error('QuotaExceeded'); }, removeItem: () => {} });
-    expect(await F.submitFeedback({ text: 'coucou' }, CTX, { now: NOW })).toBe('sent');
-    sdk.fail = 'unavailable';
-    expect(await F.submitFeedback({ text: 'encore' }, CTX, { now: NOW + MIN })).toBe('kept');
+    expect(await F.submitFeedback({ text: 'un' }, CTX, { now: NOW })).toBe('sent');
+    // (30 s entre deux envois, même sans stockage)
+    expect(await F.submitFeedback({ text: 'trop tôt' }, CTX, { now: NOW + 1000 })).toBe('wait');
+    // Règles pas encore publiées (refus), puis hors ligne : gardés en mémoire.
+    sdk.fail = 'permission-denied';
+    expect(await F.submitFeedback({ text: 'n2' }, CTX, { now: NOW + 2 * MIN })).toBe('kept');
+    navigator.onLine = false;
+    for (let i = 3; i <= 5; i++) expect(await F.submitFeedback({ text: `n${i}` }, CTX, { now: NOW + i * MIN })).toBe('kept');
+    expect(F.pendingFeedback()).toBe(4);
+    // (5 par jour, même sans stockage)
+    expect(await F.submitFeedback({ text: 'n6' }, CTX, { now: NOW + 10 * MIN })).toBe('day');
+    expect(F.pendingFeedback()).toBe(4);
+    // Le réseau revient, règles publiées : ils partent, du plus ancien au plus récent, une seule fois.
+    sdk.fail = null;
+    navigator.onLine = true;
+    handlers.online();
+    await vi.waitFor(() => expect(sdk.docs.map((d) => d.data.text)).toEqual(['un', 'n2', 'n3', 'n4', 'n5']));
+    expect(F.pendingFeedback()).toBe(0);
+    expect(await F.flushFeedback()).toBe(0);
+    expect(sdk.docs).toHaveLength(5);
+  });
+
+  it('le stockage accepte de nouveau : ce qui attendait en mémoire y passe, et survit à un redémarrage', async () => {
+    await load({ onLine: false });
+    let full = true;
+    const m = new Map();
+    vi.stubGlobal('localStorage', {
+      getItem: (k) => m.get(k) ?? null, removeItem: (k) => m.delete(k),
+      setItem: (k, v) => { if (full) throw new Error('QuotaExceeded'); m.set(k, String(v)); },
+    });
+    expect(await F.submitFeedback({ text: 'plein' }, CTX, { now: NOW })).toBe('kept');
+    expect(m.has(QUEUE)).toBe(false);
+    expect(F.pendingFeedback()).toBe(1);
+    full = false;
+    expect(await F.submitFeedback({ text: 'libre' }, CTX, { now: NOW + MIN })).toBe('kept');
+    expect(JSON.parse(m.get(QUEUE)).map((it) => it.msg.text)).toEqual(['plein', 'libre']);
+    expect(F.pendingFeedback()).toBe(2);
+    // Le lendemain, le jeu redémarre avec Internet : les deux partent.
+    await load({ init: { [QUEUE]: m.get(QUEUE) } });
+    F.startFeedback({ delayMs: 0 });
+    await vi.waitFor(() => expect(sdk.docs.map((d) => d.data.text)).toEqual(['plein', 'libre']));
+  });
+
+  it('stockage qui accepte mais ne rend rien : jamais « parti » à tort ; gardé en mémoire, puis parti', async () => {
+    await load({ onLine: false });
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+    expect(await F.submitFeedback({ text: 'perdu ?' }, CTX, { now: NOW })).toBe('kept');
+    expect(F.pendingFeedback()).toBe(1);
+    navigator.onLine = true;
+    expect(await F.flushFeedback()).toBe(1);
+    expect(sdk.docs.map((d) => d.data.text)).toEqual(['perdu ?']);
+    expect(F.pendingFeedback()).toBe(0);
   });
 });
 
@@ -372,6 +443,7 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
   }, 120000);
   beforeEach(() => {
     vi.stubGlobal('localStorage', fakeStorage({ 'animaleana.profiles': JSON.stringify([{ id: 'p1', name: 'Léa' }]) }));
+    vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
   });
 
   /** Une fausse interface : la fenêtre est posée dans la page (isConnected), hideModal l'enlève. */
@@ -485,7 +557,7 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
   });
 
   it('rien à dire, trop tôt, trop de messages : un petit mot, la fenêtre reste ouverte', async () => {
-    for (const [result, said] of [['empty', 'Choisis un smiley ou écris un petit mot 🙂'], ['wait', 'Attends un petit moment avant d\'en envoyer un autre 🙂'], ['day', 'Tu as déjà envoyé beaucoup de messages aujourd\'hui. Reviens demain 🙂']]) {
+    for (const [result, said] of [['empty', 'Choisis un smiley ou écris un petit mot 🙂'], ['wait', 'Attends un petit moment avant d\'en envoyer un autre 🙂'], ['day', 'Tu as déjà envoyé beaucoup de messages aujourd\'hui. Reviens demain 🙂'], ['offsite', 'Ton avis ne peut partir que depuis le jeu en ligne 🙂']]) {
       const ui = fakeUi();
       W.openFeedback(ui, { submit: async () => result });
       click(button(ui.box, 'Envoyer'));
@@ -497,6 +569,35 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
       expect(button(ui.box, 'Envoyer').disabled).toBe(false);
       click(button(ui.box, 'Annuler'));
     }
+  });
+
+  it('le petit mot s\'écrit dans la rangée collée en bas, au-dessus des boutons (jamais caché sous elle) ; un smiley ou une sorte l\'efface', async () => {
+    const ui = fakeUi();
+    W.openFeedback(ui, { submit: async () => 'empty' });
+    const status = one(ui.box, 'fb-status');
+    const foot = ui.box.children.at(-1);
+    expect(['row', 'end', 'fb-foot'].every((c) => foot.classList.contains(c))).toBe(true);
+    expect(foot.children[0]).toBe(status);
+    expect(foot.children.slice(1).map((b) => b.textContent)).toEqual(['Annuler', '💌 Envoyer']);
+    click(button(ui.box, 'Envoyer'));
+    await tick();
+    expect(status.hidden).toBe(false);
+    click(all(ui.box, 'fb-mood')[0]);
+    expect(status.hidden).toBe(true);
+    click(button(ui.box, 'Envoyer'));
+    await tick();
+    expect(status.hidden).toBe(false);
+    click(all(ui.box, 'fb-kind')[2]);
+    expect(status.hidden).toBe(true);
+    click(button(ui.box, 'Annuler'));
+    // La rangée (le dernier enfant de la fenêtre) est collée en bas, le petit mot y prend toute une ligne ; le champ
+    // reste au-dessus d'elle quand le clavier s'ouvre (src/ui/viewport.js : revealField compte sa hauteur).
+    const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.modal-box > \.fb-sheet > \.row\.end:last-child \{ position: sticky;/);
+    expect(css).toMatch(/\.fb-sheet > \.fb-foot \{ flex-wrap: wrap; \}/);
+    expect(css).toMatch(/\.fb-sheet \.fb-status \{ flex: 1 0 100%;/);
+    const viewport = readFileSync(new URL('../src/ui/viewport.js', import.meta.url), 'utf8');
+    expect(viewport).toContain("querySelectorAll('.row.end:last-child')");
   });
 
   it('fermée par erreur : elle se rouvre avec ce qui était choisi et écrit ; vidée une fois envoyé', async () => {
@@ -517,18 +618,18 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
   });
 
   it('pour de vrai (sans réseau) : le message est gardé sur l\'appareil, sans prénom', async () => {
-    vi.stubGlobal('location', { protocol: 'file:' });
-    const game = { running: true, profile: { id: 'p1', name: 'Léa', mode: 'sandbox', place: 'alpes' }, level: 2, day: 3 };
+    vi.stubGlobal('navigator', { onLine: false });
+    const game = { running: true, profile: { id: 'p1', name: 'Léa Dupont', mode: 'sandbox', place: 'alpes' }, level: 2, day: 3 };
     const ui = fakeUi(game);
     W.openFeedback(ui);
     click(all(ui.box, 'fb-mood')[1]);
-    type(tagged(ui.box, 'TEXTAREA')[0], 'Moi c\'est Léa, j\'adore Caramel');
+    type(tagged(ui.box, 'TEXTAREA')[0], 'Moi c\'est Léa, Léa Dupont, j\'adore Caramel');
     click(button(ui.box, 'Envoyer'));
     await vi.waitFor(() => expect(one(ui.box, 'fb-thanks')).toBeDefined());
     expect(ui.box.textContent).toMatch(/dès que possible/);
     const [item] = JSON.parse(localStorage.getItem(QUEUE));
-    expect(item.msg).toMatchObject({ text: 'Moi c\'est [prénom], j\'adore Caramel', mood: 'happy', mode: 'sandbox', place: 'alpes', level: 2, day: 3 });
-    expect(JSON.stringify(item)).not.toMatch(/Léa|"p1"/);
+    expect(item.msg).toMatchObject({ text: 'Moi c\'est [prénom], [prénom], j\'adore Caramel', mood: 'happy', mode: 'sandbox', place: 'alpes', level: 2, day: 3 });
+    expect(JSON.stringify(item)).not.toMatch(/Léa|Dupont|"p1"/);
   });
 
   it('ouverte depuis « ⋯ Plus », ⚙️ Réglages et l\'écran des profils', async () => {
@@ -552,7 +653,6 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
     expect(ui.box.classList.contains('fb-sheet')).toBe(true);
     ui.hideModal();
     // L'écran des profils
-    vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
     const pui = fakeUi();
     pui.screen = document.createElement('div');
     pui.toast = () => {};
@@ -562,19 +662,60 @@ describe('🪟 la fenêtre « Ton avis » (faux DOM)', () => {
     click(open);
     expect(pui.box.classList.contains('fb-sheet')).toBe(true);
   });
+
+  it('version « à emporter » (fichier) : pas de 💌 dans ⋯ Plus, ⚙️ Réglages ni l\'écran des profils ; ouverte quand même, une phrase vraie et rien de gardé', async () => {
+    vi.stubGlobal('location', { protocol: 'file:' });
+    const flat = (x) => [x].flat(Infinity).filter(Boolean).flatMap((n) => [n, ...(n.children ? flat(n.children) : [])]);
+    // ⋯ Plus
+    const shown = [];
+    UI.prototype.openMore.call({ game: { paused: false, profile: {} }, showModal: (c) => shown.push(c), hideModal: () => {} });
+    expect(flat(shown[0]).some((n) => /Ton avis|💌/.test(n.textContent ?? ''))).toBe(false);
+    expect(flat(shown[0]).some((n) => (n.textContent ?? '').includes('⚙️'))).toBe(true); // (le reste est bien là)
+    // ⚙️ Réglages
+    let spec = null;
+    const ui = fakeUi({ running: true, profile: { settings: {}, mode: 'manage', place: 'maison' }, rig: { mode: 'third' }, quality: 'high' });
+    Object.assign(ui, { openPanel: (s) => { spec = s; }, onScreenControls: () => true, tutorial: null });
+    panels.openSettings(ui);
+    expect(flat(spec.render()).some((n) => n.tagName === 'BUTTON' && n.textContent.includes('Ton avis'))).toBe(false);
+    // L'écran des profils
+    const pui = fakeUi();
+    pui.screen = document.createElement('div');
+    pui.toast = () => {};
+    screens.showProfiles(pui);
+    expect(pui.screen.findAll('fb-open')).toEqual([]);
+    // Ouverte quand même : la phrase vraie, un seul bouton OK (Échap), rien à écrire, rien de gardé.
+    let called = false;
+    const wui = fakeUi();
+    W.openFeedback(wui, { submit: async () => { called = true; return 'kept'; } });
+    expect(wui.box.textContent).toContain('Ton avis ne peut partir que depuis le jeu en ligne 🙂');
+    expect(all(wui.box, 'fb-mood')).toEqual([]);
+    expect(tagged(wui.box, 'TEXTAREA')).toEqual([]);
+    expect(button(wui.box, 'Envoyer')).toBeUndefined();
+    const ok = button(wui.box, 'OK');
+    expect(ok.getAttribute('data-escape')).toBe('');
+    click(ok);
+    expect(wui.closed).toBe(1);
+    expect(called).toBe(false);
+    expect(localStorage.getItem(QUEUE)).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------- aide
 
 describe('❓ l\'aide en parle', () => {
-  it('« donner une idée », « signaler un bug » : la fiche 💌', async () => {
+  it('« donner une idée », « signaler un bug » : la fiche 💌 (seulement dans le jeu en ligne)', async () => {
     globalThis.document = globalThis.document ?? { documentElement: {} };
     const { searchHelp } = await import('../src/ui/help.js');
+    vi.stubGlobal('location', { protocol: 'https:', hostname: 'lafermeamadichelle.web.app' });
     for (const q of ['donner mon avis', 'j\'ai une idée pour le jeu', 'signaler un bug', 'report a bug', 'I have an idea']) {
       expect(searchHelp(q)[0].id, q).toBe('feedback');
     }
     // (et nourrir reste nourrir : « feed » ne mène pas à « feedback »)
     for (const q of ['feed', 'give water', 'nourrir']) expect(searchHelp(q)[0].id, q).toBe('feed');
+    // Version « à emporter » (fichier) : le bouton n'y est pas, la fiche non plus.
+    vi.stubGlobal('location', { protocol: 'file:' });
+    expect(searchHelp('donner mon avis').map((x) => x.id)).not.toContain('feedback');
+    expect(searchHelp('').map((x) => x.id)).not.toContain('feedback');
   });
 });
 
@@ -583,7 +724,7 @@ describe('❓ l\'aide en parle', () => {
 describe('🔤 textes FR / EN', () => {
   const KEYS = ['fb_btn', 'fb_intro', 'fb_moodLabel', 'fb_mood_love', 'fb_mood_happy', 'fb_mood_meh', 'fb_mood_sad', 'fb_kindLabel',
     'fb_kind_idea', 'fb_kind_bug', 'fb_kind_like', 'fb_kind_other', 'fb_textLabel', 'fb_placeholder', 'fb_safety', 'fb_send',
-    'fb_sending', 'fb_sent', 'fb_kept', 'fb_empty', 'fb_wait', 'fb_day'];
+    'fb_sending', 'fb_sent', 'fb_kept', 'fb_empty', 'fb_wait', 'fb_day', 'fb_offsite'];
   let i18n;
   beforeAll(async () => {
     globalThis.document = globalThis.document ?? { documentElement: {} };

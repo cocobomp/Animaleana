@@ -5,11 +5,17 @@
 // Rien de personnel : ni prénom, ni identifiant de partie, ni compte (Firebase est chargé SANS la connexion Google,
 // dans une appli à part), ni e-mail ; l'adresse IP n'est gardée nulle part par le jeu. Seulement de quoi comprendre le
 // message : langue, version du jeu, sorte d'appareil, sens de l'écran, mode, niveau, jour du jeu, lieu et ce qui était
-// ouvert. Dans le texte, les adresses e-mail, les numéros de téléphone et les prénoms des profils sont masqués.
+// ouvert. Dans le texte, les adresses e-mail, les numéros de téléphone et les prénoms des profils (le nom entier et
+// chacun de ses mots) sont masqués.
 //
-// Pas d'Internet, version « à emporter » (fichier), règles pas encore publiées, réponse qui ne vient pas : le message
-// est GARDÉ sur l'appareil (localStorage, 20 au plus) et renvoyé au prochain démarrage ou quand le réseau revient.
-// Jamais d'erreur technique à l'écran. Limites sur l'appareil : 30 s entre deux envois, 5 par jour.
+// Pas d'Internet, règles pas encore publiées, réponse qui ne vient pas : le message est GARDÉ sur l'appareil
+// (localStorage, 20 au plus) et renvoyé au prochain démarrage ou quand le réseau revient. Stockage plein ou bloqué :
+// gardé en mémoire tant que le jeu est ouvert (renvoyé au retour du réseau ou au prochain avis), et passé dans le
+// stockage dès qu'il accepte de nouveau. Jamais d'erreur technique à l'écran. Limites sur l'appareil : 30 s entre
+// deux envois, 5 par jour (en mémoire aussi, si le stockage refuse).
+//
+// Seulement depuis le jeu en ligne (feedbackAvailable) : dans la version « à emporter » (fichier), un message ne
+// pourrait jamais partir (son stockage n'est pas celui du site) ; « 💌 Ton avis » n'y est pas proposé.
 
 import { FIREBASE_CONFIG, cloudSupported, emulatorConfig } from './firebase.js';
 
@@ -41,10 +47,30 @@ const INVISIBLE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u2
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]{2,}/g;
 const PHONE = /\+?\d(?:[ .\-/()]{0,2}\d){7,}/g; // 8 chiffres ou plus, avec ou sans séparateurs
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Les petits mots d'un nom qui ne sont pas des prénoms (« Lou de la Tour », « Ma ferme ») : jamais masqués seuls. */
+const NOT_NAMES = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'un', 'une', 'au', 'aux', 'en', 'ma', 'mon', 'mes',
+  'ta', 'ton', 'tes', 'sa', 'son', 'ses', 'di', 'da', 'del', 'dos', 'van', 'von', 'der', 'den', 'the', 'an', 'and', 'of', 'my']);
+
+/**
+ * Ce qu'on masque pour les noms des profils : chaque nom entier (en NFC, comme le texte : un nom décomposé, venu
+ * d'une partie restaurée depuis un Mac par exemple, est reconnu) et chacun de ses mots (découpé sur les espaces,
+ * tirets, apostrophes… ; 2 lettres ou plus, sauf les petits mots NOT_NAMES) : « Léa Dupont » masque aussi « Léa » et
+ * « Dupont », « Marie-Lou » aussi « marie lou ». Le plus long d'abord.
+ */
+export function nameParts(names = []) {
+  const out = new Set();
+  for (const n of names) {
+    const name = String(n ?? '').normalize('NFC').replace(INVISIBLE, '').trim().replace(/\s+/g, ' ');
+    if (name.length >= 2) out.add(name);
+    for (const w of name.split(/[^\p{L}\p{M}]+/u)) if (w.length >= 2 && !NOT_NAMES.has(w.toLowerCase())) out.add(w);
+  }
+  return [...out].sort((a, b) => b.length - a.length);
+}
 
 /**
  * Le texte du joueur, nettoyé : caractères invisibles retirés, espaces et lignes vides resserrés, adresses e-mail,
- * numéros de téléphone et prénoms (names : ceux des profils de l'appareil) masqués, MAX_TEXT caractères au plus.
+ * numéros de téléphone et prénoms (names : les noms des profils de l'appareil, entiers et mot à mot : nameParts)
+ * masqués, MAX_TEXT caractères au plus.
  */
 export function cleanText(raw, { names = [] } = {}) {
   let s = String(raw ?? '').normalize('NFC')
@@ -52,7 +78,7 @@ export function cleanText(raw, { names = [] } = {}) {
     .replace(INVISIBLE, '')
     .replace(/\t/g, ' ');
   s = s.replace(EMAIL, '[e-mail]').replace(PHONE, '[téléphone]');
-  for (const name of new Set(names.map((n) => String(n ?? '').trim()).filter((n) => n.length >= 2))) {
+  for (const name of nameParts(names)) {
     // (mot entier, sans tenir compte des majuscules ; pas de « lookbehind » : les vieux iPad ne le connaissent pas)
     s = s.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(name)}(?=[^\\p{L}\\p{N}]|$)`, 'giu'), '$1[prénom]');
   }
@@ -208,16 +234,50 @@ export function readQueue() {
 
 const writeQueue = (q) => writeJson(QUEUE_KEY, q.length ? q.slice(-MAX_QUEUE) : null);
 
-/** Nombre de messages gardés sur l'appareil, pas encore partis. */
-export const pendingFeedback = () => readQueue().length;
+// Stockage plein ou bloqué (navigation privée, appareil plein) : les messages attendent ici, en mémoire, le temps que
+// le jeu est ouvert ; ils passent dans le stockage dès qu'il accepte de nouveau (spill). Et les messages déjà partis
+// pendant cette session : jamais renvoyés, même si le stockage refuse de les retirer de la file.
+let memQueue = []; // [{ id, at, msg }]
+const gone = new Set();
+
+/** Les messages qui attendent de partir : ceux du stockage, puis ceux gardés en mémoire. */
+function pendingItems() {
+  const q = readQueue();
+  const ids = new Set(q.map((it) => it.id));
+  return [...q, ...memQueue.filter((it) => !ids.has(it.id))].filter((it) => !gone.has(it.id));
+}
+
+/** Nombre de messages gardés (sur l'appareil, ou en mémoire si le stockage refuse), pas encore partis. */
+export const pendingFeedback = () => pendingItems().length;
+
+/** Les messages gardés en mémoire passent dans le stockage s'il accepte (ils survivront alors à un redémarrage). */
+function spill() {
+  if (!memQueue.length || !writeQueue([...readQueue().filter((it) => !gone.has(it.id)), ...memQueue])) return;
+  // (relu : seul ce que le stockage rend vraiment est retiré de la mémoire)
+  const stored = new Set(readQueue().map((it) => it.id));
+  memQueue = memQueue.filter((it) => !stored.has(it.id));
+}
+
+/** Un message est parti : retiré de la file (stockage et mémoire). */
+function forget(id) {
+  gone.add(id);
+  memQueue = memQueue.filter((it) => it.id !== id);
+  const q = readQueue();
+  if (q.some((it) => it.id === id)) writeQueue(q.filter((it) => it.id !== id));
+}
 
 let idCount = 0;
 const newId = (now) => `${now.toString(36)}-${(idCount++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-/** Garde un message (le plus ancien part de la file au-delà de MAX_QUEUE). Renvoie son id, ou null sans stockage. */
+/**
+ * Garde un message (le plus ancien part de la file au-delà de MAX_QUEUE) : dans le stockage, ou en mémoire s'il est
+ * plein ou bloqué. Renvoie son id.
+ */
 export function enqueue(msg, now = Date.now()) {
   const id = newId(now);
-  return writeQueue([...readQueue(), { id, at: now, msg }]) ? id : null;
+  memQueue = [...memQueue, { id, at: now, msg }].slice(-MAX_QUEUE);
+  spill();
+  return id;
 }
 
 /** « 2026-11-25 » : le jour de l'appareil (heure locale), pour la limite par jour. */
@@ -226,13 +286,16 @@ export function dayKey(now) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+let memSent = null; // (le dernier compte noté : les limites tiennent même si le stockage refuse de l'écrire)
+
 function readSent() {
   const s = readJson(SENT_KEY);
-  return {
+  const stored = {
     day: typeof s?.day === 'string' ? s.day : '',
     n: Number.isInteger(s?.n) && s.n > 0 ? s.n : 0,
     last: Number.isFinite(s?.last) ? s.last : 0,
   };
+  return memSent && memSent.last > stored.last ? memSent : stored;
 }
 
 /** Pourquoi on ne peut pas envoyer maintenant : 'wait' (moins de 30 s depuis le précédent), 'day' (5 aujourd'hui), ou null. */
@@ -247,14 +310,21 @@ export function limitReason(now = Date.now()) {
 function noteSent(now) {
   const s = readSent();
   const day = dayKey(now);
-  writeJson(SENT_KEY, { day, n: s.day === day ? s.n + 1 : 1, last: now });
+  memSent = { day, n: s.day === day ? s.n + 1 : 1, last: now };
+  writeJson(SENT_KEY, memSent);
 }
 
 // ---------------------------------------------------------------- envoi (Firebase chargé à la demande)
 
+/**
+ * « 💌 Ton avis » est proposé : seulement depuis le jeu en ligne (une vraie adresse Internet). Dans la version « à
+ * emporter », ouverte comme fichier, le message ne partirait jamais (comme le compte Google : cloudCard).
+ */
+export const feedbackAvailable = (loc = globalThis.location) => cloudSupported(loc);
+
 /** On peut essayer d'envoyer : vraie adresse Internet (pas la version fichier) et réseau présent. */
 export function canSendNow(loc = globalThis.location, nav = globalThis.navigator) {
-  return cloudSupported(loc) && nav?.onLine !== false;
+  return feedbackAvailable(loc) && nav?.onLine !== false;
 }
 
 let ready = null;
@@ -318,18 +388,19 @@ let flushing = null;
 export async function flushFeedback({ timeoutMs = SEND_TIMEOUT_MS } = {}) {
   while (flushing) await flushing;
   flushing = (async () => {
-    const done = new Set(); // (déjà partis : même si le stockage refuse de les retirer, jamais deux fois)
+    let n = 0;
+    spill(); // (le stockage accepte peut-être de nouveau ce qui attendait en mémoire)
     for (;;) {
-      if (!canSendNow()) return done.size;
-      const next = readQueue().find((it) => !done.has(it.id));
-      if (!next) return done.size;
+      if (!canSendNow()) return n;
+      const next = pendingItems()[0];
+      if (!next) return n;
       try {
         await sendOne(next.msg, timeoutMs);
       } catch {
-        return done.size; // gardé : prochain démarrage, retour du réseau ou prochain message
+        return n; // gardé : prochain démarrage, retour du réseau ou prochain message
       }
-      done.add(next.id);
-      writeQueue(readQueue().filter((it) => it.id !== next.id));
+      forget(next.id); // (jamais deux fois, même si le stockage refuse de le retirer)
+      n++;
     }
   })();
   try {
@@ -341,23 +412,22 @@ export async function flushFeedback({ timeoutMs = SEND_TIMEOUT_MS } = {}) {
 
 /**
  * Le joueur envoie son avis. input : { mood, kind, text } ; ctx : le contexte (voir buildMessage) ; names : les prénoms
- * à masquer dans le texte. Renvoie 'sent' (parti), 'kept' (gardé sur l'appareil, il partira plus tard), 'empty' (rien
- * à envoyer), 'wait' (moins de 30 s depuis le précédent) ou 'day' (déjà 5 aujourd'hui). Ne lève jamais d'erreur.
+ * à masquer dans le texte. Renvoie 'sent' (parti), 'kept' (vraiment gardé : sur l'appareil, ou en mémoire si le
+ * stockage refuse ; il partira plus tard), 'empty' (rien à envoyer), 'wait' (moins de 30 s depuis le précédent),
+ * 'day' (déjà 5 aujourd'hui) ou 'offsite' (version fichier : il ne pourrait jamais partir, rien n'est gardé). Ne lève
+ * jamais d'erreur.
  */
 export async function submitFeedback(input, ctx, { names = [], now = Date.now(), timeoutMs = SEND_TIMEOUT_MS } = {}) {
+  if (!feedbackAvailable()) return 'offsite';
   const msg = buildMessage(input, ctx, { names });
   if (!msg) return 'empty';
   const limit = limitReason(now);
   if (limit) return limit;
   noteSent(now);
   const id = enqueue(msg, now);
-  if (!id) {
-    // Pas de stockage (navigation privée d'un vieux navigateur) : un seul essai, tout de suite.
-    if (!canSendNow()) return 'kept';
-    return sendOne(msg, timeoutMs).then(() => 'sent', () => 'kept');
-  }
   await flushFeedback({ timeoutMs });
-  return readQueue().some((it) => it.id === id) ? 'kept' : 'sent';
+  // (parti avec cet envoi ou avec un autre en cours ; sinon il attend : le plus récent n'est jamais retiré de la file)
+  return gone.has(id) ? 'sent' : 'kept';
 }
 
 let started = false;

@@ -2,14 +2,16 @@
 // petit texte (500 caractères au plus, avec son compteur), une phrase de prudence et « Envoyer ». Ouverte depuis
 // « ⋯ Plus » (src/ui/UI.js), ⚙️ Réglages (src/ui/panels.js) et l'écran des profils (src/ui/screens.js).
 // Ce qui part, la file d'attente et les limites : src/cloud/feedback.js. Jamais d'erreur technique à l'écran :
-// « Merci ! 💌 » (parti) ou « Merci ! Il partira dès que possible 💌 » (gardé sur l'appareil).
+// « Merci ! 💌 » (parti) ou « Merci ! Il partira dès que possible 💌 » (gardé sur l'appareil). Les petits mots
+// (« Choisis un smiley… », « Attends un petit moment… ») s'écrivent dans la rangée Annuler / Envoyer, collée en bas :
+// toujours visibles à côté d'« Envoyer », clavier ouvert compris. Seulement dans le jeu en ligne (feedbackAvailable).
 
 import { h, isDesk } from './dom.js';
 import { t, getLang } from '../i18n.js';
 import { nbsp } from './minigames/frame.js'; // typographie française (« Merci ! » ne se coupe pas avant le « ! »)
 import { listProfiles } from '../sim/profile.js';
 import {
-  MOODS, MOOD_EMOJI, KINDS, MAX_TEXT, submitFeedback, gameContext, deviceKind, orientationOf, appVersion,
+  MOODS, MOOD_EMOJI, KINDS, MAX_TEXT, submitFeedback, gameContext, deviceKind, orientationOf, appVersion, feedbackAvailable,
 } from '../cloud/feedback.js';
 
 /** Au-delà (réseau lent), on remercie déjà : le message est gardé sur l'appareil et finit de partir tout seul. */
@@ -51,6 +53,15 @@ function profileNames(ui) {
  * Ouvre la fenêtre. opts.submit : l'envoi (tests) ; opts.waitMs : attente avant de remercier quand le réseau traîne.
  */
 export function openFeedback(ui, { submit = submitFeedback, waitMs = UI_WAIT_MS } = {}) {
+  // Version « à emporter » (fichier) : le bouton n'y est pas proposé ; au cas où, une phrase vraie plutôt qu'un
+  // message qui ne partirait jamais.
+  if (!feedbackAvailable()) {
+    ui.showModal(h('div', { class: 'fb-sheet' },
+      h('h3', {}, `💌 ${t('fb_btn')}`),
+      h('p', { class: 'fb-offsite' }, nbsp(t('fb_offsite'))),
+      h('div', { class: 'row end' }, h('button', { type: 'button', class: 'primary', 'data-escape': true, onClick: () => ui.hideModal() }, 'OK'))));
+    return;
+  }
   const state = { ...draft, busy: false };
   const toggle = (btn, on) => {
     btn.classList.toggle('on', on);
@@ -61,11 +72,11 @@ export function openFeedback(ui, { submit = submitFeedback, waitMs = UI_WAIT_MS 
   // (le premier prend le focus à l'ouverture : au clavier, on commence par les smileys)
   const moodBtns = MOODS.map((m, i) => h('button', {
     type: 'button', class: 'fb-mood', 'data-mood': m, 'aria-pressed': 'false', 'data-default': i === 0,
-    onClick: () => { state.mood = state.mood === m ? null : m; sync(); },
+    onClick: () => { state.mood = state.mood === m ? null : m; status.hidden = true; sync(); },
   }, h('span', { class: 'fb-emoji', 'aria-hidden': 'true' }, MOOD_EMOJI[m]), h('small', {}, t(`fb_mood_${m}`))));
   const kindBtns = KINDS.map((k) => h('button', {
     type: 'button', class: 'fb-kind', 'data-kind': k, 'aria-pressed': 'false',
-    onClick: () => { state.kind = state.kind === k ? null : k; sync(); },
+    onClick: () => { state.kind = state.kind === k ? null : k; status.hidden = true; sync(); },
   }, t(`fb_kind_${k}`)));
 
   const text = h('textarea', {
@@ -112,8 +123,9 @@ export function openFeedback(ui, { submit = submitFeedback, waitMs = UI_WAIT_MS 
     h('p', { id: 'fb-safety', class: 'fb-safety' }, nbsp(t('fb_safety'))),
     text,
     count,
-    status,
-    h('div', { class: 'row end' },
+    // (le petit mot, sur sa ligne au-dessus des boutons, dans la rangée collée en bas : jamais caché par elle)
+    h('div', { class: 'row end fb-foot' },
+      status,
       h('button', { type: 'button', 'data-escape': true, onClick: () => ui.hideModal() }, t('cancel')),
       sendBtn));
 
@@ -146,8 +158,8 @@ export function openFeedback(ui, { submit = submitFeedback, waitMs = UI_WAIT_MS 
     state.busy = false;
     sendBtn.disabled = false;
     sendBtn.textContent = `💌 ${t('fb_send')}`;
-    if (result === 'empty' || result === 'wait' || result === 'day') {
-      say({ empty: 'fb_empty', wait: 'fb_wait', day: 'fb_day' }[result]);
+    if (result === 'empty' || result === 'wait' || result === 'day' || result === 'offsite') {
+      say({ empty: 'fb_empty', wait: 'fb_wait', day: 'fb_day', offsite: 'fb_offsite' }[result]);
       return;
     }
     draft = { mood: null, kind: null, text: '' };

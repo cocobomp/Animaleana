@@ -118,8 +118,9 @@ function lampPost(keep, h) {
  *
  * Ce qu'un grand décor de jeu peut ajouter (le pré de la balle, le rond de longe) : fogScale (un nombre, ou une
  * fonction de la scène relue à chaque image : fogFromCamera), lampSpot et lampFace (la place du réverbère, hors du
- * terrain), lampLight et lampReach (la place de sa lumière, au-dessus du terrain, et la distance où l'animal passe),
- * groundMarks (les matières posées sur le sol : piste, liseré, terre battue), weatherBox (où tombent pluie et neige).
+ * terrain), lampLight et lampReach (la place de sa lumière, en hauteur du côté de la caméra, et la distance au sol de
+ * son pied au point du terrain le plus loin d'elle), groundMarks (les matières posées sur le sol : piste, liseré, terre
+ * battue), weatherBox (où tombent pluie et neige).
  * Le pied du réverbère est noté dans decor.avoid le temps de l'ambiance : les objets du jour ne s'y posent pas.
  */
 export function applyAmbience(stage, decor, amb) {
@@ -400,8 +401,9 @@ export function applyAmbience(stage, decor, amb) {
       // (son pied et sa lanterne : les objets du jour se posent à côté, jamais dedans — placeExtras, decor.avoid)
       decor.avoid = [...(avoid0 ?? []), post.position.clone(), at.clone().setY(0)];
       if (decor.lampLight) {
-        // (un terrain où l'animal tourne tout autour — le rond, le pré de la balle — : la lumière au-dessus, pour
-        // éclairer le côté qu'on voit où qu'il soit ; le réverbère reste là, allumé)
+        // (un terrain où l'animal court partout — le rond, le pré de la balle — : la lumière là où le décor la met,
+        // pour éclairer le côté qu'on voit où qu'il soit ; au rond, au-dessus du milieu, où est la caméra ; au pré,
+        // devant le terrain, de notre côté ; le réverbère reste là, allumé)
         at = decor.lampLight.clone();
         flood = true;
       }

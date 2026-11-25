@@ -380,10 +380,12 @@ export function paddockSet(stage, yard) {
     if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z] });
   }
   // (le réverbère de la nuit : contre le mur, juste à droite de la porte, son bras au-dessus d'elle — là où rien ne se
-  // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait ; sa lumière, au-dessus
-  // du terrain, un peu vers nous : la chèvre court partout, on voit le côté qui nous regarde)
+  // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait)
+  // (sa lumière : en hauteur, devant le terrain, du côté de la caméra. On voit la chèvre de devant et d'en haut, et
+  // elle attend la balle au premier rang : une lumière au-dessus du terrain l'éclairait par le dos, le côté qu'on voit
+  // restait noir. D'ici, ce côté reçoit la lumière partout où elle court, jusqu'au fond)
   const lampSpot = V(door.x + dW / 2 + 0.2, 0, F.z0 - 0.25);
-  const lampLight = V(xC, Math.max(2.6, 1.8 * u + 1.6), zFar + depth * 0.6);
+  const lampLight = V(xC, Math.max(2.6, 1.8 * u + 1.6), zNear + depth * 0.55);
 
   return {
     group: g,
@@ -399,7 +401,8 @@ export function paddockSet(stage, yard) {
     lampSpot,
     lampFace: Math.PI,
     lampLight,
-    lampReach: Math.hypot(half, depth * 0.6),
+    // (de son pied aux coins du fond : là où la chèvre va le plus loin d'elle)
+    lampReach: Math.hypot(half, depth * 1.55),
     // (la pluie, la neige : sur tout le terrain, pas seulement autour de la chèvre)
     weatherBox: { x0: F.x0 - 1.5, x1: F.x1 + 1.5, z0: F.z0 - 2, z1: F.z1 + 2.5, top: Math.max(3, 3 * u + 1) },
     // (la caméra voit tout le terrain de loin, plus loin encore en portrait : la brume recule d'autant)

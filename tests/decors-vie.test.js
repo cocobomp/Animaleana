@@ -2,11 +2,16 @@
 // des choses accrochées (un fer à cheval au poteau, un licol au mur), un vol d'oiseaux loin derrière, des poules au
 // loin, une hirondelle sous le toit (setting.js : pickLife ; extras.js : placeExtras). Jamais devant l'animal, ni sur
 // sa tête, ni sur ce qu'on lui tend ; la nuit, rien ne vole.
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 import * as THREE from 'three';
 import { pickLife, lifeOff, LIFE_OF, EXTRAS, careAmbience, pickExtras } from '../src/game/care/setting.js';
 import { fakeCtx as fakeCtxOf, fakeDocument } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
+
+const random = Math.random;
+afterAll(() => {
+  Math.random = random;
+});
 
 describe('le petit plus de chaque lieu (pur)', () => {
   it('le même jour, la même liste ; tous connus ; pas ce qui est déjà dans les objets du jour', () => {
@@ -59,6 +64,12 @@ describe('les gros plans du cheval : toujours un peu de vie à l\'image', () => 
   afterEach(() => new Promise((resolve) => setImmediate(resolve)));
 
   function feedScene(place, amb, { day = 3, w = 390, h = 600 } = {}) {
+    // (le même hasard à chaque fois : la vie du cheval, donc la caméra, ne dépend pas des tests d'avant)
+    let seed = 4242;
+    Math.random = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
     const a = H.animal.createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, ageDays: 900, seed: 77 });
     a.name = 'Honey';
     a.id = 'h-vie';
@@ -86,12 +97,13 @@ describe('les gros plans du cheval : toujours un peu de vie à l\'image', () => 
   }
 
   for (const [place, w, h] of [['pre', 390, 600], ['box', 390, 600], ['pre', 640, 300]]) {
-    it(`${place} (${w} × ${h}), nourrir : au moins trois choses à voir, aucune devant lui, sur sa tête ou sur la mangeoire`, () => {
+    it(`${place} (${w} × ${h}), nourrir : au moins trois choses à voir (deux au box), aucune devant lui, sur sa tête ou sur la mangeoire`, () => {
       const amb = careAmbience({ hour: 10, weather: 'clear', season: 'summer' });
       const { sc, game } = feedScene(place, amb, { w, h });
       const list = shown(sc);
       if (process.env.DBG) console.log(place, w, sc.decor.extras.items.map((i) => `${i.kind}${i.at ? "@" + i.at.toArray().map((k) => k.toFixed(2)) : JSON.stringify(i.why)}`).join(" "));
-      expect(list.length, list.map((i) => i.kind).join(',')).toBeGreaterThanOrEqual(3);
+      // (au box, le sol se voit à peine : au moins deux)
+      expect(list.length, list.map((i) => i.kind).join(',')).toBeGreaterThanOrEqual(place === 'box' ? 2 : 3);
       const cam = sc.camera.position;
       const v = sc.view;
       const head = sc.live('head');

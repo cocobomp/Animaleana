@@ -732,7 +732,7 @@ export function extraModel(kind, keep, seed = 1, opts = {}) {
     case 'poulailler': return farHens(keep);
     case 'rougegorge': {
       const b = bird(keep);
-      b.scale.setScalar(1.6);
+      b.scale.setScalar(2.1);
       const g = new THREE.Group();
       g.add(b);
       g.userData.step = (dt) => b.userData.step?.(dt);
@@ -752,7 +752,7 @@ export function extraModel(kind, keep, seed = 1, opts = {}) {
         b.userData.range = 0.08;
         b.userData.off = new THREE.Vector3(i * 0.18, i * 0.1, i * 0.12);
         b.userData.ph = 0;
-        b.scale.setScalar(1.3);
+        b.scale.setScalar(1.8);
         g.add(b);
         birds.push(b);
       }
@@ -1143,7 +1143,8 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     },
     update(dt, st) {
       // (quelques images après l'ouverture : la caméra est à sa place, pas à l'origine ; sans caméra fixe, tout de suite)
-      if (!tried && (anywhere || (st.ready && ++frames > 3 && (st.settled?.(0.02) ?? true)))) place(st);
+      // (une caméra qui ne se pose jamais tout à fait — la friandise suit la main — : on place quand même après ~3 s)
+      if (!tried && (anywhere || (st.ready && ++frames > 3 && ((st.settled?.(0.02) ?? true) || frames > 90)))) place(st);
       for (const it of items) {
         if (!it.at) continue;
         if (it.path) {

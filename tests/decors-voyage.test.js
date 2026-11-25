@@ -149,6 +149,40 @@ function instances(W) {
   });
   return out;
 }
+/** Les dunes de la plage (en instances, tournées autour du rond) : la hauteur de leur sable au sol en (x, z). */
+function sandOf(W) {
+  const list = [];
+  const m4 = new THREE.Matrix4();
+  W.group.updateMatrixWorld(true);
+  W.group.traverse((o) => {
+    if (!o.isInstancedMesh || !o.geometry.userData?.dune) return;
+    for (let i = 0; i < o.count; i++) {
+      o.getMatrixAt(i, m4);
+      const m = m4.clone().premultiply(o.matrixWorld);
+      list.push({ inv: m.clone().invert(), y: new THREE.Vector3().setFromMatrixPosition(m).y, sy: new THREE.Vector3().setFromMatrixColumn(m, 1).length() });
+    }
+  });
+  const q = new THREE.Vector3();
+  return (x, z) => Math.max(0, ...list.map((d) => {
+    // (dans le repère de la dune, une demi-sphère de rayon 1)
+    q.set(x, 0, z).applyMatrix4(d.inv);
+    const k = 1 - q.x * q.x - q.z * q.z;
+    return k > 0 ? d.y + d.sy * Math.sqrt(k) : 0;
+  }));
+}
+/** Les coins au sol de chaque cabane de la plage (monde). */
+function hutCorners(W) {
+  const huts = W.landmarks.find((it) => it.o.userData.huts).o;
+  huts.updateMatrixWorld(true);
+  const out = [];
+  for (const hut of huts.children) {
+    // (ses murs : la première pièce de la maison)
+    const body = hut.children[0];
+    const { width, height, depth } = body.geometry.parameters;
+    for (const x of [-width / 2, width / 2]) for (const z of [-depth / 2, depth / 2]) out.push(body.localToWorld(new THREE.Vector3(x, -height / 2, z)));
+  }
+  return out;
+}
 /** Les matières du fond (et celles des pièces en instances). */
 function materials(W) {
   const s = new Set();
@@ -501,6 +535,43 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     sc.dispose();
   }, 120000);
 
+  it('la plage, pour chaque espèce : les cabanes jamais enterrées dans une dune, ni à cheval sur la clôture, ni dans la mer', () => {
+    // (la dune de gauche était posée sur les cabanes : jusqu'à 1,24 m de sable sur 1,9 m de mur ; près d'un chat ou d'un
+    // lapin, elles passaient aussi devant la clôture du fond)
+    const pets = { dog: 'labrador', cat: 'europeen', rabbit: 'belier' };
+    for (const species of ['cow', 'sheep', 'horse', 'dog', 'cat', 'rabbit']) {
+      for (const [w, h] of [[390, 600], [900, 400]]) {
+        let S;
+        if (pets[species]) {
+          const set = C.decorFor(species, 'ailleurs', { amb, look: 'plage', kinds: [], seed: 2 });
+          const { a, sc } = P.makePetStage({ species, breed: pets[species], set, w, h });
+          const ctx = P.ctxFor(a, sc, w, h);
+          S = { sc, ctx, game: H.pets[species].feed(ctx) };
+        } else S = feedScene(species, 'plage', w, h);
+        const { sc, ctx, game } = S;
+        P.run(ctx, game, sc, 1.5);
+        const W = sc.decor.away;
+        const tag = `${species} ${w}×${h}`;
+        const sand = sandOf(W);
+        const huts = W.landmarks.find((it) => it.o.userData.huts)?.o;
+        expect(huts, tag).toBeTruthy();
+        const hb = new THREE.Box3().setFromObject(huts);
+        expect(hb.min.z, `${tag} : les cabanes dans la mer`).toBeGreaterThan(W.shore + 0.5);
+        // (sous chaque coin de chaque cabane, moins de 10 cm de sable)
+        for (const p of hutCorners(W)) expect(sand(p.x, p.z), `${tag} : une cabane enterrée dans la dune`).toBeLessThan(0.1);
+        // (ni les cabanes ni les choses posées près de lui à cheval sur la clôture du fond)
+        for (const it of W.landmarks) expect(new THREE.Box3().setFromObject(it.o).max.z, `${tag} : devant la clôture`).toBeLessThan(W.back);
+        // (aucun pin planté dans une cabane)
+        for (const { o, p } of instances(W)) {
+          if (o.geometry.type !== 'CylinderGeometry' || o.geometry.parameters.radiusTop !== 0.1) continue;
+          expect(p.x > hb.min.x - 0.3 && p.x < hb.max.x + 0.3 && p.z > hb.min.z - 0.3 && p.z < hb.max.z + 0.3, `${tag} : un pin dans les cabanes`).toBe(false);
+        }
+        game.destroy?.();
+        sc.dispose();
+      }
+    }
+  }, 180000);
+
   it('le lapin en voyage : sa caisse de transport ne rentre jamais dans son pelage, et rien du jour n\'est posé dedans', () => {
     // (la caisse, plus grande que la maisonnette, rentrait dans l'arrière-train du nain, du bélier et du rex ; un
     // coquillage du jour était posé dedans)
@@ -591,10 +662,11 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
   }, 240000);
 
   it('posée juste derrière sa tête, la construction glisse sur le côté dès que l\'image change', () => {
-    for (const look of ['montagne', 'japon', 'haras']) {
+    for (const look of ['montagne', 'japon', 'haras', 'plage']) {
       const { sc, ctx, game } = feedScene('horse', look);
       run(ctx, game, sc, 1.5);
       const it = sc.decor.away.landmarks[0];
+      const sand = sandOf(sc.decor.away);
       // (on la met sur la ligne de la caméra à sa tête, à sa profondeur)
       sc.scene.updateMatrixWorld(true);
       const hd = sc.live('head');
@@ -610,6 +682,9 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
       sc.update(1 / 30);
       expect(it.shift, look).not.toBe(0);
       expect(behindHead(sc, it.o), look).toBe(false);
+      // (glissées, les cabanes de la plage ne vont jamais dans une dune)
+      const b = new THREE.Box3().setFromObject(it.o);
+      for (const x of [b.min.x, b.max.x]) for (const z of [b.min.z, b.max.z]) expect(sand(x, z), `${look} : glissée dans une dune`).toBeLessThan(0.1);
       game.destroy();
       sc.dispose();
     }
@@ -700,6 +775,11 @@ describe('la balle de la chèvre et la longe, en voyage', () => {
         if (pen.away.shore !== null) expect(p.z, 'arbre dans la mer').toBeGreaterThan(pen.away.shore + 0.5);
       }
       expect(quads.size).toBe(4);
+      // (autour du rond aussi, les cabanes de la plage ne sont pas enterrées dans une dune)
+      if (look === 'plage') {
+        const sand = sandOf(pen.away);
+        for (const p of hutCorners(pen.away)) expect(sand(p.x, p.z), 'une cabane enterrée').toBeLessThan(0.1);
+      }
       for (let k = 0; k < 30; k++) {
         ctx.time += 1 / 30;
         game.update(1 / 30);

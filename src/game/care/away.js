@@ -200,9 +200,9 @@ function opening(keep, into, mat, x, y, z, w, h) {
 
 /**
  * Habille le décor dehors (decor : sa version dehors) pour la famille de lieu look (AWAY_LOOKS), sous l'ambiance amb
- * (careAmbience : l'heure, la saison, la neige, la pluie, le brouillard). Renvoie { group, look, shore, landmarks,
- * update(dt, stage), dispose() } (shore : le bord de la mer, z ; landmarks : les constructions qu'on garde hors de sa
- * tête dans l'image).
+ * (careAmbience : l'heure, la saison, la neige, la pluie, le brouillard). Renvoie { group, look, shore, back,
+ * landmarks, update(dt, stage), dispose() } (shore : le bord de la mer, z ; back : le bord du fond, z — tout ce qui est
+ * posé au fond est derrière ; landmarks : les constructions qu'on garde hors de sa tête dans l'image).
  */
 export function dressAway(stage, decor, look, amb = null) {
   const L = AWAY_LOOKS[look];
@@ -414,6 +414,8 @@ export function dressAway(stage, decor, look, amb = null) {
   const treeKind = { pin: 'pin', sapin: 'sapin', bouleau: 'bouleau', cerisier: 'cerisier', olivier: 'olivier', eucalyptus: 'eucalyptus', pommier: 'pommier', ombu: 'feuillu', feuillu: 'feuillu' }[L.trees] ?? 'feuillu';
   const nTrees = many({ plage: 6, montagne: 14, volcan: 5, rocheuses: 9, pampa: 3, japon: 9, mediterranee: 10, bush: 7, cottage: 9, haras: 8, normandie: 9 }[look] ?? 8);
   const beach = look === 'plage';
+  // (les pins de la plage : plantés après les cabanes et le parasol, à côté d'eux — voir plus bas)
+  const beachTrees = [];
   for (let i = 0; i < nTrees; i++) {
     // (la plage : les pins sur le sable, sur les côtés, entre la clôture et la mer — jamais dans l'eau)
     const depth = beach ? (1.5 + r() * 3.5) * kSea : 11 + r() * 8;
@@ -422,7 +424,8 @@ export function dressAway(stage, decor, look, amb = null) {
     if (beach && !ring && Math.abs(side) < 9) continue;
     const p = at(side, depth);
     if (!onLand(p.z, 1)) continue;
-    tree(look === 'mediterranee' && i % 3 === 1 ? 'cypres' : treeKind, p.x, p.z, s);
+    if (beach) beachTrees.push({ side, depth, p, s });
+    else tree(look === 'mediterranee' && i % 3 === 1 ? 'cypres' : treeKind, p.x, p.z, s);
   }
   if (L.trees === 'ombu') {
     const p = at(-9, 14);
@@ -475,15 +478,6 @@ export function dressAway(stage, decor, look, amb = null) {
         boat.position.y = Math.sin(t * 1.1) * 0.05;
         boat.position.x = sx + 6 + Math.sin(t * 0.05) * 3;
       });
-    }
-  }
-  if (far.has('dunes')) {
-    // (deux dunes sur les côtés, entre la clôture et la mer : leur pied n'atteint ni l'une ni l'autre)
-    const dm = mat(white ? 0xe8edf2 : 0xe8d6b0);
-    const dg = keep(new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2));
-    for (const s of [-1, 1]) {
-      const p = at(s * (12 + r() * 4), (3.0 + r() * 0.4) * kSea);
-      inst.add(dg, dm, [p.x, -0.1, p.z], [6 + r() * 3, 1.2 + r() * 0.6, 2.2 * kSea], p.ry);
     }
   }
   if (far.has('sommets')) {
@@ -583,22 +577,43 @@ export function dressAway(stage, decor, look, amb = null) {
   // ---------------------------------------------------------------- la construction du pays (à gauche, au loin)
   // (les constructions qu'on garde hors de sa tête dans l'image : voir clearHead)
   const landmarks = [];
-  /** Pose o au fond (side, depth), tourné de rot (et vers nous), et la garde hors de sa tête (glisse de step m). */
+  // (la place de chaque chose posée, en mètres de côté et de profondeur : les dunes et les pins de la plage s'en
+  // écartent)
+  const spans = [];
+  /** Sa boîte dans son propre repère, tourné de rot (côté : x ; vers nous : +z). */
+  const ownBox = (o, rot) => {
+    o.position.set(0, o.position.y, 0);
+    o.rotation.y = rot;
+    o.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(o);
+  };
+  /**
+   * Pose o au fond (side, depth), tourné de rot (et vers nous), et la garde hors de sa tête (glisse de step m). Son
+   * devant reste toujours derrière le bord du fond : jamais à cheval sur la clôture.
+   */
   const place = (o, side, depth, rot = 0, guard = true, step = 1.5) => {
-    const p = at(side, depth);
+    const b = ownBox(o, rot);
+    const d = Math.max(depth, b.max.z + 0.05);
+    const p = at(side, d);
     o.position.set(p.x, o.position.y, p.z);
     o.rotation.y = rot + p.ry;
     g.add(o);
+    spans.push({ x0: side + b.min.x, x1: side + b.max.x, d0: d - b.max.z, d1: d - b.min.z, depth: d });
     if (guard) landmarks.push({ o, step });
     return o;
   };
+  /** Le côté side, mesuré à la profondeur from, ramené à la profondeur to (autour du rond, l'arc grandit avec elle). */
+  const sideAt = (side, from, to) => (ring ? (side * (ring + to)) / (ring + from) : side);
   const dark = mat(0x2a2420);
   const glass = mat(0x8ab0c8, { roughness: 0.3 });
   let mark = null;
   switch (L.landmark) {
     case 'cabane': {
-      // (deux cabanes rayées sur le sable, en retrait du bord de l'eau)
+      // (deux cabanes rayées sur le sable, entre la clôture et l'eau : leur devant à 40 cm au moins derrière la clôture,
+      // leur fond à 60 cm au moins du bord de l'eau ; plus petites s'il n'y a pas la place — la mer est toute proche
+      // d'un chat. Les dunes et les pins s'en écartent : rien ne les enterre)
       const land = new THREE.Group();
+      land.userData.huts = true;
       const walls = keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#3a78c0')), roughness: 0.8 }));
       for (const [k, dx] of [[0, -1.2], [1, 1.2]]) {
         const hm = k ? keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#d84a3a')), roughness: 0.8 })) : walls;
@@ -607,7 +622,11 @@ export function dressAway(stage, decor, look, amb = null) {
         opening(keep, h, dark, 0, 0.75, 0.8, 0.7, 1.4);
         land.add(h);
       }
-      place(land, -11.3, Math.min(4.5, 7 * kSea - 2.2), 0.25);
+      const b = ownBox(land, 0.25);
+      const sea = 7 * kSea;
+      const k = Math.min(1, (sea - 1) / (b.max.z - b.min.z));
+      land.scale.setScalar(k);
+      place(land, -11.3, THREE.MathUtils.clamp(4.5, b.max.z * k + 0.4, sea - 0.6 + b.min.z * k), 0.25);
       // (un parasol planté dans le sable)
       const pole = new THREE.Mesh(keep(new THREE.CylinderGeometry(0.03, 0.03, 2, 5)), mat(0xe8e0d0));
       const um = new THREE.Mesh(keep(new THREE.ConeGeometry(1.1, 0.45, 10, 1, true)), keep(new THREE.MeshStandardMaterial({ map: keep(stripeTexture('#f0a83a')), side: THREE.DoubleSide, roughness: 0.8 })));
@@ -1047,6 +1066,49 @@ export function dressAway(stage, decor, look, amb = null) {
         return null;
     }
   }
+
+  // ---------------------------------------------------------------- la plage : pins et dunes, à côté de ce qui est posé
+  /** Ce point (côté, profondeur) tombe-t-il sur une chose posée, à m mètres près ? */
+  const onSpan = (side, depth, m) => spans.some((f) => {
+    const s = sideAt(side, depth, f.depth);
+    return depth > f.d0 - m && depth < f.d1 + m && s > f.x0 - m && s < f.x1 + m;
+  });
+  // (un pin n'a pas son tronc dans une cabane, ni sa couronne dans son toit)
+  for (const t of beachTrees) if (!onSpan(t.side, t.depth, 1.5)) tree(treeKind, t.p.x, t.p.z, t.s);
+  const mounds = [];
+  if (far.has('dunes')) {
+    // (deux dunes sur les côtés, entre la clôture et la mer : leur pied n'atteint ni l'une ni l'autre. Chacune s'écarte
+    // de ce qui est posé de son côté — les cabanes, le parasol, le paravent — : le sable n'enterre rien)
+    const dm = mat(white ? 0xe8edf2 : 0xe8d6b0);
+    const dg = keep(new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2));
+    dg.userData.dune = true;
+    for (const s of [-1, 1]) {
+      const depth = (3.0 + r() * 0.4) * kSea;
+      const rx = 6 + r() * 3;
+      const rz = 2.2 * kSea;
+      const h = 1.2 + r() * 0.6;
+      let side = s * (12 + r() * 4);
+      for (const f of spans) {
+        if (f.d1 < depth - rz || f.d0 > depth + rz) continue;
+        const x0 = sideAt(f.x0, f.depth, depth);
+        const x1 = sideAt(f.x1, f.depth, depth);
+        if ((x0 + x1) * s <= 0) continue;
+        side = s < 0 ? Math.min(side, x0 - 0.5 - rx) : Math.max(side, x1 + 0.5 + rx);
+      }
+      const p = at(side, depth);
+      inst.add(dg, dm, [p.x, -0.1, p.z], [rx, h, rz], p.ry);
+      mounds.push({ x: p.x, z: p.z, rx, rz, h });
+    }
+  }
+  /** La hauteur du sable des dunes en (x, z) (hors du rond de longe : rien n'y glisse). */
+  const sandAt = (x, z) => {
+    let y = 0;
+    for (const m of mounds) {
+      const k = 1 - ((x - m.x) / m.rx) ** 2 - ((z - m.z) / m.rz) ** 2;
+      if (k > 0) y = Math.max(y, m.h * Math.sqrt(k) - 0.1);
+    }
+    return y;
+  };
   inst.done();
   // (tout le fond sans ombres : le soleil n'ombre que ses abords, la carte des ombres n'est pas lue si loin)
   g.traverse((o) => {
@@ -1091,6 +1153,8 @@ export function dressAway(stage, decor, look, amb = null) {
   }
   /** Le rectangle q touche-t-il un des cercles de sa tête ? */
   const hits = (q, zone) => !!q && zone.some((c) => Math.hypot(Math.max(q.x0, Math.min(c.x, q.x1)) - c.x, Math.max(q.y0, Math.min(c.y, q.y1)) - c.y) < c.r);
+  /** Glissée de d m, la construction reste-t-elle hors des dunes (moins de 10 cm de sable sous chaque coin) ? */
+  const offDunes = (it, d) => !mounds.length || [it.box.min.x, it.box.max.x].every((x) => [it.box.min.z, it.box.max.z].every((z) => sandAt(x + it.x0 + d, z) < 0.1));
   // (où va sa tête pendant le soin : debout au repos, et la bouche à la mangeoire ou à la gamelle — mesurée par le décor)
   const restHead = [stage.marks?.head, stage.marks?.muzzle, decor.anchors?.eat].filter((p) => p?.isVector3).map((p) => p.clone());
   function clearHead(st) {
@@ -1117,13 +1181,13 @@ export function dressAway(stage, decor, look, amb = null) {
     for (const it of guards) {
       const now = rectOf(st, it, it.shift);
       if (!hits(now, zone)) continue;
-      // (d'abord du côté où elle est déjà, par rapport à sa tête)
+      // (d'abord du côté où elle est déjà, par rapport à sa tête ; jamais dans une dune)
       const first = now.x0 + now.x1 < 2 * hc.x ? -1 : 1;
       let best = null;
       for (let k = 1; k <= 16 && best === null; k++) {
         for (const s of [first, -first]) {
           const d = it.shift + s * k * it.step;
-          if (best === null && !hits(rectOf(st, it, d), wide)) best = d;
+          if (best === null && offDunes(it, d) && !hits(rectOf(st, it, d), wide)) best = d;
         }
       }
       if (best === null) continue;
@@ -1136,6 +1200,7 @@ export function dressAway(stage, decor, look, amb = null) {
     group: g,
     look,
     shore,
+    back: ring ? null : zb,
     landmarks: guards,
     update(dt, st) {
       for (const s of steps) s(Math.min(dt, 0.1));

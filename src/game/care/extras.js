@@ -987,6 +987,169 @@ export function extraRange(kind) {
  */
 const HANG_Y = { fer: [0.6, 2.7], licol: [0.9, 2.3], cloche: [0.6, 2.5], nichoir: [0.5, 2.6], cadre: [0.4, 1.9], carottes: [0.04, 1.2] };
 
+// ---------------------------------------------------------------- les rayons sur l'animal, sans tout tester
+
+/** Le rayon (o, d : direction unitaire) touche-t-il le triangle t ? Sa distance (des deux côtés), ou Infinity. */
+function triHit(P, I, t, o, d) {
+  const a = I[3 * t] * 3;
+  const b = I[3 * t + 1] * 3;
+  const c = I[3 * t + 2] * 3;
+  const ax = P[a];
+  const ay = P[a + 1];
+  const az = P[a + 2];
+  const e1x = P[b] - ax;
+  const e1y = P[b + 1] - ay;
+  const e1z = P[b + 2] - az;
+  const e2x = P[c] - ax;
+  const e2y = P[c + 1] - ay;
+  const e2z = P[c + 2] - az;
+  const px = d.y * e2z - d.z * e2y;
+  const py = d.z * e2x - d.x * e2z;
+  const pz = d.x * e2y - d.y * e2x;
+  const det = e1x * px + e1y * py + e1z * pz;
+  if (det === 0) return Infinity;
+  const inv = 1 / det;
+  const sx = o.x - ax;
+  const sy = o.y - ay;
+  const sz = o.z - az;
+  const u = (sx * px + sy * py + sz * pz) * inv;
+  if (u < 0 || u > 1) return Infinity;
+  const qx = sy * e1z - sz * e1y;
+  const qy = sz * e1x - sx * e1z;
+  const qz = sx * e1y - sy * e1x;
+  const v = (d.x * qx + d.y * qy + d.z * qz) * inv;
+  if (v < 0 || u + v > 1) return Infinity;
+  const k = (e2x * qx + e2y * qy + e2z * qz) * inv;
+  return k >= 0 ? k : Infinity;
+}
+
+/**
+ * La copie figée de l'animal (stage.proxy) rangée dans une grille de 12 cases de côté sur sa boîte : chaque triangle
+ * dans les cases que touche sa boîte. Un rayon ne teste alors que les triangles des cases qu'il traverse, dans l'ordre,
+ * au lieu des 7 000 triangles du cheval : le même premier point touché que stage.proxy.hit, cent fois moins cher (le
+ * téléphone ne saute plus d'image). Refaite à chaque nouvelle copie figée ; null sans elle.
+ */
+function gridOf(P) {
+  const pos = P?.pos;
+  const idx = P?.geo?.index?.array;
+  const bb = P?.geo?.boundingBox;
+  if (!pos || !idx || !bb || bb.isEmpty()) return null;
+  const N = 12;
+  const lx = bb.min.x - 1e-3;
+  const ly = bb.min.y - 1e-3;
+  const lz = bb.min.z - 1e-3;
+  const sx = (bb.max.x + 1e-3 - lx) / N;
+  const sy = (bb.max.y + 1e-3 - ly) / N;
+  const sz = (bb.max.z + 1e-3 - lz) / N;
+  const M = N - 1;
+  const cell = (v) => {
+    const c = Math.floor(v);
+    return c < 0 ? 0 : c > M ? M : c;
+  };
+  const nT = idx.length / 3;
+  // (la case de chaque sommet ; puis les cases que touche chaque triangle, de .. à, sur chaque axe ; combien par
+  // case, puis lesquels)
+  const at = new Uint8Array(pos.length);
+  for (let v = 0; v < pos.length; v += 3) {
+    at[v] = cell((pos[v] - lx) / sx);
+    at[v + 1] = cell((pos[v + 1] - ly) / sy);
+    at[v + 2] = cell((pos[v + 2] - lz) / sz);
+  }
+  const span = new Uint8Array(nT * 6);
+  const start = new Int32Array(N * N * N + 1);
+  for (let t = 0, q = 0; t < nT; t++, q += 6) {
+    const a = idx[3 * t] * 3;
+    const b = idx[3 * t + 1] * 3;
+    const c = idx[3 * t + 2] * 3;
+    for (let e = 0; e < 3; e++) {
+      const x = at[a + e];
+      const y = at[b + e];
+      const z = at[c + e];
+      span[q + 2 * e] = x < y ? (x < z ? x : z) : y < z ? y : z;
+      span[q + 2 * e + 1] = x > y ? (x > z ? x : z) : y > z ? y : z;
+    }
+    for (let i = span[q]; i <= span[q + 1]; i++) for (let j = span[q + 2]; j <= span[q + 3]; j++) for (let k = span[q + 4]; k <= span[q + 5]; k++) start[(i * N + j) * N + k + 1]++;
+  }
+  for (let c = 1; c < start.length; c++) start[c] += start[c - 1];
+  const items = new Int32Array(start[N * N * N]);
+  const put = start.slice(0, N * N * N);
+  for (let t = 0, q = 0; t < nT; t++, q += 6) {
+    for (let i = span[q]; i <= span[q + 1]; i++) for (let j = span[q + 2]; j <= span[q + 3]; j++) for (let k = span[q + 4]; k <= span[q + 5]; k++) items[put[(i * N + j) * N + k]++] = t;
+  }
+  return { N, lx, ly, lz, sx, sy, sz, start, items, pos, idx, mark: new Uint32Array(nT), stamp: 0 };
+}
+
+/** Le premier triangle de la grille touché par le rayon (o, d : direction unitaire) : sa distance, ou Infinity. */
+function gridHit(G, o, d) {
+  const { N, lx, ly, lz, sx, sy, sz } = G;
+  // (où le rayon entre dans la boîte de la grille, et où il en sort)
+  let t0 = 0;
+  let t1 = Infinity;
+  for (const [ok, dk, lk, sk] of [[o.x, d.x, lx, sx], [o.y, d.y, ly, sy], [o.z, d.z, lz, sz]]) {
+    if (dk === 0) {
+      if (ok < lk || ok > lk + N * sk) return Infinity;
+      continue;
+    }
+    let ta = (lk - ok) / dk;
+    let tb = (lk + N * sk - ok) / dk;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta);
+    t1 = Math.min(t1, tb);
+    if (t0 > t1) return Infinity;
+  }
+  // (puis de case en case le long du rayon, dans l'ordre : le premier triangle touché dans une case, avant d'en sortir,
+  // est le bon)
+  const cell = (v, l, s) => Math.min(N - 1, Math.max(0, Math.floor((v - l) / s)));
+  let i = cell(o.x + d.x * t0, lx, sx);
+  let j = cell(o.y + d.y * t0, ly, sy);
+  let k = cell(o.z + d.z * t0, lz, sz);
+  const si = d.x > 0 ? 1 : -1;
+  const sj = d.y > 0 ? 1 : -1;
+  const sk2 = d.z > 0 ? 1 : -1;
+  let ti = d.x === 0 ? Infinity : (lx + (i + (d.x > 0 ? 1 : 0)) * sx - o.x) / d.x;
+  let tj = d.y === 0 ? Infinity : (ly + (j + (d.y > 0 ? 1 : 0)) * sy - o.y) / d.y;
+  let tk = d.z === 0 ? Infinity : (lz + (k + (d.z > 0 ? 1 : 0)) * sz - o.z) / d.z;
+  const di = d.x === 0 ? Infinity : sx / Math.abs(d.x);
+  const dj = d.y === 0 ? Infinity : sy / Math.abs(d.y);
+  const dk2 = d.z === 0 ? Infinity : sz / Math.abs(d.z);
+  G.stamp = (G.stamp + 1) >>> 0 || 1;
+  const stamp = G.stamp;
+  let best = Infinity;
+  for (;;) {
+    const c = (i * N + j) * N + k;
+    for (let n = G.start[c]; n < G.start[c + 1]; n++) {
+      const t = G.items[n];
+      if (G.mark[t] === stamp) continue;
+      G.mark[t] = stamp;
+      const h = triHit(G.pos, G.idx, t, o, d);
+      if (h < best) best = h;
+    }
+    if (best <= Math.min(ti, tj, tk)) return best;
+    if (ti <= tj && ti <= tk) {
+      i += si;
+      if (i < 0 || i >= N) return best;
+      ti += di;
+    } else if (tj <= tk) {
+      j += sj;
+      if (j < 0 || j >= N) return best;
+      tj += dj;
+    } else {
+      k += sk2;
+      if (k < 0 || k >= N) return best;
+      tk += dk2;
+    }
+  }
+}
+
+/**
+ * La copie figée d'un animal rangée pour les rayons (tests) : hit(o, d) → la distance du premier point touché (d :
+ * direction unitaire), ou Infinity ; null sans copie figée.
+ */
+export function proxyGrid(P) {
+  const G = gridOf(P);
+  return G ? { hit: (o, d) => gridHit(G, o, d) } : null;
+}
+
 const _bb = new THREE.Box3();
 /** La boîte (monde) de ce qu'on voit d'un objet : ses maillages visibles seulement (un accessoire range sa main cachée). */
 function shownBox(o, out = new THREE.Box3()) {
@@ -1215,6 +1378,30 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     return Math.hypot(dx, dy) < S.hr * (k < 1 ? 0.85 : k > 1 ? 1.15 : 1);
   }
 
+  // ---------------------------------------------------------------- les rayons sur l'animal
+
+  let grid = null;
+  let gridVer = -2;
+  const _dir = V();
+  /** Le premier point de l'animal (sa copie figée) sur le rayon de la caméra vers q : sa distance, ou Infinity. */
+  function coatHit(st, q) {
+    const P = st.proxy;
+    const cam = st.camera.position;
+    _dir.subVectors(q, cam);
+    const d = _dir.length();
+    if (d < 1e-6) return Infinity;
+    _dir.divideScalar(d);
+    // (refaite à chaque nouvelle copie figée : sa version)
+    const ver = P.geo?.attributes?.position?.version ?? -1;
+    if (ver !== gridVer) {
+      gridVer = ver;
+      grid = gridOf(P);
+    }
+    if (grid) return gridHit(grid, cam, _dir);
+    const h = P.hit(new THREE.Ray(cam.clone(), _dir.clone()), -9, 1e9);
+    return h ? h.point.distanceTo(cam) : Infinity;
+  }
+
   // ---------------------------------------------------------------- le mur, ce qu'on voit
 
   let solids = null;
@@ -1235,15 +1422,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   /** Ce point se voit-il depuis la caméra (pas derrière l'animal ; walls : ni derrière un mur ou la clôture pleine) ? */
   function seen(st, q, walls = true) {
     const cam = st.camera.position;
-    const dir = q.clone().sub(cam);
-    const d = dir.length();
-    dir.normalize();
-    if (st.proxy?.hit) {
-      const h = st.proxy.hit(new THREE.Ray(cam.clone(), dir), -9, 1e9);
-      if (h && h.point.distanceTo(cam) < d - 0.05) return false;
-    }
+    const d = q.distanceTo(cam);
+    if (st.proxy?.hit && coatHit(st, q) < d - 0.05) return false;
     if (!walls) return true;
-    rc.set(cam, dir);
+    rc.set(cam, q.clone().sub(cam).normalize());
     rc.near = 0.05;
     rc.far = d - 0.05;
     for (const o of solidList()) {
@@ -1377,12 +1559,7 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       // (le contour de l'objet, à plusieurs hauteurs : un petit sapin ne déborde pas sur son poitrail)
       const ring = [];
       for (const k of [0.25, 0.6, 0.9]) for (const [dx, dz] of [[rad, 0], [-rad, 0], [0, rad], [0, -rad]]) ring.push(p.clone().add(V(dx * (1.1 - k * 0.5), h * k, dz * (1.1 - k * 0.5))));
-      for (const q of [...pts, ...ring]) {
-        const dir = q.clone().sub(cam);
-        const d = dir.length();
-        const h2 = st.proxy.hit(new THREE.Ray(cam.clone(), dir.normalize()), -9, 1e9);
-        if (h2 && h2.point.distanceTo(cam) > d - 0.02) return no('devant');
-      }
+      for (const q of [...pts, ...ring]) if (coatHit(st, q) > q.distanceTo(cam) - 0.02) return no('devant');
     }
     if (mode === 'safe') return true;
     // (accroché à un pan de mur : le mur est là, nu, derrière lui — aussi aux places fixes du décor sur ce mur : un

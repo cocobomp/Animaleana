@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 import * as THREE from 'three';
 import { pickLife, lifeOff, LIFE_OF, EXTRAS, careAmbience, pickExtras, extrasPlace } from '../src/game/care/setting.js';
-import { extraModel, extraSize, extraRange } from '../src/game/care/extras.js';
+import { extraModel, extraSize, extraRange, proxyGrid } from '../src/game/care/extras.js';
 import { bag } from '../src/game/care/barnProps.js';
 import { fakeCtx as fakeCtxOf, fakeDocument } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -411,6 +411,39 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
       if (amb === 'nuit') for (const k of ['hirondelle', 'papillons', 'vol', 'rougegorge', 'poulailler']) expect([...r.kinds]).not.toContain(k);
     }, 120000);
   }
+
+  it('la copie figée rangée en grille : les rayons touchent le même point qu\'en testant tous ses triangles', () => {
+    sameLuck(91);
+    const amb = careAmbience(AMB.jour);
+    const a = H.animal.createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, ageDays: 900, seed: 77 });
+    const model = H.horseReal.buildRealHorseModel(H.animal.stageLook(a), a.breed, H.gltf);
+    const sc = new H.stage.CareStage({ a, renderer: H.stage.headlessRenderer(), model, set: H.care3d.decorFor('horse', 'box', { amb, kinds: [], life: [], seed: 3 }) });
+    sc.resize(390, 600, H.frame.fitView(390, 600, 400, 360));
+    sc.ready = true;
+    for (let i = 0; i < 30; i++) sc.update(1 / 30);
+    sc.scene.updateMatrixWorld(true);
+    sc.proxy.bake();
+    const G = proxyGrid(sc.proxy);
+    const bb = sc.proxy.geo.boundingBox.clone().expandByScalar(0.3);
+    const size = bb.getSize(new THREE.Vector3());
+    const cam = sc.camera.position.clone();
+    let touched = 0;
+    for (let i = 0; i < 600; i++) {
+      // (de la caméra, ou de n'importe où autour de lui, vers n'importe quel point de sa boîte)
+      const to = new THREE.Vector3(bb.min.x + Math.random() * size.x, bb.min.y + Math.random() * size.y, bb.min.z + Math.random() * size.z);
+      const from = i % 2 ? cam : to.clone().add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(3));
+      const dir = to.clone().sub(from).normalize();
+      const ref = sc.proxy.hit(new THREE.Ray(from.clone(), dir.clone()), -9, 1e9);
+      const got = G.hit(from, dir);
+      if (!ref) expect(got, `rayon ${i}`).toBe(Infinity);
+      else {
+        touched++;
+        expect(got, `rayon ${i}`).toBeCloseTo(ref.distance, 4);
+      }
+    }
+    expect(touched).toBeGreaterThan(150);
+    sc.dispose();
+  }, 120000);
 });
 
 describe('les gros plans du chat, du chien, du lapin, du mouton et de la vache', () => {

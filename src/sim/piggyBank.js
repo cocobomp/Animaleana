@@ -5,6 +5,9 @@
 // - 🔥 La série des petits boulots : un boulot au moins chaque jour de jeu, et le premier boulot du jour rapporte un
 //   petit bonus qui grandit (+5, +10, +15, +20 au plus). Un jour sauté : la série recommence, sans rien perdre.
 // - ⭐ Journée complète : tous les petits boulots du jour faits, un petit bonus en plus.
+// - ☀️ Bon retour : la première ouverture de la partie un nouveau jour du CALENDRIER (un vrai jour), un petit cadeau.
+//   Pas de série : un jour sauté ne fait rien perdre.
+// (Aussi : ⭐ la prime du travail bien fait, src/sim/wellDone.js ; 🎯 les défis du jour, src/sim/dailyChallenges.js.)
 //
 // Les règles des petits boulots ne changent pas (une fois par jour chacun, entre 8 h et 18 h : src/game/Game.js).
 // Logique pure (tests/tirelire.test.js) ; le jeu : Game.doJob, Game.buyGear/buyTool/buyAnimal ; l'écran :
@@ -15,6 +18,7 @@
 //          (+ told : la fête « tu as assez ! » déjà faite ; place : l'élevage du voyage où l'animal a été choisi,
 //          absent à la maison et dans une ancienne partie : voir goalPlace)
 //   jobStreak : { day (dernier jour avec un boulot), n (jours de suite) }
+//   lastVisit : 'AAAA-MM-JJ', la dernière date du calendrier où la partie a été ouverte (créé au premier usage)
 
 import { GEAR, gearPrice, defaultSize } from './gear.js';
 import { TOOLS } from './tools.js';
@@ -78,6 +82,29 @@ export function jobCheer(pay) {
   if (pay?.full) return { key: 'cel_fullDay', big: true };
   if (pay?.streak && STREAK_CHEERS.includes(pay.n)) return { key: 'cel_streak', n: pay.n, big: false };
   return { key: 'cel_bravo', big: false };
+}
+
+// ---------------------------------------------------------------- ☀️ bon retour
+
+/** ☀️ Le cadeau « bon retour », une fois par date du calendrier. */
+export const RETURN_BONUS = 10;
+
+/**
+ * ☀️ Bon retour : la partie s'ouvre un nouveau jour du calendrier (today : 'AAAA-MM-JJ', la date locale :
+ * src/sim/saveFile.js localDay). Renvoie { coins (0 en bac à sable), word (on fête : « Bon retour ! ») }. La date est
+ * notée à chaque fois (profile.lastVisit, créé au premier usage) : rien juste après la fin de l'histoire du début le
+ * même jour. Rien pendant l'histoire du début, ni le jour où la partie a été créée (createdDay : ce n'est pas un
+ * retour). Une ancienne partie (sans lastVisit) qui revient : le cadeau. Pas de série : sauter des jours ne change rien.
+ */
+export function returnBonus(profile, today, createdDay = '') {
+  const none = { coins: 0, word: false };
+  if (!profile || typeof today !== 'string' || !today) return none;
+  const last = typeof profile.lastVisit === 'string' ? profile.lastVisit : '';
+  if (last === today) return none;
+  profile.lastVisit = today;
+  if (profile.tutorial?.done === false) return none;
+  if (!last && createdDay === today) return none; // (une partie toute neuve : pas encore un retour)
+  return { coins: profile.mode === 'sandbox' ? 0 : RETURN_BONUS, word: true };
 }
 
 // ---------------------------------------------------------------- 🎯 objectif d'épargne

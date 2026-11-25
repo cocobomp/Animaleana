@@ -39,7 +39,9 @@ import { horseDayView } from '../sim/horseDay.js'; // ☀️ la journée de ton 
 import { galopLevel, nextGalop, practiceOf, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { albumView } from '../sim/horseFacts.js'; // 🃏 les cartes « Le savais-tu ? »
 import { earsOf } from '../sim/horseEars.js'; // 👂 ce que disent ses oreilles
-import { todayChallenge } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { todayChallenge, challengeDef, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { dailyState, DAILY } from '../sim/dailyChallenges.js'; // 🎯 les défis du jour de la ferme et le coffre
+import { wellDoneToday, WELL_DONE } from '../sim/wellDone.js'; // ⭐ la prime du travail bien fait
 import { huntView } from '../sim/halloween.js'; // 🎃 la chasse aux citrouilles
 import { keycaps, openKeysCard, stripWanted, setStripWanted } from './controls.js'; // ⌨️ les touches sur ordinateur
 import { controlsHelp } from './keys.js';
@@ -648,6 +650,8 @@ export function openJobs(ui) {
         })),
         // (sous les boulots : ils restent en haut, même en paysage ; leur bonus 🔥 est déjà écrit sur chacun)
         sandbox ? null : jobStreakCard(p, g.day, g.hour, jobs),
+        dailyCard(p, g.day, sandbox), // 🎯 les défis du jour et le coffre (bac à sable : sans pièces)
+        sandbox ? null : wellDoneLine(p, g.day), // ⭐ les primes Bravo du jour
       ];
     },
   });
@@ -684,6 +688,43 @@ function jobStreakCard(p, day, hour, jobs) {
       jobs.length > 1 ? h('small', { class: done >= jobs.length ? 'streak-full done' : 'streak-full' },
         done >= jobs.length ? `✅ ${t('job_fullDone')}`
           : still.all ? `⭐ ${t('job_fullHelp', { n: FULL_DAY_BONUS, done, total: jobs.length })}` : `⭐ ${t('job_fullLate')}`) : null));
+}
+
+/**
+ * 🎯 Les défis du jour (src/sim/dailyChallenges.js) : les défis de la ferme (⬜/✅, où tu en es, +10 🪙), le 🎁 coffre
+ * surprise, et en lecture seule le défi de ton cheval (+30 🪙). Rien n'est tiré ici (dailyTick et challengeTick s'en
+ * chargent, avec leur annonce du matin) : pas encore tirés aujourd'hui, pas de ligne. Bac à sable : sans pièces.
+ */
+function dailyCard(p, day, sandbox) {
+  const st = dailyState(p, day);
+  // (le défi du cheval : seulement celui que challengeTick a déjà tiré aujourd'hui, sinon on volerait son annonce)
+  const horse = p.challenge?.day === day ? challengeDef(p.challenge.id) : null;
+  if (!st && !horse) return null;
+  const pay = (n) => (sandbox ? null : h('b', { class: 'dc-pay' }, `+${n} 🪙`));
+  const row = (ok, text, have, n, coins) => h('div', { class: `dc-row ${ok ? 'done' : ''}` },
+    h('span', { class: 'dc-box', 'aria-hidden': 'true' }, ok ? '✅' : '⬜'),
+    h('span', { class: 'dc-text' }, text, ok ? null : h('small', {}, ` (${have}/${n})`)),
+    pay(coins));
+  const rows = st ? st.list.map((x) => row(x.done || x.have >= x.def.n, `${x.def.icon} ${t(`dc_${x.def.id}`)}`, x.have, x.def.n, DAILY.coins)) : [];
+  const opened = st && st.chest !== null;
+  const chest = !st ? null : h('small', { class: `dc-chest ${opened ? 'open' : ''}` },
+    opened ? `🎁 ${t('dc_chestOpened')}${sandbox ? '' : ` +${st.chest} 🪙`}` : `🎁 ${t('dc_chestHelp')}`);
+  let horseRow = null;
+  if (horse) {
+    const have = Math.max(0, Math.min(horse.n, (p.stats?.[horse.stat] ?? 0) - (Number.isFinite(p.challenge.base) ? p.challenge.base : 0)));
+    horseRow = row(!!p.challenge.done || have >= horse.n, `🐴 ${t(`ch_${horse.id}`)}`, have, horse.n, CHALLENGE_REWARD.coins);
+  }
+  return h('div', { class: `piggy-card daily ${opened ? 'ready' : ''}` },
+    h('div', { class: 'piggy-main' }, h('b', {}, t('dc_title')), ...rows, chest, horseRow));
+}
+
+/** ⭐ « Primes Bravo aujourd'hui : 10/20 🪙 » (src/sim/wellDone.js) : ce que rapportent les étoiles des soins et corvées. */
+function wellDoneLine(p, day) {
+  const got = wellDoneToday(p, day).coins;
+  const full = got >= WELL_DONE.perDay;
+  return h('p', { class: 'note wd-line' },
+    h('b', {}, t('wd_today', { n: got, max: WELL_DONE.perDay })), ' ',
+    full ? t('wd_full') : t('wd_help', { a: WELL_DONE.pay[3], b: WELL_DONE.pay[2] }));
 }
 
 // ---------------------------------------------------------------- réglages

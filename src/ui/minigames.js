@@ -219,6 +219,7 @@ export function runMinigame(ui, a, action, opts = {}) {
     // (a.guest : l'animal d'un client du salon de toilettage, qui n'est pas au joueur : il reste là.)
     stillThere: (game) => !game?.profile || !!a.guest || game.profile.animals.some((x) => x.id === a.id),
     opts,
+    wellDone: opts.wellDone ?? null, // ⭐ (seulement UI.careWithGame : src/sim/wellDone.js)
   });
 }
 
@@ -226,6 +227,7 @@ export function runMinigame(ui, a, action, opts = {}) {
  * Lance le mini-jeu d'une corvée (curer un box, balayer, ranger…) : même cadre, sans animal.
  * kind : une corvée de CHORE_GAMES ; target : le n° du box pour 'muck' et 'straw'.
  * o.a : l'animal qui habite là (pour le décor seulement) ; o.subtitle : « Box de Pomme ».
+ * o.wellDone : la prime du travail bien fait (Game.wellDoneFor ; seulement Interiors.chore la donne).
  * Les corvées sans mini-jeu renvoient tout de suite 1, comme avant.
  */
 export function runChoreGame(ui, kind, target = null, o = {}) {
@@ -245,13 +247,14 @@ export function runChoreGame(ui, kind, target = null, o = {}) {
     endEmoji: icon,
     endText: (stars) => t(`mg_chore_end${stars}`),
     stillThere: (game) => !game || !!game.profile,
+    wellDone: o.wellDone ?? null,
   });
 }
 
 /**
  * Cadre commun : fenêtre, consigne, barre de progression, canvas agrandi, entrées, boucle,
  * carte de fin et fermeture. o : { make, action, a, chore, icon, title, subtitle, seed,
- * endEmoji, endText(stars), stillThere(game) }.
+ * endEmoji, endText(stars), stillThere(game), wellDone (⭐ : la carte de fin y écrit ses étoiles) }.
  */
 function openMinigame(ui, o) {
   const { make, action, a } = o;
@@ -617,10 +620,18 @@ function openMinigame(ui, o) {
       cont.addEventListener('click', () => close(quality));
       // 🃏 La carte est gagnée ici seulement (fermé avec ✕ : rien, et la même carte revient la fois suivante).
       const card = o.factId ? ui.game?.collectFact?.(o.factId) : null;
+      // ⭐ La prime du travail bien fait (src/sim/wellDone.js) : les étoiles de CETTE carte (jamais recalculées), notées
+      // pour Game.wellDone, qui paie après le soin réussi ; la pastille « +5 🪙 » est dans la ligne des étoiles (la carte
+      // ne grandit pas), et rien si elle vaut 0 (★, plafond du jour, déjà eue, bac à sable).
+      const wd = o.wellDone ?? null;
+      if (wd) wd.stars = stars;
+      const prime = wd ? wd.preview?.(stars)?.coins ?? 0 : 0;
       endEl.replaceChildren(h('div', { class: 'mg-end-card' },
         h('div', { class: 'mg-end-emoji' }, o.endEmoji),
         h('h2', {}, nbsp(t(stars === 3 ? 'mg_bravo' : stars === 2 ? 'mg_wellDone' : 'mg_done'))),
-        h('div', { class: 'mg-stars', 'aria-label': `${stars}/3` }, [1, 2, 3].map((i) => h('span', { class: i <= stars ? 'on' : 'off', style: { animationDelay: `${0.15 + i * 0.18}s` } }, '★'))),
+        h('div', { class: prime > 0 ? 'mg-stars has-prime' : 'mg-stars', 'aria-label': prime > 0 ? `${stars}/3 · +${prime} 🪙` : `${stars}/3` },
+          [1, 2, 3].map((i) => h('span', { class: i <= stars ? 'on' : 'off', style: { animationDelay: `${0.15 + i * 0.18}s` } }, '★')),
+          prime > 0 ? h('b', { class: 'mg-prime', 'aria-hidden': 'true' }, `+${prime} 🪙`) : null),
         h('p', {}, nbsp(msg ?? o.endText(stars))),
         o.fact ? factCard(card) : null,
         cont));

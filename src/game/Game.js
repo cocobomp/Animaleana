@@ -35,7 +35,10 @@ import {
   socialMoment, graze, companionsOf, hasStock, helperTask as helperTaskFn, HELPERS, equipmentShown, helperShown,
 } from '../sim/farm.js';
 import { SPECIES, isOffered, coreShown, anyAvailable } from '../sim/species.js';
-import { jobPayout, recordJob, goalBought, jobCheer } from '../sim/piggyBank.js'; // 🐷 tirelire : série des boulots, objectif d'épargne, mot de fête
+import { jobPayout, recordJob, goalBought, jobCheer, returnBonus } from '../sim/piggyBank.js'; // 🐷 tirelire : série des boulots, objectif d'épargne, mot de fête, bon retour
+import { wellDonePreview, recordWellDone } from '../sim/wellDone.js'; // ⭐ la prime du travail bien fait
+import { todayDaily, dailyJustDone, DAILY, chestGolden } from '../sim/dailyChallenges.js'; // 🎯 les défis du jour de la ferme et le coffre
+import { localDay } from '../sim/saveFile.js'; // (☀️ bon retour : la date du calendrier)
 import {
   NEEDS, createAnimal, tickAnimal, applyCare, careFull, bondStage, CARE, breedingChecklist, mate, trainTrick, trainSkill, canRide, canBreed, breed, cure, checkup, mood, ageYears,
   namesInUse,
@@ -59,7 +62,7 @@ import { markHorseDay } from '../sim/horseDay.js'; // la journée de ton cheval
 import { galopLevel, nextGalop, canTakeExam } from '../sim/galops.js'; // 🏅 les Galops
 import { CALL, answerCall, cameWhenCalled } from '../sim/horseCall.js'; // 📣 appeler ton cheval
 import { tapPost, postMilestone } from '../sim/posting.js'; // ⬆️ trot enlevé
-import { todayChallenge, challengeJustDone, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
+import { todayChallenge, challengeJustDone, challengeDef, CHALLENGE_REWARD } from '../sim/horseChallenge.js'; // 🎯 le défi du jour
 import { newStars, starUnlock, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
 import {
   GEAR, buyGear, equip, unequip, rideGear, tackUpForRide, starterTack, feltWeather, canLead, canLeash, equipHelmet, riderHelmet, LEASH_LEN,
@@ -718,7 +721,34 @@ export class Game {
     this.ui.onStart(this);
     // Pendant le tutoriel guidé, c'est le guide qui explique quoi faire.
     if (profile.animals.length === 0 && profile.tutorial?.done !== false) this.ui.toast(t('welcome', { name: profile.name }), 7000);
+    // ☀️ Bon retour (un nouveau jour du calendrier) : un peu après l'ouverture, une fois fermée la fenêtre « Quoi de
+    // neuf ? » (1,2 s) ou une autre (on réessaie chaque seconde, une minute au plus) : le message se voit, et la fête part.
+    const welcome = (tries = 60) => {
+      if (!this.running || this.profile !== profile) return;
+      if (this.ui.isBlocking?.() && tries > 0) return void setTimeout(() => welcome(tries - 1), 1000);
+      this.welcomeBack();
+    };
+    setTimeout(welcome, 2500);
     this.emit('start', profile);
+  }
+
+  /**
+   * ☀️ Bon retour (src/sim/piggyBank.js returnBonus) : la première ouverture de la partie un nouveau jour du calendrier
+   * (un vrai jour, pas un jour de jeu), après l'histoire du début : +10 🪙 et « Bon retour ! ». Pas de série : un jour
+   * sauté ne fait rien perdre. Bac à sable : le mot, sans pièces. Renvoie le résultat de returnBonus.
+   */
+  welcomeBack(now = Date.now()) {
+    const p = this.profile;
+    if (!p) return null;
+    const r = returnBonus(p, localDay(now), Number.isFinite(p.createdAt) ? localDay(p.createdAt) : '');
+    if (!r.word) return r;
+    earn(p, r.coins);
+    addStat(p, 'returns');
+    if (r.coins) audio.ui('coin');
+    this.ui.toast(r.coins ? t('back_gift', { n: r.coins }) : t('back_hello'), 6000);
+    this.ui.celebrate?.({ word: t('cel_back') });
+    this.save?.();
+    return r;
   }
 
   /** Événements : game.on('adopted', fn), game.emit('adopted', a). */
@@ -1069,7 +1099,8 @@ export class Game {
     const mounted = this.player?.mount?.data;
     const horse = (mounted && mine.includes(mounted) ? mounted : null)
       ?? mine.find((a) => a.id === this.lastHorseId) ?? here[0] ?? mine[0];
-    if (c.fresh && p.tutorial?.done !== false) this.ui.toast(t('ch_new', { what: t(`ch_${c.def.id}`) }), 7000);
+    // (une seule bulle le matin : les défis de la ferme, dailyTick, s'y ajoutent)
+    if (c.fresh && p.tutorial?.done !== false) this.ui.toast(t('ch_new', { what: t(`ch_${c.def.id}`) }), 8000, { group: 'daily' });
     if (!challengeJustDone(p, this.day)) return;
     earn(p, CHALLENGE_REWARD.coins);
     const s0 = bondStage(horse);
@@ -1081,6 +1112,59 @@ export class Game {
     const coins = isSandbox(p) ? '' : ` +${CHALLENGE_REWARD.coins} 🪙`;
     this.ui.toast(`${t('ch_done', { what: t(`ch_${c.def.id}`), name: horse.name, g: horse.sex })}${coins}`, 7000);
     this.ui.celebrate?.({ word: t('cel_challenge') }); // 🎉 « Défi réussi ! » et les pièces qui volent (src/ui/piggy.js)
+  }
+
+  /**
+   * 🎯 Ce que tu peux faire aujourd'hui, ici, pour les défis de la ferme (src/sim/dailyChallenges.js) : mine (tes
+   * animaux ici), can (les soins possibles sur eux, avec l'outil qu'il faut), jobsLeft (les petits boulots encore
+   * possibles aujourd'hui, d'après jobBlock).
+   */
+  dailyCtx() {
+    const p = this.profile;
+    const mine = p.animals.filter((a) => !a.client && !a.guest && a.location === p.place);
+    const can = new Set();
+    for (const a of mine) for (const act of SPECIES[a.species]?.actions ?? []) if (!missingTool(p, act)) can.add(act);
+    const h0 = Math.max(this.hour, JOB_HOURS.from);
+    const jobsLeft = availableJobs(p).filter((j) => !jobBlock(p, j, this.day, h0)).length;
+    return { hour: this.hour, home: this.isHome, mine: mine.length, can, jobsLeft };
+  }
+
+  /**
+   * 🎯 Les défis du jour de la ferme (src/sim/dailyChallenges.js), juste après celui du cheval (challengeTick) : tirés
+   * le matin (jamais sur la même chose que le défi du cheval du jour) et annoncés dans la même bulle ; chacun réussi
+   * rapporte +10 🪙 ; les 2 faits, le 🎁 coffre surprise s'ouvre tout de suite, en grand. Rien pendant l'histoire du
+   * début. Bac à sable : les défis et la fête, sans pièces.
+   */
+  dailyTick() {
+    const p = this.profile;
+    if (!p || p.tutorial?.done === false) return;
+    const horse = p.challenge?.day === this.day ? challengeDef(p.challenge.id) : null;
+    const d = todayDaily(p, this.day, this.dailyCtx(), horse?.stat ?? null);
+    if (!d) return;
+    if (d.fresh) {
+      const list = d.list.map((x) => `${x.def.icon} ${t(`dc_${x.def.id}`)}`).join(' · ');
+      this.ui.toast(t(d.list.length > 1 ? 'dc_new' : 'dc_newOne', { list }), 8000, { group: 'daily' });
+    }
+    const r = dailyJustDone(p, this.day);
+    if (!r.ids.length && r.chest === null) return;
+    const sandbox = isSandbox(p);
+    for (const id of r.ids) {
+      earn(p, DAILY.coins);
+      addStat(p, 'dailyDone');
+      this.ui.toast(`${t('dc_done', { what: t(`dc_${id}`) })}${sandbox ? '' : ` +${DAILY.coins} 🪙`}`, 6000);
+    }
+    if (r.chest === null) {
+      audio.ui('coin');
+      this.ui.celebrate?.({ word: t('cel_challenge') }); // 🎉 « Défi réussi ! »
+      return;
+    }
+    // 🎁 Les 2 défis faits : le coffre s'ouvre tout de suite (un jour sur 7, le coffre doré).
+    earn(p, r.chest);
+    addStat(p, 'chests');
+    audio.ui('levelUp');
+    const golden = chestGolden(r.chest);
+    this.ui.toast(`${t(golden ? 'dc_chestGolden' : 'dc_chest')}${sandbox ? '' : ` +${r.chest} 🪙`}`, 8000);
+    this.ui.celebrate?.({ word: t(golden ? 'cel_chestGolden' : 'cel_chest'), big: true });
   }
 
   /**
@@ -1536,6 +1620,7 @@ export class Game {
       this.checkAcc = 0;
       this.galopNews();
       this.challengeTick();
+      this.dailyTick(); // (après le défi du cheval : jamais sur la même chose que lui)
       this.starsTick();
       // Toute quête finie est récompensée, rejointe ou non ; une quête rejointe et finie quitte « Mes quêtes », et
       // la fin du chapitre en cours de l'histoire est fêtée par le guide, qui annonce le suivant (src/sim/quests.js).
@@ -1821,6 +1906,7 @@ export class Game {
         if (n === 0) this.ui.showDeltas(a, before);
         spend(this.profile, CARE[action].cost);
         addStat(this.profile, action);
+        addStat(this.profile, 'cares'); // (🎯 « fais 5 soins » : chaque animal soigné compte)
         if (res.unlame) this.ui.toast(t('unlame', { name: a.name, g: a.sex }), 6000); // (pieds curés : le caillou est parti)
         this.bondNews(a, stage0);
         // (l'histoire de ton premier cheval, sa journée : tes chevaux, pas ceux qu'on te confie)
@@ -2419,6 +2505,7 @@ export class Game {
     }
     spend(this.profile, care.cost);
     addStat(this.profile, action);
+    addStat(this.profile, 'cares'); // (🎯 le défi du jour « fais 5 soins » : src/sim/dailyChallenges.js)
     // (l'histoire de ton premier cheval, sa journée, les Galops : tes chevaux, pas ceux qu'on te confie)
     if (a.species === 'horse' && !a.client && !a.guest) {
       addStat(this.profile, `horse_${action}`);
@@ -2469,6 +2556,36 @@ export class Game {
     audio.ui('levelUp');
     this.ui.toast(t('goal_bought', { name: label }), 6000);
     this.ui.celebrate?.({ word: t('cel_goalDone'), big: true }); // 🎉 « Objectif atteint ! » (le mot seul : on a payé)
+  }
+
+  /**
+   * ⭐ Ce qu'on donne au mini-jeu d'un soin ou d'une corvée pour la prime du travail bien fait (src/sim/wellDone.js) :
+   * { key, own, stars, preview }. Le cadre (src/ui/minigames.js showEnd) y écrit les étoiles de sa carte de fin et y lit
+   * la pastille « +5 🪙 » (preview) ; on paie avec wellDone, après le soin réussi.
+   */
+  wellDoneFor(key, own = true) {
+    const wd = { key, own: !!own, stars: null };
+    wd.preview = (stars) => wellDonePreview(this.profile, { stars, key, own: wd.own, day: this.day });
+    return wd;
+  }
+
+  /**
+   * ⭐ La prime du travail bien fait, APRÈS le soin ou la corvée réussis (wd : wellDoneFor). Les étoiles sont celles de
+   * la carte de fin (wd.stars) ; pas de mini-jeu, donc pas d'étoiles : rien. ★★★ +5 🪙, ★★ +2 🪙, au plus 20 🪙 par
+   * jour de jeu ; « Bravo ! » (ou « Bien joué ! ») vole avec les pièces depuis « Continuer ». Bac à sable : le mot seul.
+   */
+  wellDone(wd) {
+    const p = this.profile;
+    if (!p || !wd || !Number.isInteger(wd.stars)) return null;
+    if (wd.own && wd.stars >= 2) addStat(p, 'wellDone');
+    if (wd.own && wd.stars === 3) addStat(p, 'wellDone3'); // (🎯 le défi du jour « 2 soins ★★★ »)
+    const r = recordWellDone(p, { stars: wd.stars, key: wd.key, own: wd.own, day: this.day });
+    if (r.coins > 0) {
+      earn(p, r.coins);
+      audio.ui('coin');
+    }
+    if (r.n > 0) this.ui.celebrate?.({ word: t(wd.stars === 3 ? 'cel_bravo' : 'cel_wellDone') });
+    return r;
   }
 
   train(a, trainingId) {

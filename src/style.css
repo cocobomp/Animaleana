@@ -2024,6 +2024,19 @@ body.actv-running #quest-tracker { display: none !important; } /* pendant une ac
 .mg-stars .on { color: #f2b824; text-shadow: 0 2px 0 #c98a10; }
 .mg-stars .off { color: #d9d2c2; }
 @keyframes mg-star { from { transform: scale(0) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
+/* ⭐ La prime du travail bien fait (src/sim/wellDone.js) : une pastille « +5 🪙 » collée sur les étoiles, en position
+   absolue (la carte ne grandit ni en hauteur ni en largeur : 320 px, carte compacte, carte de la scène 3D). Avec une
+   pastille, la ligne des étoiles prend la largeur de ses étoiles (toujours centrée) pour qu'elle s'y accroche ; les
+   autres cartes à étoiles (métiers, vétérinaire) ne changent pas. */
+.mg-stars.has-prime { position: relative; width: max-content; max-width: 100%; margin-inline: auto; }
+.mg-stars .mg-prime {
+  position: absolute; right: -16px; bottom: -5px; z-index: 1; font-size: 0.95rem; line-height: 1.2; font-weight: 900;
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap; color: #6b4a00; background: #ffe58a;
+  border: 2px solid #e0a800; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18); transform: rotate(-6deg);
+  animation: mg-prime 0.45s ease-out 0.95s both;
+}
+@keyframes mg-prime { from { transform: rotate(-6deg) scale(0); opacity: 0; } 70% { transform: rotate(-6deg) scale(1.2); opacity: 1; } to { transform: rotate(-6deg) scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .mg-stars .mg-prime { animation: none; } }
 .mg-continue { width: 100%; min-height: 56px; font-size: 1.2rem; }
 /* Carte trop haute pour la scène (360 × 780 avec un message de 3 lignes, long prénom) : version
    compacte, posée par le cadre (minigames.js, fitEnd) seulement quand la carte normale ne tient pas. */
@@ -3125,3 +3138,16 @@ span.card-emoji.list-thumb { width: 64px; height: auto; border-radius: 0; }
 .tk-tool-goal-row { flex-basis: 100%; display: flex; justify-content: flex-end; min-width: 0; }
 .tk-tool-goal-row .goal-btn { min-height: 44px; max-width: 100%; white-space: normal; }
 .piggy-main small.piggy-where { color: #8a5a00; font-weight: 600; }
+/* 🎯 Les défis du jour (src/ui/panels.js dailyCard) : une ligne par défi, le texte passe à la ligne, les pièces jamais
+   coupées (rien ne déborde à 320 px). Lecture seule : pas de bouton. */
+.piggy-card.daily { background: #f3f8ff; border-color: #c9dcf2; }
+.piggy-card.daily.ready { background: #fff4cc; border-color: #e6b23a; }
+.dc-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.dc-box { flex-shrink: 0; }
+.dc-text { flex: 1; min-width: 0; overflow-wrap: break-word; }
+.dc-text small { color: var(--muted); white-space: nowrap; }
+.dc-row.done .dc-text { color: var(--muted); }
+.dc-pay { flex-shrink: 0; white-space: nowrap; color: #8a5a00; }
+.piggy-main small.dc-chest { font-weight: 700; color: #8a5a00; }
+.piggy-main small.dc-chest.open { color: var(--primary); }
+.note.wd-line b { color: #8a5a00; }

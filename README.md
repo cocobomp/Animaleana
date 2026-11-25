@@ -53,7 +53,7 @@ l'écran dit les touches utiles (à pied, en selle) ; **H** ouvre la carte « Le
 
 ## Contenu (version 0.5)
 
-- Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent, petits boulots)
+- Plusieurs profils, avatar personnalisable, modes **bac à sable** et **gestion** (argent, petits boulots) ; une **tirelire** 🐷 avec un objectif d'épargne, des primes « Bravo » pour les soins et corvées ★★★, 2 **défis du jour** avec un coffre surprise 🎁, et un petit cadeau quand on revient jouer un autre jour
 - 7 espèces et 116 races : chevaux, chiens, chats, lapins, moutons, chèvres, vaches (avec des races locales en voyage) ; chiens de troupeau
 - Besoins réalistes, personnalités, maladies ; **vétérinaire à jouer soi-même** (examen, carnet, diagnostic, soin) et trousse de soins
 - **Mini-jeux pour chaque corvée** : curer le box, pailler, balayer l'allée, ranger le salon, faire la vaisselle

@@ -140,7 +140,8 @@ export function dressOther(stage, d, dress, place = 'pre', { anywhere = false } 
   const { amb, day = 1, id = '', species = '', seed = 1 } = dress;
   const look = travelLook(dress);
   const where = look ? 'ailleurs' : place;
-  const kinds = pickExtras({ day, id, place: extrasPlace(where, look), species, n: 3, amb });
+  // (sans ce que le décor ne peut pas tenir : d.noExtras)
+  const kinds = pickExtras({ day, id, place: extrasPlace(where, look), species, n: 3, amb, without: d.noExtras });
   const life = pickLife({ day, id, place: where, amb, species, taken: kinds });
   d.place = where;
   d.dress = dress;

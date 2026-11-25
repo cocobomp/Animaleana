@@ -974,6 +974,12 @@ const SIZE = {
 };
 /** La course de ce qui bouge autour de sa place (m), déjà comptée dans SIZE. */
 const RANGE = { poule: 0.3, papillon: 0.24, souris: 0.06, escargot: 0.03 };
+/**
+ * Ce qui est long, au sol : sa vraie emprise dans son propre repère, [demi-longueur le long de son axe (x), demi-largeur
+ * (z)] — la poule, sa promenade comprise (RANGE.poule, plus son bec et sa queue : 0,23 m), le corps large de 0,24 m ; la
+ * brouette, de ses bras à sa roue, son bac évasé. Tournée, elle prend plus ou moins de place vers un mur (touchesSolid).
+ */
+const FOOT = { poule: [RANGE.poule + 0.23, 0.12], brouette: [0.8, 0.35] };
 /** Ce qui se perche (EXTRAS : 'perch') mais peut aussi s'asseoir ou sautiller par terre. */
 const FLOOR_TOO = new Set(['chat', 'oiseau']);
 
@@ -1563,13 +1569,20 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   let solidWorld = null;
   const _tb = new THREE.Box3();
   /**
-   * Sa boîte au sol en p (rad de côté, les trois quarts de rad vers nous et vers le fond, h de haut) touche-t-elle une
-   * pièce pleine du décor qui dépasse du sol (un mur, un poteau, une lisse, la paille) ? Les boîtes sont prises une fois.
+   * Sa boîte au sol en p (h de haut) touche-t-elle une pièce pleine du décor qui dépasse du sol (un mur, un poteau, une
+   * lisse, la paille) ? Ce qui est long (FOOT : la poule et sa promenade, la brouette) prend sa vraie emprise, tournée de
+   * rot ; le reste, face à nous, tourné d'un rien, son rayon rad de côté et les trois quarts de rad vers nous et vers le
+   * fond. Les boîtes sont prises une fois.
    */
-  function touchesSolid(p, rad, h) {
+  function touchesSolid(p, rad, h, kind = null, rot = 0) {
     solidWorld ??= solidList().map((o) => ({ o, box: shownBox(o, new THREE.Box3()) }));
-    _tb.min.set(p.x - rad, p.y + 0.03, p.z - rad * 0.75);
-    _tb.max.set(p.x + rad, p.y + h, p.z + rad * 0.75);
+    const f = FOOT[kind];
+    const c = Math.abs(Math.cos(rot));
+    const sn = Math.abs(Math.sin(rot));
+    const ex = f ? c * f[0] + sn * f[1] : rad;
+    const ez = f ? sn * f[0] + c * f[1] : rad * 0.75;
+    _tb.min.set(p.x - ex, p.y + 0.03, p.z - ez);
+    _tb.max.set(p.x + ex, p.y + h, p.z + ez);
     for (const { o, box } of solidWorld) {
       if (box.isEmpty() || box.max.y < p.y + 0.03 || !o.parent || !shown(o)) continue;
       if (box.intersectsBox(_tb)) return true;
@@ -1647,9 +1660,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
   /**
    * La place p convient-elle à cet objet ? s : la place du décor (son mur). mode : 'place' (une nouvelle place),
    * 'keep' (un objet déjà posé, quand le cadrage change : un peu de marge, pour ne pas le faire clignoter), 'safe'
-   * (pendant que la caméra bouge : seulement ce qui ne doit jamais arriver, cacher l'animal ou ce qu'on lui tend).
+   * (pendant que la caméra bouge : seulement ce qui ne doit jamais arriver, cacher l'animal ou ce qu'on lui tend). rot :
+   * sa rotation à cette place (turnAt ; posé, la sienne).
    */
-  function fits(st, it, p, taken, S, s = null, mode = 'place') {
+  function fits(st, it, p, taken, S, s = null, mode = 'place', rot = it.m.rotation.y) {
     const no = (why) => {
       it.why[why] = (it.why[why] ?? 0) + 1;
       return false;
@@ -1667,10 +1681,9 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     for (const q of avoid) if (Math.hypot(p.x - q.x, p.z - q.z) < rad + 0.25) return no('réverbère');
     // (accroché, perché, appuyé : à un mur, une clôture qu'on voit — le décor cache ceux qui passent devant la caméra)
     if (s?.wall && !shown(s.wall)) return no('mur caché');
-    // (une place serrée contre le décor — au pied d'un mur, entre une porte et un poteau : s.tight — : posé là, il ne
-    // touche aucune pièce pleine ; face à nous, tourné d'un rien, il prend son rayon de côté et les trois quarts de
-    // son rayon vers le mur)
-    if (it.where === 'floor' && s?.tight && touchesSolid(p, rad, h)) return no('mur');
+    // (une place serrée contre le décor — au pied d'un mur, entre une porte et un poteau : s.tight — : posé là, tourné
+    // comme il le sera, il ne touche aucune pièce pleine)
+    if (it.where === 'floor' && s?.tight && touchesSolid(p, rad, h, it.kind, rot)) return no('mur');
     // (ni sur ce qu'on lui tend — mangeoire, seau, gamelles, filet, notre main — ni sur la plaque à son nom : leur
     // boîte, dans le monde et dans l'image, pas seulement leur centre)
     const ib = new THREE.Box3(V(p.x - rad, p.y, p.z - rad), V(p.x + rad, p.y + h, p.z + rad));
@@ -2078,13 +2091,28 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
     headAt = st?.live?.('head') ?? null;
   }
 
-  /** Posé pour la caméra qui arrive : il ne doit pas non plus gêner là où elle est encore. */
-  function safeNow(st, it, p, s, J) {
+  /** Posé pour la caméra qui arrive (tourné de rot) : il ne doit pas non plus gêner là où elle est encore. */
+  function safeNow(st, it, p, s, J, rot) {
     if (!J.now?.target) return true;
     return atPose(st, J.now, () => {
       J.Snow ??= survey(st);
-      return fits(st, it, p, [], J.Snow, s, 'safe');
+      return fits(st, it, p, [], J.Snow, s, 'safe', rot);
     });
+  }
+
+  /**
+   * Sa rotation à la place s, tirée de la place (la même à chaque essai, avant de l'y poser) : face à nous avec un
+   * petit angle ; posé sur une lisse, le long de celle-ci ; accroché, face au dehors du mur ; le chat, l'oiseau, la
+   * mouette, de profil sur leur lisse. Au pied d'un mur ou d'une clôture (s.tight), ce qui est long (FOOT : la poule et
+   * sa promenade, la brouette) se tourne le long d'eux (s.along) s'il n'y tient pas autrement.
+   */
+  function turnAt(it, s, p, h) {
+    const r = seeded(hashSeed(`${it.kind}|${s.p.join(',')}`));
+    let rot = s.face ?? (it.where === 'lean' ? (r() - 0.5) * 0.3 : it.kind === 'brouette' || it.kind === 'botte' ? (r() - 0.5) * 0.6 : (r() - 0.5) * 1.2);
+    if (it.kind === 'chat' || it.kind === 'oiseau' || it.kind === 'mouette') rot = (s.face ?? 0) + (r() - 0.5) * 0.5 + (it.kind !== 'chat' ? Math.PI / 2 : 0);
+    if (it.where === 'hang') rot = s.face ?? 0;
+    if (it.where === 'floor' && s.tight && FOOT[it.kind] && s.along != null && touchesSolid(p, 0, h, it.kind, rot)) rot = s.along;
+    return rot;
   }
 
   /**
@@ -2113,15 +2141,13 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       if (it.where === 'air') p.y += 0.35 + 0.25 * Math.min(1.5, box ? box.max.y : 1);
       // (appuyée contre le mur : le pied un peu en avant, le haut contre le mur)
       if (it.where === 'lean') p.add(V(Math.sin(s.face ?? 0) * 0.3, 0, Math.cos(s.face ?? 0) * 0.3));
-      if (!fits(st, it, p, J.taken, J.S, s) || !safeNow(st, it, p, s, J)) continue;
+      // (tourné comme il le sera : la place est essayée avec sa vraie emprise)
+      const rot = turnAt(it, s, p, h);
+      if (!fits(st, it, p, J.taken, J.S, s, 'place', rot) || !safeNow(st, it, p, s, J, rot)) continue;
       it.at = p;
       it.spot = s;
       it.m.position.copy(p);
-      // (face à nous, avec un petit angle ; posé sur une lisse, le long de celle-ci ; accroché : face au dehors du mur)
-      const r = seeded(hashSeed(`${it.kind}|${s.p.join(',')}`));
-      it.m.rotation.y = s.face ?? (it.where === 'lean' ? (r() - 0.5) * 0.3 : it.kind === 'brouette' || it.kind === 'botte' ? (r() - 0.5) * 0.6 : (r() - 0.5) * 1.2);
-      if (it.kind === 'chat' || it.kind === 'oiseau' || it.kind === 'mouette') it.m.rotation.y = (s.face ?? 0) + (r() - 0.5) * 0.5 + (it.kind !== 'chat' ? Math.PI / 2 : 0);
-      if (it.where === 'hang') it.m.rotation.y = s.face ?? 0;
+      it.m.rotation.y = rot;
       appear(it);
       it.cur = null;
       return true;

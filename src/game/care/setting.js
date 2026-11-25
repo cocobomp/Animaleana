@@ -420,13 +420,15 @@ export function seeded(seed) {
 /**
  * Les objets du jour autour de cet animal, dans ce lieu : tirés au sort de façon stable (le même jour, les mêmes
  * objets ; le lendemain, au moins un a changé). La liste du lieu est mélangée une fois pour cet animal ; chaque jour,
- * on avance d'un nombre de cases tiré au sort et on prend les n suivants. Renvoie une liste de kinds (EXTRAS).
+ * on avance d'un nombre de cases tiré au sort et on prend les n suivants. without : ce que le décor ne peut pas tenir
+ * (la brouette, trop grosse pour le petit pré de la balle) — un autre objet est tiré à sa place. Renvoie une liste de
+ * kinds (EXTRAS).
  */
-export function pickExtras({ day = 1, id = '', place = 'pre', n = 3, species = '', amb = null } = {}) {
+export function pickExtras({ day = 1, id = '', place = 'pre', n = 3, species = '', amb = null, without = null } = {}) {
   // (le chat sur le muret : pas pour le chat lui-même ; ni fleurs ni papillon sous la neige, pas de papillon sous la
   // pluie, la nuit les bêtes dorment)
   const banned = extrasOff(amb);
-  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !(k === 'chat' && species === 'cat') && !banned.has(k));
+  const list = (EXTRAS_OF[place] ?? EXTRAS_OF.pre).filter((k) => !(k === 'chat' && species === 'cat') && !banned.has(k) && !without?.includes(k));
   const L = list.length;
   const m = Math.min(n, L);
   if (m <= 0) return [];

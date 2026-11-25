@@ -379,12 +379,13 @@ export function paddockSet(stage, yard) {
   // balle ne roule pas jusque-là), accrochés à ses poteaux ; ni devant la porte ni sur le touret. (En voyage, la
   // clôture du fond va jusqu'au coin de gauche : les places aussi.) Au sol, toutes serrées contre le décor (tight :
   // extras.js) — ce qui y est posé ne passe ni dans les lisses, ni dans un poteau, la paille, le touret ou le mur ; une
-  // botte tient devant la clôture du fond, la brouette ne tient pas dans ce petit pré.
+  // botte tient devant la clôture du fond ; la poule qui se promène se tourne le long du mur ou de la clôture (along)
+  // si elle n'y tient pas autrement ; la brouette ne tient nulle part (noExtras, plus bas).
   const spots = [];
   const topY = 0.92 * fH + 0.05;
   const back0 = travel ? F.x0 + 0.45 : F.x0 + 3.7;
   for (let x = back0; x <= F.x1 - 2 * sR - 0.6; x += 0.35) {
-    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.48], tight: true });
+    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.48], tight: true, along: 0 });
     spots.push({ kind: 'perch', p: [x, topY, F.z0 + 0.07], face: 0 });
   }
   for (const p of backPosts) if (p.x > back0 - 0.1 && p.x < F.x1 - 0.2) spots.push({ kind: 'hang', p: [p.x, 0.32 * fH + 0.06, F.z0 + 0.06], face: 0 });
@@ -394,14 +395,15 @@ export function paddockSet(stage, yard) {
   const wallZ = F.z0 - 0.4;
   for (let x = bx - 0.3; !travel && x <= F.x0 + 3.2; x += 0.3) {
     if (Math.abs(x - door.x) < dW / 2 + 0.3) continue;
-    spots.push({ kind: 'floor', p: [x, 0, wallZ + 0.42], tight: true });
+    // (au sol, tous les 15 cm : entre la porte et le poteau du coin, la place est juste pour la poule qui se promène)
+    for (const dx of [0, 0.15]) if (Math.abs(x + dx - door.x) >= dW / 2 + 0.3) spots.push({ kind: 'floor', p: [x + dx, 0, wallZ + 0.42], tight: true, along: 0 });
     spots.push({ kind: 'lean', p: [x, 0, wallZ + 0.04] });
     spots.push({ kind: 'hang', p: [x, Math.min(1.25, wallH - 0.6), wallZ + 0.005], face: 0 });
   }
   // (le long de la clôture de gauche et de droite, hors du terrain : au sol, sur la lisse du haut ; pas sur la paille)
   for (let z = F.z0 + 0.8; z <= zNear + 0.2; z += 0.35) {
-    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z], tight: true }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
-    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z], tight: true });
+    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z], tight: true, along: Math.PI / 2 }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
+    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z], tight: true, along: Math.PI / 2 });
   }
   // (le réverbère de la nuit : contre le mur, juste à droite de la porte, son bras au-dessus d'elle — là où rien ne se
   // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait ; en voyage, à la même
@@ -431,6 +433,10 @@ export function paddockSet(stage, yard) {
     // s'y posent, sur les côtés — la demi-largeur de la clôture du fond, away.js : MID)
     awayMid: (F.x1 - F.x0) / 2,
     spots,
+    // (la brouette, 1,6 m de long, ne tient nulle part dans ce petit pré : entre la porte et le poteau du coin, ni le
+    // long des clôtures ; à gauche de la porte, hors de l'image en portrait, et en paysage, elle dépasse du haut de
+    // l'image. Un autre objet du jour est tiré à sa place : pickExtras)
+    noExtras: ['brouette'],
     lampSpot,
     lampFace: Math.PI,
     lampLight,

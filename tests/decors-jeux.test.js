@@ -303,40 +303,55 @@ describe('la balle de la chèvre, dans le pré', () => {
     expect(n).toBeGreaterThan(4);
   }, 120000);
 
-  it('au pied de la chèvrerie, rien de posé au sol ne rentre dans le mur, la porte ou le poteau du coin (la brouette, la botte, la poule)', () => {
+  it('au pied de la chèvrerie, rien de posé au sol ne rentre dans le mur, la porte ou le poteau du coin ; la poule qui se promène y trouve sa place, la brouette n\'y est jamais tirée', () => {
     const amb = careAmbience({ hour: 13, weather: 'clear', season: 'summer' });
-    // (des jours où la brouette, la botte ou la poule sont parmi les objets du jour du pré)
+    // (des jours où la botte ou la poule sont parmi les objets du jour du pré ; la brouette, trop grosse pour ce petit
+    // pré, n'y est jamais tirée : un autre objet à sa place)
     const days = [];
     for (let day = 1; days.length < 16 && day < 400; day++) {
-      const kinds = pickExtras({ day, id: 'g2', place: extrasPlace('pre'), species: 'goat', n: 3, amb });
-      if (kinds.some((k) => k === 'brouette' || k === 'botte' || k === 'poule')) days.push(day);
+      const kinds = pickExtras({ day, id: 'g2', place: extrasPlace('pre'), species: 'goat', n: 3, amb, without: ['brouette'] });
+      if (kinds.some((k) => k === 'botte' || k === 'poule')) days.push(day);
     }
     let byWall = 0;
-    let refused = 0;
+    // (la poule du jour, et combien de fois elle est posée, en portrait et en paysage)
+    const hens = { 390: [0, 0], 844: [0, 0] };
     for (const day of days) {
       for (const [w, h] of [[390, 600], [844, 390]]) {
         const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, 'g2', day), w, h });
         const game = goatPlay.goatPlay3dGame(ctx);
         run(ctx, game, sc, 1.5);
         const pre = sc.decor;
+        expect(pre.extrasPicked, `jour ${day}`).not.toContain('brouette');
+        expect(pre.extrasPicked.length).toBe(3);
         const solids = solidBoxes(pre);
         for (const it of pre.extras.items) {
-          if (['brouette', 'botte', 'poule'].includes(it.kind)) refused += it.why.mur ?? 0;
+          if (it.kind === 'poule') {
+            hens[w][0]++;
+            if (it.at) hens[w][1]++;
+          }
           if (!it.at || it.path || it.where !== 'floor') continue;
           if (it.spot?.tight) byWall++;
-          it.m.updateMatrixWorld(true);
-          const b = new THREE.Box3().setFromObject(it.m).expandByScalar(-0.01);
           const at = `${(it.at.x - pre.dims.x0).toFixed(2)}, ${(it.at.z - pre.dims.z0).toFixed(2)}`;
-          for (const { o, box } of solids) expect(box.intersectsBox(b), `jour ${day}, ${w}×${h} : ${it.kind} (${at}) dans ${o.geometry.type}`).toBe(false);
+          // (la poule va et vient le long de son axe, tourné : à plusieurs moments de sa promenade, bec et queue compris)
+          for (let k = 0; k < (it.kind === 'poule' ? 8 : 1); k++) {
+            if (k) run(ctx, game, sc, 0.55);
+            it.m.updateMatrixWorld(true);
+            const b = new THREE.Box3().setFromObject(it.m).expandByScalar(-0.01);
+            for (const { o, box } of solids) expect(box.intersectsBox(b), `jour ${day}, ${w}×${h} : ${it.kind} (${at}) dans ${o.geometry.type}`).toBe(false);
+          }
         }
         game.destroy();
         sc.dispose();
       }
     }
-    // (des choses posées au pied du mur, d'autres trop grosses pour y tenir, parties ailleurs)
     expect(byWall).toBeGreaterThan(4);
-    expect(refused).toBeGreaterThan(0);
-  }, 120000);
+    // (avant, la poule n'était jamais posée : sa boîte comptait sa promenade dans tous les sens, 45 cm vers le mur. Elle
+    // l'est maintenant au moins un jour sur trois, en portrait comme en paysage — sinon, sa place est prise par un
+    // autre objet du jour)
+    expect(hens[844][0]).toBeGreaterThan(5);
+    expect(hens[844][1], 'la poule posée en paysage').toBeGreaterThanOrEqual(Math.ceil(hens[844][0] / 3));
+    expect(hens[390][1], 'la poule posée en portrait').toBeGreaterThanOrEqual(Math.ceil(hens[390][0] / 3));
+  }, 180000);
 
   it("la nuit, pendant la partie : le côté de la chèvre qu'on voit reçoit la lumière, lancer après lancer", () => {
     const amb = careAmbience({ hour: 23, weather: 'clear', season: 'summer' });

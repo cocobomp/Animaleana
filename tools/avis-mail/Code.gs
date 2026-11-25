@@ -6,11 +6,11 @@
 //
 // Toutes les heures, verifierLesAvis lit les avis arrivés depuis le dernier mail (collection « feedback », par l'API
 // de Firestore, avec tes droits Google : les règles de firestore.rules, qui interdisent de les lire, ne valent que
-// pour le jeu) et envoie UN mail récapitulatif s'il y a du neuf (PAR_PASSAGE avis au plus : la suite au passage
-// suivant). Rien de neuf : pas de mail. Le script ne fait que lire : il n'écrit, ne change ni n'efface rien.
-// Erreur (réseau, droits, réponse illisible, mail refusé) : pas de mail d'avis, le repère « dernier vu » ne bouge pas,
-// on réessaie l'heure suivante (rien n'est perdu) ; après ALERTE_APRES échecs de suite, UN mail d'alerte (pas un par
-// heure), et plus rien jusqu'à ce que la lecture remarche.
+// pour le jeu) et envoie UN mail récapitulatif s'il y a du neuf (PAR_PASSAGE avis et MAX_OCTETS au plus : la suite
+// au passage suivant). Rien de neuf : pas de mail. Le script ne fait que lire : il n'écrit, ne change ni n'efface rien.
+// Erreur (lecture : réseau, droits, réponse illisible ; ou mail refusé) : pas de mail d'avis, le repère « dernier vu »
+// ne bouge pas, on réessaie l'heure suivante (rien n'est perdu) ; après ALERTE_APRES échecs de suite, UN mail d'alerte
+// qui dit ce qui ne marche pas (pas un par heure), et plus rien jusqu'à ce que ça remarche.
 //
 // Les fonctions à lancer (menu en haut de l'éditeur, à côté de « Déboguer », puis « Exécuter ») :
 //   installer        le passage toutes les heures (un seul, même installé deux fois) et un premier passage tout de suite
@@ -25,6 +25,10 @@
 const PROJET = 'lafermeamadichelle';
 const COLLECTION = 'feedback';
 const PAR_PASSAGE = 50; // avis au plus par mail (la suite au passage suivant)
+// Octets au plus par mail (texte et HTML ensemble, en UTF-8) : MailApp refuse un corps de plus de 200 Ko (compte Gmail).
+// Les règles bornent la LONGUEUR des champs, pas leur contenu : 50 avis pleins de « & » ou de retours à la ligne,
+// écrits hors du jeu, dépasseraient. Les avis qui ne tiennent pas partent au passage suivant (voir mailDesAvis_).
+const MAX_OCTETS = 100000;
 const ALERTE_APRES = 6; // échecs de suite (un par heure) avant le mail d'alerte
 const FUSEAU = 'Europe/Zurich';
 const EXPEDITEUR = 'La ferme à Madichelle'; // (le nom affiché ; l'adresse est la tienne)
@@ -103,7 +107,8 @@ function desinstaller() {
 function essai() {
   let lecture;
   try {
-    lecture = { ok: true, n: chercherLesAvis_(lireRepere_(PropertiesService.getScriptProperties()), PAR_PASSAGE).length };
+    const avis = chercherLesAvis_(lireRepere_(PropertiesService.getScriptProperties()), PAR_PASSAGE);
+    lecture = { ok: true, n: avis.length, dansUnMail: mailDesAvis_(avis).n };
   } catch (err) {
     lecture = { ok: false, erreur: messageDe_(err) };
   }
@@ -119,31 +124,45 @@ function passage_(props) {
   let avis;
   try {
     avis = chercherLesAvis_(repere, PAR_PASSAGE);
-    if (avis.length) envoyer_(texteDuMail_(avis, { plein: avis.length >= PAR_PASSAGE }));
   } catch (err) {
-    return echec_(props, err); // (repère inchangé : on réessaie l'heure suivante)
+    return echec_(props, err, 'lecture'); // (repère inchangé : on réessaie l'heure suivante)
   }
-  // Le mail est parti (ou il n'y avait rien) : seulement maintenant, le repère avance.
-  const suivant = repereApres_(avis);
+  // Les premiers avis qui tiennent dans un mail (MAX_OCTETS) ; les autres partent au passage suivant.
+  const { mail, n } = mailDesAvis_(avis);
+  if (n) {
+    try {
+      envoyer_(mail);
+    } catch (err) {
+      return echec_(props, err, 'mail'); // (repère inchangé, là aussi)
+    }
+  }
+  // Le mail est parti (ou il n'y avait rien) : seulement maintenant, le repère avance, sur le dernier avis DU MAIL.
+  const suivant = repereApres_(avis.slice(0, n));
   if (suivant) props.setProperty(CLES.repere, JSON.stringify(suivant));
   const echecs = Number(props.getProperty(CLES.echecs)) || 0;
   [CLES.echecs, CLES.premierEchec, CLES.alerte].forEach((k) => props.deleteProperty(k));
-  if (echecs) Logger.log(`La lecture des avis remarche (après ${echecs} échec${echecs > 1 ? 's' : ''}).`);
-  Logger.log(avis.length ? `${nombreDAvis_(avis.length)} : mail envoyé.` : 'Aucun nouvel avis : pas de mail.');
-  return { etat: avis.length ? 'envoye' : 'rien', n: avis.length };
+  if (echecs) Logger.log(`Ça remarche (après ${echecs} échec${echecs > 1 ? 's' : ''}).`);
+  const reste = avis.length - n;
+  Logger.log(n ? `${nombreDAvis_(n)} : mail envoyé${reste ? ` (encore ${reste} au passage suivant)` : ''}.`
+    : 'Aucun nouvel avis : pas de mail.');
+  return { etat: n ? 'envoye' : 'rien', n };
 }
 
-/** Un échec de plus : noté (et dit dans le journal) ; UN mail d'alerte quand la série atteint ALERTE_APRES. */
-function echec_(props, err) {
+/**
+ * Un échec de plus (sorte : 'lecture', les avis n'ont pas pu être lus ; 'mail', lus mais le mail est refusé) : noté
+ * (et dit dans le journal) ; UN mail d'alerte quand la série atteint ALERTE_APRES.
+ */
+function echec_(props, err, sorte) {
   const message = messageDe_(err);
   const echecs = (Number(props.getProperty(CLES.echecs)) || 0) + 1;
   props.setProperty(CLES.echecs, String(echecs));
   if (!props.getProperty(CLES.premierEchec)) props.setProperty(CLES.premierEchec, maintenant_().toISOString());
-  Logger.log(`Avis pas lus (échec ${echecs} de suite) : ${message}. On réessaie dans une heure.`);
+  Logger.log(`${sorte === 'mail' ? 'Avis lus, mais mail refusé' : 'Avis pas lus'} (échec ${echecs} de suite) : `
+    + `${message.replace(/\.$/, '')}. On réessaie dans une heure.`);
   let alerte = false;
   if (echecs >= ALERTE_APRES && !props.getProperty(CLES.alerte)) {
     try {
-      envoyer_(mailAlerte_(echecs, props.getProperty(CLES.premierEchec), message));
+      envoyer_(mailAlerte_(echecs, props.getProperty(CLES.premierEchec), message, sorte));
       props.setProperty(CLES.alerte, 'oui');
       alerte = true;
     } catch (e) {
@@ -296,8 +315,28 @@ function texte_(s, max) {
 /** Un texte sur une seule ligne (version, lieu, écran, message d'erreur…), nettoyé et borné. */
 const ligne_ = (s, max) => couper_(texte_(s, 4 * max).replace(/\s+/g, ' '), max);
 
-const echapper_ = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+/** Échappé pour le HTML, entre deux balises : & < > suffisent (un « " » n'y fait rien, il reste un seul caractère). */
+const echapper_ = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** Échappé pour une valeur d'attribut (href="…") : aussi " et '. */
+const echapperAttribut_ = (s) => echapper_(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/** La taille d'un texte en octets, en UTF-8 (comme dans le mail) : 1 pour « a », 2 pour « é », 4 pour un emoji. */
+function octets_(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xD800 && c < 0xDC00 && (s.charCodeAt(i + 1) & 0xFC00) === 0xDC00) {
+      n += 4; // (un emoji : deux « caractères » en JavaScript)
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
+
+/** La taille d'un mail en octets : sujet, texte et HTML ensemble. */
+const tailleDuMail_ = (mail) => octets_(mail.sujet) + octets_(mail.texte) + octets_(mail.html || '');
 
 /** Une valeur connue dite en clair (table) ; une valeur inconnue (écrite hors du jeu) telle quelle, nettoyée. */
 function dire_(table, v) {
@@ -339,16 +378,41 @@ function fiche_(a) {
 }
 
 /**
+ * Le mail des avis lus par un passage : { mail, n }, n le nombre d'avis qu'il contient (les premiers ; mail : null
+ * sans avis). Tous s'ils tiennent dans MAX_OCTETS ; sinon le plus grand nombre qui tient (cherché par moitiés : la
+ * taille grandit avec chaque avis), et le mail dit que la suite arrive au passage suivant. Toujours au moins un : un
+ * avis seul fait au plus une quinzaine de Ko (texte_ et ligne_ bornent chacun de ses champs, quoi qu'il y ait dans la
+ * base).
+ */
+function mailDesAvis_(avis) {
+  if (!avis.length) return { mail: null, n: 0 };
+  const mailDe = (n) => texteDuMail_(avis.slice(0, n), n < avis.length ? { coupe: true } : { plein: n >= PAR_PASSAGE });
+  const tient = (n) => tailleDuMail_(mailDe(n)) <= MAX_OCTETS;
+  if (tient(avis.length)) return { mail: mailDe(avis.length), n: avis.length };
+  let oui = 1; // (un avis tient toujours, voir plus haut)
+  let non = avis.length;
+  while (non - oui > 1) {
+    const m = Math.floor((oui + non) / 2);
+    if (tient(m)) oui = m;
+    else non = m;
+  }
+  return { mail: mailDe(oui), n: oui };
+}
+
+/**
  * Le mail récapitulatif : { sujet, texte, html }. Le message de chaque enfant est nettoyé ; dans le texte simple,
  * chacune de ses lignes commence par « │ » (il ne peut pas se faire passer pour le mail lui-même) ; dans le HTML,
- * tout est échappé. plein : la limite est atteinte, d'autres avis attendent peut-être.
+ * tout est échappé. plein : la limite de PAR_PASSAGE est atteinte, d'autres avis attendent peut-être ; coupe :
+ * d'autres attendent (ils ne tenaient pas dans ce mail : mailDesAvis_).
  */
 function texteDuMail_(avis, options) {
-  const plein = Boolean(options && options.plein);
+  const coupe = Boolean(options && options.coupe);
+  const plein = coupe || Boolean(options && options.plein);
   const fiches = avis.map(fiche_);
   const sujet = `💌 La ferme à Madichelle : ${nombreDAvis_(avis.length)}`;
-  const suite = `Il y en a peut-être d'autres : ${PAR_PASSAGE} avis au plus par mail, `
-    + 'la suite arrive avec le prochain (dans une heure).';
+  const suite = coupe ? 'D\'autres avis attendent (un mail ne peut pas tout contenir) : la suite arrive avec le '
+    + 'prochain (dans une heure).'
+    : `Il y en a peut-être d'autres : ${PAR_PASSAGE} avis au plus par mail, la suite arrive avec le prochain (dans une heure).`;
   const fin = [
     `Tous les avis, dans la console Firestore : ${CONSOLE}`,
     'Une fois lus, tu peux les effacer dans la console (le jeu, lui, ne peut ni les relire ni les effacer).',
@@ -381,11 +445,12 @@ function texteDuMail_(avis, options) {
           + `${e(f.texte).replace(/\n/g, '<br>')}</div>`
         : '<div style="margin:8px 0;color:#777"><i>(pas de texte : juste le smiley)</i></div>',
       `<div style="color:#666;font-size:12px">${f.details.map((d) => `${e(d[0])} : ${e(d[1])}`).join(' · ')}</div>`,
-      `<div style="font-size:12px;margin-top:4px"><a href="${e(f.lien)}">Voir dans la console</a></div>`,
+      `<div style="font-size:12px;margin-top:4px"><a href="${echapperAttribut_(f.lien)}">Voir dans la console</a></div>`,
       '</div>',
     ].join('')),
     plein ? `<p><b>${e(suite)}</b></p>` : '',
-    `<p style="color:#666;font-size:13px"><a href="${e(CONSOLE)}">Tous les avis, dans la console Firestore</a><br>`,
+    `<p style="color:#666;font-size:13px"><a href="${echapperAttribut_(CONSOLE)}">Tous les avis, dans la console `
+      + 'Firestore</a><br>',
     `${e(fin[1])}<br>${e(fin[2])}</p>`,
     '</div>',
   ].join('\n');
@@ -393,23 +458,34 @@ function texteDuMail_(avis, options) {
   return { sujet, texte: texte.join('\n\n'), html };
 }
 
-/** Le mail d'alerte (texte simple) : la lecture ne marche plus depuis echecs heures. */
-function mailAlerte_(echecs, premierEchec, erreur) {
+/**
+ * Le mail d'alerte (texte simple) : ça ne marche plus depuis echecs heures. sorte (voir echec_) : 'lecture', les avis
+ * ne peuvent plus être lus ; 'mail', ils sont lus mais Google refuse d'envoyer le mail qui les récapitule.
+ */
+function mailAlerte_(echecs, premierEchec, erreur, sorte) {
+  const depuis = `Depuis le ${heureSuisse_(premierEchec)}`;
+  const essais = `(${echecs} essais de suite, un par heure)`;
+  const parMail = sorte === 'mail';
   return {
-    sujet: '⚠️ La ferme à Madichelle : les avis ne peuvent plus être lus',
+    sujet: parMail ? '⚠️ La ferme à Madichelle : le mail des avis ne part plus'
+      : '⚠️ La ferme à Madichelle : les avis ne peuvent plus être lus',
     texte: [
       'Bonjour,',
       '',
-      `Depuis le ${heureSuisse_(premierEchec)}, le script qui t'envoie les avis du jeu n'arrive plus à les lire `
-        + `(${echecs} essais de suite, un par heure).`,
+      parMail
+        ? `${depuis}, le script lit bien les avis du jeu, mais Google refuse d'envoyer le mail qui les récapitule ${essais}.`
+        : `${depuis}, le script qui t'envoie les avis du jeu n'arrive plus à les lire ${essais}.`,
       '',
       `Dernière erreur : ${ligne_(erreur, 300)}`,
       '',
-      'Rien n\'est perdu : les avis attendent dans la base, ils arriveront dans le mail suivant dès que la lecture '
-        + 'remarchera. Tu ne recevras pas d\'autre alerte d\'ici là.',
+      `Rien n'est perdu : les avis attendent dans la base, ils arriveront dans le mail suivant dès que ${parMail
+        ? 'le mail repartira' : 'la lecture remarchera'}. Tu ne recevras pas d'autre alerte d'ici là. En attendant, `
+        + 'ils sont dans la console Firestore (lien tout en bas).',
       '',
       'À vérifier :',
-      '- le script tourne bien avec le compte Google propriétaire du projet Firebase « lafermeamadichelle » ;',
+      parMail
+        ? '- toutes les autorisations ont été acceptées (relancer « installer » les redemande), dont « Envoyer des e-mails » ;'
+        : '- le script tourne bien avec le compte Google propriétaire du projet Firebase « lafermeamadichelle » ;',
       '- dans https://script.google.com, ouvre le script : lance « essai », et regarde « Exécutions » (à gauche) ;',
       '- l\'aide pas à pas : docs/HEBERGEMENT.md du dépôt du jeu, « Recevoir un mail à chaque avis ».',
       '',
@@ -418,14 +494,19 @@ function mailAlerte_(echecs, premierEchec, erreur) {
   };
 }
 
-/** Le mail d'essai (texte simple). lecture : { ok, n } ou { ok: false, erreur } ; installe : le passage horaire existe. */
+/**
+ * Le mail d'essai (texte simple). lecture : { ok, n, dansUnMail } (dansUnMail : combien tiennent dans le prochain mail)
+ * ou { ok: false, erreur } ; installe : le passage horaire existe.
+ */
 function mailEssai_(lecture, installe) {
   const lignes = ['Bonjour,', '', 'Ceci est le mail d\'essai du script des avis : le mail marche, puisqu\'il est arrivé 🙂',
     ''];
   if (lecture.ok) {
     const n = lecture.n;
     const combien = n ? `${nombreDAvis_(n)}${n >= PAR_PASSAGE ? ' (au moins)' : ''}` : 'aucun nouvel avis';
-    const quand = n ? ` ${n === 1 ? 'Il arrivera' : 'Ils arriveront'} avec le prochain passage.` : '';
+    const plusieurs = n >= PAR_PASSAGE || (lecture.dansUnMail || n) < n; // (ils ne tiennent pas tous dans un mail)
+    const quand = !n ? '' : ` ${n === 1 ? 'Il arrivera' : 'Ils arriveront'} avec ${plusieurs
+      ? 'les prochains passages (un mail par heure)' : 'le prochain passage'}.`;
     lignes.push(`La lecture des avis marche aussi : ${combien} depuis le dernier mail.${quand}`);
   } else {
     lignes.push(`Mais la lecture des avis ne marche pas : ${ligne_(lecture.erreur, 300)}`, '',

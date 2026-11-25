@@ -257,12 +257,16 @@ n'arrive dans la base, et donc aucun mail.
 Madichelle : 2 nouveaux avis » ; pour chaque avis, le smiley, la sorte (💡 idée, 🐞 bug, ❤️ j'aime, ✉️ autre), le
 texte de l'enfant, la langue, l'appareil, la version du jeu, le mode, le niveau et le jour du jeu, le lieu, ce qui
 était ouvert, l'heure d'arrivée (heure suisse) et un lien vers l'avis dans la console. Le tout premier mail contient
-les avis déjà dans la base. 50 avis au plus par mail : la suite arrive l'heure suivante. Le texte des enfants est
-montré tel quel, mais rien de ce qu'ils écrivent ne peut devenir une mise en forme ou un lien dans le mail.
+les avis déjà dans la base. 50 avis au plus par mail, et 100 Ko au plus (Google refuse d'envoyer un mail de plus de
+200 Ko ; des avis très longs, écrits hors du jeu, le dépasseraient) : la suite arrive l'heure suivante, le mail le
+dit. Le texte des enfants est montré tel quel, mais rien de ce qu'ils écrivent ne peut devenir une mise en forme ou
+un lien dans le mail.
 
 **Si ça ne marche pas** : le script réessaie toutes les heures sans rien perdre (les avis attendent dans la base et
-arrivent dans le mail suivant). Après 6 heures d'échecs de suite, **un seul** mail « ⚠️ La ferme à Madichelle : les
-avis ne peuvent plus être lus », avec l'erreur ; plus d'alerte ensuite tant que ça ne remarche pas.
+arrivent dans le mail suivant). Après 6 heures d'échecs de suite, **un seul** mail d'alerte, avec l'erreur :
+« ⚠️ La ferme à Madichelle : les avis ne peuvent plus être lus » (la lecture dans Firestore ne marche pas) ou
+« ⚠️ La ferme à Madichelle : le mail des avis ne part plus » (les avis sont lus, mais Google refuse d'envoyer le
+mail) ; plus d'alerte ensuite tant que ça ne remarche pas.
 
 - Erreur 403, `PERMISSION_DENIED` : le script ne tourne pas avec le compte propriétaire du projet Firebase, ou une
   autorisation a été refusée. Recommencer avec le bon compte, ou relancer `installer` (il redemande les autorisations).

@@ -2,8 +2,10 @@
 // faux services Google (UrlFetchApp, MailApp, PropertiesService, Session, ScriptApp, Utilities, LockService, Logger) :
 // la requête (filtre, tri, limite, en-têtes), la lecture des documents Firestore (REST), le texte du mail (échappé,
 // heure suisse, champs absents tolérés), un mail seulement s'il y a du neuf, le repère qui n'avance qu'après un mail
-// parti, les erreurs (repère inchangé, UNE alerte après 6 échecs de suite), 50 avis au plus, installer() qui n'installe
-// qu'une fois, le mail d'essai, le manifeste (appsscript.json).
+// parti, les erreurs (repère inchangé, UNE alerte après 6 échecs de suite, qui dit si c'est la lecture ou le mail),
+// 50 avis et 100 Ko au plus par mail (le faux MailApp refuse, comme le vrai, plus de 200 Ko : même 50 avis au pire de
+// ce que les règles acceptent arrivent tous, en plusieurs mails), installer() qui n'installe qu'une fois, le mail
+// d'essai, le manifeste (appsscript.json).
 // Puis, avec l'émulateur Firestore (sauté sans lui, comme tests/firestoreRules.test.js), le vrai corps de la requête
 // runQuery : seuls les nouveaux avis reviennent, dans l'ordre d'arrivée, aucun oublié. Pour le lancer :
 //   npx --yes firebase-tools@15.32.1 emulators:exec --only firestore --project demo-ferme \
@@ -56,10 +58,15 @@ function formatDate(d, tz, motif) {
   return motif.replace(/yyyy|MM|dd|HH|mm/g, (t) => v[t]);
 }
 
+/** Comme le vrai MailApp avec un compte Gmail : un corps de plus de 200 Ko est refusé (quotas d'Apps Script). */
+const MAX_CORPS = 200 * 1024;
+const octets = (s) => Buffer.byteLength(s || '', 'utf8');
+
 /**
  * Les faux services Google, et Code.gs chargé avec eux (g.gs : son contexte). g.reponse : ce que Firestore répond
  * (objet { code, texte }, Error : réseau coupé, ou fonction (url, params) qui rend l'un ou l'autre) ; g.mailEchoue :
- * MailApp refuse ; g.verrouille : un autre passage tient le verrou.
+ * MailApp refuse (un message d'erreur, ou une fonction (mail) qui le rend pour les mails à refuser) ; g.verrouille :
+ * un autre passage tient le verrou.
  */
 function google({ fetch = null, jeton = 'jeton-du-parent' } = {}) {
   const g = {
@@ -83,7 +90,9 @@ function google({ fetch = null, jeton = 'jeton-du-parent' } = {}) {
     },
     MailApp: {
       sendEmail: (m) => {
-        if (g.mailEchoue) throw new Error(g.mailEchoue);
+        const refus = typeof g.mailEchoue === 'function' ? g.mailEchoue(m) : g.mailEchoue;
+        if (refus) throw new Error(refus);
+        if (octets(m.body) + octets(m.htmlBody) > MAX_CORPS) throw new Error('Limit Exceeded: Email Body Size.');
         g.mails.push(plain(m));
       },
     },
@@ -134,6 +143,31 @@ const ORDRE = [
   { field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' },
   { field: { fieldPath: '__name__' }, direction: 'ASCENDING' },
 ];
+
+/**
+ * Des avis au pire de ce que firestore.rules accepte (écrits sans compte, hors du jeu) : chaque texte à sa longueur
+ * maximale, plein de ce qui grossit le plus dans le mail (« & » → « &amp; », retour à la ligne → « <br> » et « │ »).
+ */
+const PIRES = ['&\n\n'.repeat(167).slice(0, 500), '"'.repeat(500), '\'\n'.repeat(250), '<'.repeat(500)];
+const pire = (i) => ({
+  text: PIRES[i % PIRES.length], mood: 'love', kind: 'idea', lang: 'fr', version: '&'.repeat(40), device: 'phone',
+  orientation: 'portrait', mode: 'manage', level: 1000, day: 1000000, place: '&'.repeat(30), screen: '&'.repeat(40),
+});
+/** Un identifiant comme ceux que Firestore donne (20 caractères). */
+const ID = (i) => `d${String(i).padStart(2, '0')}`.padEnd(20, 'x');
+
+/**
+ * Un petit Firestore pour g.reponse : la collection rangée par heure puis par nom, le départ juste après le repère
+ * (startAt), la limite ; comme la vraie requête (celle-ci est vérifiée dans l'émulateur, plus bas).
+ */
+const base = (docs) => (url, params) => {
+  const q = JSON.parse(params.payload).structuredQuery;
+  const cle = (d) => `${d.document.fields.createdAt.timestampValue} ${d.document.name}`; // (heures de même longueur)
+  const depart = q.startAt ? q.startAt.values.map((v) => v.timestampValue ?? v.referenceValue).join(' ') : '';
+  return reponse(...docs.filter((d) => cle(d) > depart).sort((a, b) => (cle(a) < cle(b) ? -1 : 1)).slice(0, q.limit));
+};
+/** Les identifiants des avis d'un mail, dans l'ordre (les liens « Dans la console »). */
+const idsDuMail = (m) => [...m.body.matchAll(/Dans la console : \S+~2F(\S+)/g)].map((x) => x[1]);
 
 // ---------------------------------------------------------------- la requête et la lecture
 
@@ -252,11 +286,15 @@ describe('📧 le mail : un récapitulatif clair, sans rien d\'injecté', () => 
     };
     const a = g.gs.lireAvis_({ name: NOM('x"><script>'), fields: { ...champs(piege), createdAt: { timestampValue: '2026-11-25T09:05:00Z' } } });
     const m = plain(g.gs.texteDuMail_([a]));
-    expect(m.html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &lt;b&gt;gras&lt;/b&gt;<br>Langue : faux<br>à l&#39;envers');
+    // (entre deux balises, & < > suffisent : « " » et « ' » y restent tels quels, inoffensifs)
+    expect(m.html).toContain('&lt;script&gt;alert("x")&lt;/script&gt; &amp; &lt;b&gt;gras&lt;/b&gt;<br>Langue : faux<br>à l\'envers');
     const balises = new Set([...m.html.matchAll(/<\/?([a-zA-Z]+)/g)].map((x) => x[1]));
     expect([...balises].sort()).toEqual(['a', 'b', 'br', 'div', 'p', 'span']); // (seulement celles du mail lui-même)
-    expect(m.html).not.toMatch(/<(script|img)|href="http:\/\/x/); // (« onerror= » n'y est plus que du texte, entre &lt; et &gt;)
-    expect([...m.html.matchAll(/href="([^"]*)"/g)].map((x) => x[1])).toEqual([CONSOLE, CONSOLE]); // (identifiant bizarre : pas de lien direct)
+    // Hors des balises du mail, plus aucun < ni > : « onerror= » et « href= » venus d'un avis n'y sont que du texte.
+    expect(m.html.replace(/<\/?(a|b|br|div|p|span|i)\b[^<>]*>/g, '')).not.toMatch(/[<>]/);
+    expect(m.html).not.toMatch(/<(script|img)|<a href="http:\/\/x/);
+    expect([...m.html.matchAll(/<a href="([^"]*)"/g)].map((x) => x[1])).toEqual([CONSOLE, CONSOLE]); // (identifiant bizarre : pas de lien direct)
+    expect(vm.runInContext('echapperAttribut_(\'a"b\\\'c<d&\')', g.gs)).toBe('a&quot;b&#39;c&lt;d&amp;'); // (dans un attribut : aussi " et ')
     expect(m.html).toContain('<b>spam&lt;i&gt;</b>'); // (la sorte inconnue, échappée)
     // Texte simple : chaque ligne du message marquée « │ », caractères invisibles et de contrôle retirés.
     expect(m.texte).toContain('  │ <script>alert("x")</script> & <b>gras</b>\n  │ Langue : faux\n  │ à l\'envers\n');
@@ -384,6 +422,79 @@ describe('📧 les passages : un mail seulement s\'il y a du neuf, le repère, l
     expect(g.mails[1].body).not.toContain('Il y en a peut-être d\'autres');
   });
 
+  it('50 avis au pire de ce que les règles acceptent : des mails sous 100 Ko, le repère sur le dernier ENVOYÉ, la suite au passage suivant', () => {
+    const T = '2026-11-25T09:05:00.123456Z'; // (écrits d'un coup : la même heure pour tous)
+    const docs = Array.from({ length: 50 }, (_, i) => doc(ID(i), T, pire(i)));
+    // Tous dans un seul mail, comme avant : bien plus que ce que MailApp accepte (il serait refusé à chaque passage).
+    const tous = plain(g.gs.texteDuMail_(docs.map((d) => g.gs.lireAvis_(d.document)), { plein: true }));
+    expect(octets(tous.texte) + octets(tous.html)).toBeGreaterThan(MAX_CORPS);
+    g.reponse = base(docs);
+    const r1 = g.passage();
+    expect(r1.etat).toBe('envoye');
+    expect(r1.n).toBeGreaterThan(5);
+    expect(r1.n).toBeLessThan(50);
+    expect(g.mails).toHaveLength(1);
+    const m1 = g.mails[0];
+    expect(m1.subject).toBe(`💌 La ferme à Madichelle : ${r1.n} nouveaux avis`);
+    expect(idsDuMail(m1)).toEqual(docs.slice(0, r1.n).map((d) => d.document.name.split('/').pop()));
+    expect(m1.body).toContain('D\'autres avis attendent (un mail ne peut pas tout contenir) : la suite arrive avec le prochain (dans une heure).');
+    expect(m1.htmlBody).toContain('<p><b>D\'autres avis attendent');
+    expect(g.repere()).toEqual({ t: T, nom: NOM(ID(r1.n - 1)) }); // (le dernier du mail, pas le 50e lu)
+    expect(g.logs).toContain(`${r1.n} nouveaux avis : mail envoyé (encore ${50 - r1.n} au passage suivant).`);
+    // Un vrai avis arrive entre-temps : il passe après les autres, rien n'est perdu ni répété.
+    docs.push(doc('tard', '2026-11-25T10:00:00.000000Z'));
+    const envoyes = [...idsDuMail(m1)];
+    for (let i = 0; i < 10 && g.passage().etat === 'envoye'; i++) envoyes.push(...idsDuMail(g.mails.at(-1)));
+    expect(envoyes).toEqual([...Array.from({ length: 50 }, (_, i) => ID(i)), 'tard']);
+    expect(g.mails.length).toBeLessThanOrEqual(4);
+    for (const m of g.mails) expect(octets(m.subject) + octets(m.body) + octets(m.htmlBody)).toBeLessThanOrEqual(100000);
+    expect(g.mails.at(-1).body).not.toMatch(/D'autres avis attendent|Il y en a peut-être/);
+    expect(g.props.has(ECHECS)).toBe(false);
+  });
+
+  it('un avis seul tient toujours dans un mail, quoi qu\'il y ait dans la base (chaque champ est borné)', () => {
+    // (écrit par le propriétaire, hors des règles : texte immense, champs inconnus, identifiant de 1500 caractères)
+    const n = (s, k) => s.repeat(k);
+    const a = g.gs.lireAvis_({
+      name: NOM(n('&', 1500)),
+      fields: {
+        ...champs({ ...pire(0), text: n('&\n\n', 20000), kind: n('&', 5000), mood: n('<', 5000), lang: n('&', 5000), device: n('&', 5000), orientation: n('&', 5000), mode: n('&', 5000), version: n('&\n', 5000), place: n('&', 5000), screen: n('&', 5000) }),
+        createdAt: { timestampValue: '2026-11-25T09:05:00Z' },
+      },
+    });
+    const { mail, n: combien } = plain(g.gs.mailDesAvis_([a]));
+    expect(combien).toBe(1);
+    expect(octets(mail.sujet) + octets(mail.texte) + octets(mail.html)).toBeLessThan(20000); // (MAX_OCTETS : 100 000)
+    expect(plain(g.gs.mailDesAvis_([]))).toEqual({ mail: null, n: 0 });
+  });
+
+  it('octets_ : la taille en UTF-8, comme le mail (accents, emojis, moitié d\'emoji)', () => {
+    for (const s of ['', 'abc', 'é', '│', '😍 Plus de chevaux ! 🐴', 'a\uD83D', '\uDE0Da', '&amp;\n<br>'.repeat(30)]) {
+      expect(g.gs.octets_(s), JSON.stringify(s)).toBe(Buffer.byteLength(s, 'utf8'));
+    }
+  });
+
+  it('mail des avis refusé (pas la lecture) : repère inchangé, et l\'alerte dit que c\'est le mail qui ne part plus', () => {
+    g.gs.maintenant_ = () => new Date('2026-11-25T08:00:00Z');
+    g.reponse = reponse(doc('a1', T1));
+    g.mailEchoue = (m) => (m.subject.startsWith('💌') ? 'Limit Exceeded: Email Body Size.' : null); // (l'alerte, elle, part)
+    for (let i = 1; i <= 7; i++) expect(g.passage(), `passage ${i}`).toMatchObject({ etat: 'erreur', echecs: i, alerte: i === 6 });
+    expect(g.repere()).toBeNull();
+    expect(g.logs).toContain('Avis lus, mais mail refusé (échec 1 de suite) : Limit Exceeded: Email Body Size. On réessaie dans une heure.');
+    expect(g.mails).toHaveLength(1);
+    const alerte = g.mails[0];
+    expect(alerte.subject).toBe('⚠️ La ferme à Madichelle : le mail des avis ne part plus');
+    expect(alerte.body).toContain('Depuis le 25.11.2026, 09:00, le script lit bien les avis du jeu, mais Google refuse d\'envoyer le mail qui les récapitule (6 essais de suite, un par heure).');
+    expect(alerte.body).toContain('Dernière erreur : Limit Exceeded: Email Body Size.');
+    expect(alerte.body).toContain('ils arriveront dans le mail suivant dès que le mail repartira');
+    expect(alerte.body).not.toMatch(/ne peuvent plus être lus|n'arrive plus à les lire/);
+    // Le mail repart : les avis arrivent, les compteurs repartent de zéro.
+    g.mailEchoue = null;
+    expect(g.passage()).toEqual({ etat: 'envoye', n: 1 });
+    expect(g.repere()).toEqual({ t: T1, nom: NOM('a1') });
+    expect([...g.props.keys()]).toEqual([REPERE]);
+  });
+
   it('un passage déjà en cours (verrou pris) : le second ne fait rien', () => {
     g.verrouille = true;
     expect(g.passage()).toEqual({ etat: 'occupe' });
@@ -442,7 +553,7 @@ describe('📧 installer, desinstaller, essai', () => {
 
   it('essai() : un mail d\'essai à soi-même, qui dit si la lecture et le passage horaire marchent, sans bouger le repère', () => {
     g.reponse = reponse(doc('a1', '2026-11-25T09:05:00Z'), doc('a2', '2026-11-25T09:06:00Z'), doc('a3', '2026-11-25T09:07:00Z'));
-    expect(plain(g.gs.essai())).toEqual({ ok: true, n: 3 });
+    expect(plain(g.gs.essai())).toEqual({ ok: true, n: 3, dansUnMail: 3 });
     expect(g.mails).toHaveLength(1);
     expect(g.mails[0]).toMatchObject({ to: MOI, subject: '✅ La ferme à Madichelle : mail d\'essai' });
     expect(g.mails[0].body).toContain('La lecture des avis marche aussi : 3 nouveaux avis depuis le dernier mail. Ils arriveront avec le prochain passage.');
@@ -458,6 +569,13 @@ describe('📧 installer, desinstaller, essai', () => {
     g.reponse = reponse();
     g.gs.essai();
     expect(g.mails[2].body).toContain('aucun nouvel avis depuis le dernier mail.\n');
+    // Trop d'avis (ou trop gros) pour un seul mail : ils arriveront en plusieurs fois.
+    g.reponse = reponse(...Array.from({ length: 30 }, (_, i) => doc(ID(i), '2026-11-25T09:05:00Z', pire(i))));
+    const lecture = plain(g.gs.essai());
+    expect(lecture.n).toBe(30);
+    expect(lecture.dansUnMail).toBeLessThan(30);
+    expect(g.mails[3].body).toContain('30 nouveaux avis depuis le dernier mail. Ils arriveront avec les prochains passages (un mail par heure).');
+    expect(g.repere()).toBeNull();
     // Le mail ne part pas : l'essai échoue (en rouge dans le journal d'exécution).
     g.mailEchoue = 'quota';
     expect(() => g.gs.essai()).toThrow('quota');
@@ -521,6 +639,20 @@ describe.skipIf(!HOST)('📧 la vraie requête runQuery (émulateur Firestore)',
   }
   const textes = (avis) => avis.map((a) => a.text);
   const apres = (a) => ({ t: a.createdAt, nom: a.nom });
+  // UrlFetchApp.fetch est synchrone : la requête du script part d'un petit node à part (vers l'émulateur, dans le
+  // projet de test).
+  const versLEmulateur = (url, params) => {
+    const local = url.replace(`https://firestore.googleapis.com/v1/projects/${PROJET}/`, `http://${HOST}/v1/projects/${P}/`);
+    const out = execFileSync(process.execPath, ['-e', `
+      let s = '';
+      process.stdin.on('data', (c) => { s += c; }).on('end', async () => {
+        const { url, p } = JSON.parse(s);
+        const r = await fetch(url, { method: p.method.toUpperCase(), headers: { ...p.headers, 'Content-Type': p.contentType }, body: p.payload });
+        process.stdout.write(JSON.stringify({ code: r.status, texte: await r.text() }));
+      });`], { input: JSON.stringify({ url: local, p: params }) });
+    const r = JSON.parse(out);
+    return { getResponseCode: () => r.code, getContentText: () => r.texte };
+  };
 
   beforeAll(async () => {
     ({ buildMessage } = await import('../src/cloud/feedback.js'));
@@ -563,19 +695,6 @@ describe.skipIf(!HOST)('📧 la vraie requête runQuery (émulateur Firestore)',
   });
 
   it('le vrai passage (verifierLesAvis) contre l\'émulateur : un mail avec les nouveaux seulement, puis rien', async () => {
-    // UrlFetchApp.fetch est synchrone : la requête part d'un petit node à part (vers l'émulateur, dans le projet de test).
-    const versLEmulateur = (url, params) => {
-      const local = url.replace(`https://firestore.googleapis.com/v1/projects/${PROJET}/`, `http://${HOST}/v1/projects/${P}/`);
-      const out = execFileSync(process.execPath, ['-e', `
-        let s = '';
-        process.stdin.on('data', (c) => { s += c; }).on('end', async () => {
-          const { url, p } = JSON.parse(s);
-          const r = await fetch(url, { method: p.method.toUpperCase(), headers: { ...p.headers, 'Content-Type': p.contentType }, body: p.payload });
-          process.stdout.write(JSON.stringify({ code: r.status, texte: await r.text() }));
-        });`], { input: JSON.stringify({ url: local, p: params }) });
-      const r = JSON.parse(out);
-      return { getResponseCode: () => r.code, getContentText: () => r.texte };
-    };
     const h = google({ fetch: versLEmulateur, jeton: 'owner' });
     await ecrire(['p2', 'Un poney rose !']);
     await ecrire(['p1', 'Bug : le chat <vole>']);
@@ -591,5 +710,34 @@ describe.skipIf(!HOST)('📧 la vraie requête runQuery (émulateur Firestore)',
     expect(h.passage()).toEqual({ etat: 'envoye', n: 1 });
     expect(h.mails[1].body).toContain('Encore un avis');
     expect(h.mails[1].body).not.toContain('Un poney rose');
+  });
+
+  it('50 avis au pire, écrits SANS compte (les règles les acceptent) : tous arrivent, une fois chacun, en mails sous 100 Ko', async () => {
+    /** Écrit des avis sans compte, comme n'importe qui par l'API (un seul envoi : la même heure pour tous). */
+    const sansCompte = (avis) => fetch(`${racine}:commit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        writes: avis.map(([id, m]) => ({
+          update: { name: NOM(id, P), fields: champs(m) },
+          updateTransforms: [{ fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' }],
+        })),
+      }),
+    });
+    // (les règles jouent bien : un texte de 501 caractères est refusé)
+    expect((await sansCompte([['trop', { ...pire(1), text: 'x'.repeat(501) }]])).status).toBe(403);
+    const r = await sansCompte(Array.from({ length: 50 }, (_, i) => [ID(i), pire(i)]));
+    expect(r.ok, await r.text()).toBe(true);
+    const h = google({ fetch: versLEmulateur, jeton: 'owner' });
+    const premier = h.passage();
+    expect(premier.etat).toBe('envoye');
+    expect(premier.n).toBeLessThan(50);
+    await ecrire(['tard', 'Un vrai avis, arrivé après']);
+    const envoyes = [...idsDuMail(h.mails[0])];
+    for (let i = 0; i < 10 && h.passage().etat === 'envoye'; i++) envoyes.push(...idsDuMail(h.mails.at(-1)));
+    expect(envoyes).toEqual([...Array.from({ length: 50 }, (_, i) => ID(i)), 'tard']);
+    for (const m of h.mails) expect(octets(m.subject) + octets(m.body) + octets(m.htmlBody)).toBeLessThanOrEqual(100000);
+    expect(h.mails.at(-1).body).toContain('  │ Un vrai avis, arrivé après');
+    expect(h.props.has(ECHECS)).toBe(false);
   });
 });

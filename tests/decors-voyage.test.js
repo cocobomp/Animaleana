@@ -133,6 +133,32 @@ function awayShare(sc) {
   return k / n;
 }
 
+/** Le rectangle de o dans l'image touche-t-il le cercle de sa tête (même mesure que away.js, un peu de marge) ? */
+function behindHead(sc, o) {
+  sc.scene.updateMatrixWorld(true);
+  const hd = sc.live('head');
+  const hc = sc.project(hd);
+  const ab = new THREE.Box3().setFromObject(sc.model.coatMesh ?? sc.holder);
+  const hr = sc.projectRadius(hd, 0.25 * Math.max(0.25, ab.max.y - ab.min.y)) + 10 - 6;
+  const b = new THREE.Box3().setFromObject(o);
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const x of [b.min.x, b.max.x]) {
+    for (const y of [b.min.y, b.max.y]) {
+      for (const z of [b.min.z, b.max.z]) {
+        const q = sc.project(new THREE.Vector3(x, y, z));
+        x0 = Math.min(x0, q.x);
+        x1 = Math.max(x1, q.x);
+        y0 = Math.min(y0, q.y);
+        y1 = Math.max(y1, q.y);
+      }
+    }
+  }
+  return Math.hypot(Math.max(x0, Math.min(hc.x, x1)) - hc.x, Math.max(y0, Math.min(hc.y, y1)) - hc.y) < hr;
+}
+
 /** La couleur du sol en voyage (away.js, GROUND) : le sable de la plage, la terre rouge du bush. */
 const SOIL = { plage: 0xf4e6c8, bush: 0xd8875a };
 /**
@@ -748,32 +774,6 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     }
   }, 120000);
 
-  /** Le rectangle de o dans l'image touche-t-il le cercle de sa tête (même mesure que away.js, un peu de marge) ? */
-  function behindHead(sc, o) {
-    sc.scene.updateMatrixWorld(true);
-    const hd = sc.live('head');
-    const hc = sc.project(hd);
-    const ab = new THREE.Box3().setFromObject(sc.model.coatMesh ?? sc.holder);
-    const hr = sc.projectRadius(hd, 0.25 * Math.max(0.25, ab.max.y - ab.min.y)) + 10 - 6;
-    const b = new THREE.Box3().setFromObject(o);
-    let x0 = Infinity;
-    let x1 = -Infinity;
-    let y0 = Infinity;
-    let y1 = -Infinity;
-    for (const x of [b.min.x, b.max.x]) {
-      for (const y of [b.min.y, b.max.y]) {
-        for (const z of [b.min.z, b.max.z]) {
-          const q = sc.project(new THREE.Vector3(x, y, z));
-          x0 = Math.min(x0, q.x);
-          x1 = Math.max(x1, q.x);
-          y0 = Math.min(y0, q.y);
-          y1 = Math.max(y1, q.y);
-        }
-      }
-    }
-    return Math.hypot(Math.max(x0, Math.min(hc.x, x1)) - hc.x, Math.max(y0, Math.min(hc.y, y1)) - hc.y) < hr;
-  }
-
   it('chien et chat au jardin en voyage : les arbres de la ferme, cachés, ne cachent pas le rouge-gorge (les rayons ne les voient pas)', () => {
     const visible = (o) => {
       for (let p = o; p; p = p.parent) if (!p.visible) return false;
@@ -908,17 +908,19 @@ describe('la balle de la chèvre et la longe, en voyage', () => {
   it('la balle en voyage : pas la chèvrerie de la ferme, une clôture tout le long du fond ; le lieu se voit derrière, en portrait comme en paysage', () => {
     const amb = careAmbience({ hour: 15, weather: 'clear', season: 'summer' });
     // (au téléphone en portrait, la caméra d'en haut voit une douzaine de mètres derrière la clôture : le chalet, les
-    // sapins, les collines du lieu ; en paysage, plus près du terrain, les trois choses des Alpes juste derrière)
-    for (const [w, h, least] of [[390, 600, 0.05], [360, 740, 0.08], [844, 390, 0.01]]) {
+    // sapins, les collines du lieu ; en paysage, plus près du terrain, les choses des Alpes juste derrière : les trois
+    // toutes proches, et les jeunes sapins et le rocher sur les côtés)
+    for (const [w, h, least] of [[390, 600, 0.05], [360, 740, 0.08], [844, 390, 0.05]]) {
       const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, 'g1', 'montagne'), w, h });
       const game = goatPlay.goatPlay3dGame(ctx);
       const pre = sc.decor;
       pre.group.traverse((o) => {
         expect(o.userData?.house, 'la chèvrerie de la ferme').toBeFalsy();
       });
-      // (le rocher, le panneau et le petit sapin juste derrière la clôture, et le chalet : rien n'est retiré à gauche,
-      // là où la chèvrerie se tenait)
-      expect(pre.away.landmarks.length).toBe(4);
+      // (le rocher, le panneau et le petit sapin juste derrière la clôture, le chalet, et sur les côtés les quatre jeunes
+      // sapins et le rocher : rien n'est retiré à gauche, là où la chèvrerie se tenait)
+      expect(pre.away.landmarks.length).toBe(9);
+      expect(pre.away.landmarks.filter((it) => it.o.userData.mid).length).toBe(5);
       run(ctx, game, sc, 1.5);
       expect(awayShare(sc), `le lieu dans l'image, ${w}×${h}`).toBeGreaterThan(least);
       game.destroy();
@@ -936,6 +938,46 @@ describe('la balle de la chèvre et la longe, en voyage', () => {
     game.destroy();
     sc.dispose();
   }, 90000);
+
+  it('la balle en voyage, au téléphone en paysage : dans chaque lieu, des choses du pays juste derrière la clôture, sur les côtés ; jamais devant elle ni devant sa balle', () => {
+    const amb = careAmbience({ hour: 15, weather: 'clear', season: 'summer' });
+    // (en paysage, la caméra basse ne voit que 3 ou 4 m derrière la clôture : avant, le lieu n'y faisait que 0,3 à 3,5 %
+    // de l'image — l'herbe du pré, la clôture et, dans les Alpes, un rocher, un panneau, un petit sapin. En portrait, la
+    // Méditerranée n'en avait que 2 % : ses jeunes oliviers et sa lavande s'y voient aussi)
+    for (const look of LOOKS) {
+      for (const [w, h, least] of [[844, 390, 0.05], [390, 600, 0.04]]) {
+        const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, 'g1', look), w, h });
+        const game = goatPlay.goatPlay3dGame(ctx);
+        const pre = sc.decor;
+        const mid = pre.away.landmarks.filter((it) => it.o.userData.mid);
+        expect(mid.length, look).toBeGreaterThanOrEqual(4);
+        // (la caméra posée — une image pour s'y poser, une pour que le lieu s'écarte —, la chèvre à son départ : rien du
+        // lieu derrière sa tête dans l'image. Ensuite elle court partout, et c'est elle qui passe devant)
+        run(ctx, game, sc, 2 / 30);
+        for (const it of pre.away.landmarks) expect(behindHead(sc, it.o), `${look} ${w}×${h} : derrière sa tête`).toBe(false);
+        // (toutes derrière la clôture du fond, à 45 cm au moins : ni dans ses lisses, ni dans le pré)
+        for (const it of mid) expect(new THREE.Box3().setFromObject(it.o).max.z, `${look} : dans le pré`).toBeLessThan(pre.dims.z0 - 0.4);
+        // (pendant qu'elle joue, jamais devant elle ni devant la balle : un rayon de la caméra à sa tête, à sa bouche, à
+        // la balle ne rencontre rien du lieu avant elles)
+        const rc = new THREE.Raycaster();
+        rc.camera = sc.camera;
+        for (let k = 0; k < 6; k++) {
+          run(ctx, game, sc, 0.25);
+          sc.scene.updateMatrixWorld(true);
+          const cam = sc.camera.position;
+          for (const p of [sc.live('head'), sc.live('muzzle'), game.peek().ball3d]) {
+            const d = p.distanceTo(cam);
+            rc.set(cam.clone(), p.clone().sub(cam).normalize());
+            rc.far = d - 0.02;
+            expect(rc.intersectObject(pre.away.group, true).filter((h) => h.object.visible).length, `${look} ${w}×${h} : devant elle`).toBe(0);
+          }
+        }
+        expect(awayShare(sc), `le lieu dans l'image, ${look} ${w}×${h}`).toBeGreaterThan(least);
+        game.destroy();
+        sc.dispose();
+      }
+    }
+  }, 120000);
 
   for (const [look, amb] of [
     ['plage', careAmbience({ hour: 16, weather: 'clear', season: 'summer' })],

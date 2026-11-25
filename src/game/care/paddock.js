@@ -427,6 +427,9 @@ export function paddockSet(stage, yard) {
     // (en voyage, le fond du lieu deux fois moins loin au-delà de 6 m : la caméra du jeu, d'en haut, ne voit pas
     // l'horizon ; ses arbres et sa construction viennent derrière la clôture, là où sont ceux de la ferme — away.js)
     awayFold: 0.5,
+    // (en paysage, la caméra du jeu, plus basse, ne voit que 3 ou 4 m derrière la clôture : des choses moyennes du lieu
+    // s'y posent, sur les côtés — la demi-largeur de la clôture du fond, away.js : MID)
+    awayMid: (F.x1 - F.x0) / 2,
     spots,
     lampSpot,
     lampFace: Math.PI,

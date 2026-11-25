@@ -64,7 +64,7 @@ describe('la balle de la chèvre, dans le pré', () => {
         // (le réverbère : contre la clôture, hors du terrain où la balle roule)
         expect(A.lamp).toBeTruthy();
         const d = pre.dims;
-        expect(A.lamp.position.z).toBeLessThan(d.z0 + 0.2);
+        expect(A.lampPost.position.z).toBeLessThan(d.z0 + 0.2);
       }
       // la lumière du soleil suit l'heure
       let sun = null;
@@ -151,7 +151,7 @@ describe('la longe, au rond', () => {
       }
       if (amb.lamp) {
         expect(A.lamp).toBeTruthy();
-        expect(Math.hypot(A.lamp.position.x, A.lamp.position.z)).toBeGreaterThan(F);
+        expect(Math.hypot(A.lampPost.position.x, A.lampPost.position.z)).toBeGreaterThan(F);
       }
       // (la brume plus loin que dans un petit décor : on voit encore la clôture d'en face)
       expect(sc.scene.fog.far).toBeGreaterThan(2 * F);

@@ -114,7 +114,7 @@ function lampPost(keep, h) {
 
 /**
  * Habille la scène selon l'ambiance amb (careAmbience). decor : { group, outdoor, sky, ground, spots, dims, room } ;
- * stage : la scène (marks, box, camera, scene). Renvoie { update(dt, stage), dispose(), lamp, rain, snow }.
+ * stage : la scène (marks, box, camera, scene). Renvoie { update(dt, stage), dispose(), lamp, lampPost, rain, snow }.
  */
 export function applyAmbience(stage, decor, amb) {
   const keep = bag();
@@ -358,9 +358,11 @@ export function applyAmbience(stage, decor, amb) {
 
   // ---------------------------------------------------------------- la lampe (la nuit ; le soir par gros temps)
   let lamp = null;
+  let pole = null;
   if (amb.lamp) {
     const light = new THREE.PointLight(0xffb866, 1, 0, 2);
     let at;
+    let flood = false;
     if (out) {
       // un réverbère au fond, à gauche de lui (il éclaire son flanc et le coin repas) ; ou à la place que le décor
       // lui garde (decor.lampSpot : hors du terrain de jeu)
@@ -374,7 +376,14 @@ export function applyAmbience(stage, decor, amb) {
       }
       post.updateMatrixWorld(true);
       g.add(post);
+      pole = post;
       at = post.localToWorld(post.userData.light.clone());
+      if (decor.lampLight) {
+        // (un terrain où l'animal tourne tout autour — le rond, le pré de la balle — : la lumière au-dessus, pour
+        // éclairer le côté qu'on voit où qu'il soit ; le réverbère reste là, allumé)
+        at = decor.lampLight.clone();
+        flood = true;
+      }
     } else {
       // la lanterne accrochée au plafond, au-dessus de lui, un peu vers nous
       const roof = decor.dims?.roof ?? decor.dims?.eave ?? decor.room?.roof ?? 2.6;
@@ -384,10 +393,20 @@ export function applyAmbience(stage, decor, amb) {
       at = l.position.clone().add(V(0, -0.13, 0));
     }
     light.position.copy(at);
-    // (assez fort pour bien le voir : sa lumière à la distance de son flanc vaut un peu plus que le ciel de nuit)
-    // (un réverbère que le décor a mis à l'écart — le pré de la balle — : pas plus fort pour autant, il éblouirait le mur)
-    const d = Math.max(0.8, Math.min(decor.lampSpot ? 1.6 : 99, at.distanceTo(center)));
-    light.intensity = 1.9 * d * d;
+    if (flood) {
+      // (la même lumière partout sur le terrain, comme un projecteur : sans baisse avec la distance — l'enfant au
+      // milieu n'est pas éblouie, le cheval au bout de la longe pas dans le noir —, puis éteinte au-delà de la clôture)
+      const d = Math.hypot(decor.lampReach ?? 0, at.y - center.y);
+      light.decay = 0;
+      light.distance = Math.max(4, d * 2.5);
+      const win = (1 - (d / light.distance) ** 4) ** 2;
+      light.intensity = 1.9 / win;
+    } else {
+      // (assez fort pour bien le voir : sa lumière à la distance de son flanc vaut un peu plus que le ciel de nuit)
+      // (un réverbère que le décor a mis à l'écart : pas plus fort pour autant, il éblouirait ce qui est près de lui)
+      const d = Math.max(0.8, Math.min(decor.lampSpot ? 1.6 : 99, at.distanceTo(center)));
+      light.intensity = 1.9 * d * d;
+    }
     light.userData.role = 'lamp';
     light.userData.base = light.intensity;
     g.add(light);
@@ -397,6 +416,7 @@ export function applyAmbience(stage, decor, amb) {
   let time = 0;
   return {
     lamp,
+    lampPost: pole,
     rain,
     snow,
     group: g,

@@ -496,8 +496,10 @@ export function roundPenSet(stage, pen) {
     // (accroché au poteau, côté rond, entre la lisse du bas et celle du milieu)
     places.push({ kind: 'hang', p: [Math.cos(a) * (F - 0.13), 0.3 * fH + 0.06, Math.sin(a) * (F - 0.13)], face: faceIn(a) });
   }
-  // (le réverbère de la nuit : dehors, à côté de la paille)
+  // (le réverbère de la nuit : dehors, à côté de la paille ; sa lumière au-dessus du milieu, comme un projecteur : le
+  // cheval tourne tout autour, et l'on voit toujours le côté qui regarde le milieu)
   const lampSpot = V(Math.cos(ba - 0.3) * (F + 0.8), 0, Math.sin(ba - 0.3) * (F + 0.8));
+  const lampLight = V(0, Math.max(3.2, 2.2 * u + 1.6), 0);
 
   return {
     group: g,
@@ -510,6 +512,8 @@ export function roundPenSet(stage, pen) {
     spots: places,
     lampSpot,
     lampFace: faceIn(ba - 0.3),
+    lampLight,
+    lampReach: R,
     // (la pluie, la neige : sur tout le rond, la caméra en fait le tour ; la brume plus loin, ses arbres tout autour, et
     // plus loin encore quand la caméra recule — au téléphone en portrait —, le cheval n'y est jamais noyé)
     weatherBox: { x0: -F - 2.5, x1: F + 2.5, z0: -F - 2.5, z1: F + 2.5, top: Math.max(3.5, 2.6 * u + 1.5) },

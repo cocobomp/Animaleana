@@ -150,8 +150,8 @@ Les anciennes versions du jeu (encore en cache sur un appareil) ne peuvent alors
 
 ## 💌 Les avis des joueurs
 
-Dans le jeu, « 💌 Ton avis » (menu ⋯ Plus, ⚙️ Réglages et écran des profils) : un smiley (😍 🙂 😐 😕), une sorte
-(idée, bug, j'aime, autre) et un petit texte. Code : `src/cloud/feedback.js` (le message, l'envoi, la file d'attente),
+Dans le jeu en ligne, « 💌 Ton avis » (menu ⋯ Plus, ⚙️ Réglages et écran des profils) : un smiley (😍 🙂 😐 😕), une
+sorte (idée, bug, j'aime, autre) et un petit texte. Code : `src/cloud/feedback.js` (le message, l'envoi, la file d'attente),
 `src/ui/feedbackWindow.js` (la fenêtre), `firestore.rules` (ce que la base accepte), tests `tests/feedback.test.js` et
 `tests/firestoreRules.test.js`.
 
@@ -164,7 +164,8 @@ console (sélectionner le document → **Supprimer le document**).
 **Publier les règles (une fois, à la main)** : l'action GitHub ne publie que les fichiers du jeu, pas les règles.
 Tant que les règles avec `feedback` ne sont pas en ligne, la base refuse les avis : le jeu les garde sur l'appareil
 (20 au plus) et les renvoie au démarrage suivant ou quand le réseau revient. Rien ne se perd, et l'enfant voit
-« Merci ! Il partira dès que possible 💌 ». Pour les publier (un compte qui a le droit de modifier les règles) :
+« Merci ! Il partira dès que possible 💌 ». (Stockage de l'appareil plein ou bloqué : l'avis attend en mémoire tant
+que le jeu est ouvert, et passe dans le stockage dès qu'il y a de nouveau de la place.) Pour les publier (un compte qui a le droit de modifier les règles) :
 
     npx firebase-tools deploy --only firestore:rules --project lafermeamadichelle
 
@@ -175,7 +176,7 @@ puis **Publier**). Les règles des sauvegardes ne changent pas.
 
 | Champ | Contenu |
 |---|---|
-| `text` | Le message, 500 caractères au plus. Les adresses e-mail, les numéros de téléphone et les prénoms des profils de l'appareil y sont remplacés par `[e-mail]`, `[téléphone]` et `[prénom]` avant de partir |
+| `text` | Le message, 500 caractères au plus. Les adresses e-mail, les numéros de téléphone et les noms des profils de l'appareil y sont remplacés par `[e-mail]`, `[téléphone]` et `[prénom]` avant de partir (le nom entier et chacun de ses mots : un profil « Léa Dupont » masque aussi « Léa » et « Dupont ») |
 | `mood` | `love` 😍, `happy` 🙂, `meh` 😐, `sad` 😕, ou `none` (pas de smiley : il y a alors un texte) |
 | `kind` | `idea` (idée), `bug`, `like` (j'aime) ou `other` (autre, ou rien de choisi) |
 | `lang`, `version` | Langue du jeu (`fr`, `en`) ; version et commit (par exemple `0.5.0+cb4307f`) |
@@ -194,7 +195,8 @@ tailles) mais pas leur nombre : comme tout formulaire sans compte, quelqu'un pou
 du jeu. En cas d'abus : fermer la collection (`allow create: if false;` dans `firestore.rules`, puis publier), ou
 ajouter App Check.
 
-**Version « à emporter » (fichier)** : elle ne se connecte jamais à Internet ; ses avis restent sur l'ordinateur.
+**Version « à emporter » (fichier)** : « 💌 Ton avis » n'y est pas proposé (comme le compte Google) : elle ne se
+connecte jamais à Internet et son stockage n'est pas celui du site, un avis n'en partirait jamais.
 
 ## Mise en ligne automatique
 

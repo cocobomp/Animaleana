@@ -36,7 +36,7 @@ import { hoofTrim3dGame } from './hoofTrim3d.js';
 import { goatPlay3dGame } from './goatPlay3d.js';
 import { barnClean3dGame } from './barnClean3d.js';
 import { lunge3dGame, liberty3dGame } from './lunge3d.js'; // (longe et liberté dans le rond de longe)
-import { careSetting, gameAmbience, pickExtras, pickLife, hashSeed, awayLook, extrasPlace, AWAY_LOOKS } from '../../game/care/setting.js'; // (le vrai lieu, l'heure, la météo)
+import { whereFacts, settingFrom, gameAmbience, pickExtras, pickLife, hashSeed, awayLook, extrasPlace, AWAY_LOOKS } from '../../game/care/setting.js'; // (le vrai lieu, l'heure, la météo)
 import { dressDecor } from '../../game/care/dress.js'; // (le lieu du voyage, l'ambiance, les objets du jour)
 
 /** Soins du cheval refaits en 3D (les autres soins, et les autres espèces, gardent leur jeu dessiné). */
@@ -92,41 +92,50 @@ export function decorFor(species, place, { amb = null, kinds = [], life = [], se
   };
 }
 
-/** Le décor de ce soin pour cet animal, dans le jeu (lieu, heure, météo, objets du jour, lieu du voyage). */
+/**
+ * Le décor de ce soin pour cet animal, dans le jeu (lieu, heure, météo, objets du jour, lieu du voyage). travel : la
+ * famille du lieu du voyage quand on y est avec lui, quel que soit le lieu du soin (la balle de la chèvre, la longe :
+ * leur pré et leur rond prennent aussi le décor du lieu, dressOther).
+ */
 export function careDecor(game, a, action = null) {
-  const place = careSetting(game, a, action);
   const amb = gameAmbience(game);
+  let facts = { known: false };
   let day = 1;
-  let look = null;
   try {
+    facts = whereFacts(game, a);
     day = game?.day ?? 1;
-    look = place === 'ailleurs' ? awayLook(game?.profile?.place) : null;
   } catch {
     day = 1;
   }
+  const place = settingFrom(a?.species, facts, action);
+  const travel = facts.known && facts.here && facts.away ? awayLook(facts.placeId) : null;
+  const look = place === 'ailleurs' ? travel : null;
   const id = a?.id ?? '';
   const species = a?.species;
   const kinds = pickExtras({ day, id, place: extrasPlace(place, look), species, n: 3, amb });
   const life = pickLife({ day, id, place, amb, species, taken: kinds });
   const seed = hashSeed(`${day}|${id}`) % 100000;
-  const dress = { amb, day, id, species, seed, look };
-  return { place, amb, kinds, life, look, set: decorFor(species, place, { amb, kinds, life, seed, look, dress }) };
+  const dress = { amb, day, id, species, seed, look, travel };
+  return { place, amb, kinds, life, look, travel, set: decorFor(species, place, { amb, kinds, life, seed, look, dress }) };
 }
 
 /**
  * Habille un décor qu'un jeu met lui-même à la place de celui du soin (le pré de la balle, le rond de longe) avec la
- * même heure, la même météo et la même saison, et les objets du jour de ce lieu (place : 'pre'). dress : decor.dress
- * du décor du soin (careDecor) ; sans lui (tests, jeu dessiné), rien ne change. anywhere : la caméra tourne avec
- * l'animal (placeExtras). Renvoie le décor.
+ * même heure, la même météo et la même saison, et les objets du jour de ce lieu (place : 'pre'). En voyage
+ * (dress.travel), c'est le lieu du voyage : son fond (away.js), ses objets du jour. dress : decor.dress du décor du soin
+ * (careDecor) ; sans lui (tests, jeu dessiné), rien ne change. anywhere : la caméra tourne avec l'animal (placeExtras ;
+ * le fond du lieu se pose alors tout autour). Renvoie le décor.
  */
 export function dressOther(stage, d, dress, place = 'pre', { anywhere = false } = {}) {
   if (!dress?.amb) return d;
   const { amb, day = 1, id = '', species = '', seed = 1 } = dress;
-  const kinds = pickExtras({ day, id, place, species, n: 3, amb });
-  const life = pickLife({ day, id, place, amb, species, taken: kinds });
-  d.place = place;
+  const look = AWAY_LOOKS[dress.travel] ? dress.travel : null;
+  const where = look ? 'ailleurs' : place;
+  const kinds = pickExtras({ day, id, place: extrasPlace(where, look), species, n: 3, amb });
+  const life = pickLife({ day, id, place: where, amb, species, taken: kinds });
+  d.place = where;
   d.dress = dress;
-  return dressDecor(stage, d, { amb, kinds, life, seed: seed + 17, anywhere });
+  return dressDecor(stage, d, { amb, kinds, life, seed: seed + 17, anywhere, look });
 }
 
 /** Scène de chaque espèce (celle du cheval par défaut ; chien, chat, lapin : PetStage, leurs repères et leur vie). */

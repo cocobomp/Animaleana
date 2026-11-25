@@ -47,6 +47,20 @@ describe('les objets du jour (pur)', () => {
     }
   });
 
+  it('ce que le décor ne peut pas tenir (without : la brouette au petit pré de la balle) n\'est jamais tiré ; un autre objet à sa place', () => {
+    let had = 0;
+    for (let day = 1; day <= 40; day++) {
+      const a = pickExtras({ day, id: 'g2', place: 'pre', species: 'goat' });
+      const b = pickExtras({ day, id: 'g2', place: 'pre', species: 'goat', without: ['brouette'] });
+      if (a.includes('brouette')) had++;
+      expect(b).not.toContain('brouette');
+      expect(b.length).toBe(3);
+      // (sans rien à retirer, les mêmes objets qu'avant)
+      expect(pickExtras({ day, id: 'g2', place: 'pre', species: 'goat', without: [] })).toEqual(a);
+    }
+    expect(had).toBeGreaterThan(3);
+  });
+
   it('deux animaux le même jour n\'ont pas forcément les mêmes objets', () => {
     const lists = new Set(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => pickExtras({ day: 5, id, place: 'pre' }).join(',')));
     expect(lists.size).toBeGreaterThan(1);

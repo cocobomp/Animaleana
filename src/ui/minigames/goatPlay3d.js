@@ -6,12 +6,13 @@
 // poussant du nez jusqu'à nous. Contente, le chevreau gambade ; fatiguée, elle traîne la tête basse, puis se couche.
 //
 // Le décor : la scène de soin est construite avec la chèvrerie (farmBarn.js) ; ce jeu la cache, pose le pré à sa place
-// le temps de la partie, et rend la chèvrerie en partant.
+// le temps de la partie, et rend la chèvrerie en partant. En voyage, le pré n'a pas le mur de la chèvrerie de la
+// ferme : la clôture fait tout le tour du fond, et le lieu du voyage se voit derrière (paddockSet : travel).
 
 import * as THREE from 'three';
 import { playGame } from './fun.js';
 import { drawCountZone } from './food.js';
-import { withLogic, dressOther } from './care3d.js';
+import { withLogic, dressOther, travelLook } from './care3d.js';
 import { handModel, avatarHand } from '../../game/care/props.js';
 import { canvasTex } from '../../game/care/textures.js';
 import { paddockSet } from '../../game/care/paddock.js';
@@ -63,9 +64,10 @@ export function goatPlay3dGame(ctx) {
   const barn = sc.decor;
   const before = { bg: sc.scene.background, fog: sc.scene.fog, env: sc.scene.environmentIntensity };
   sc.scene.remove(barn.group);
-  // (l'heure, la météo, la saison et les objets du jour du soin : decor.dress, care3d.js)
+  // (l'heure, la météo, la saison et les objets du jour du soin : decor.dress, care3d.js ; en voyage, ni la chèvrerie
+  // ni sa porte : le fond du lieu derrière la clôture)
   const dress = barn?.dress ?? null;
-  const pre = paddockSet(sc, { xC, half, zFar, depth, season: dress?.amb?.season });
+  const pre = paddockSet(sc, { xC, half, zFar, depth, season: dress?.amb?.season, travel: !!travelLook(dress) });
   pre.sky(sc);
   dressOther(sc, pre, dress, 'pre');
   sc.decor = pre;

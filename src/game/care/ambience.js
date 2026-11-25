@@ -118,8 +118,9 @@ function lampPost(keep, h) {
  *
  * Ce qu'un grand décor de jeu peut ajouter (le pré de la balle, le rond de longe) : fogScale (un nombre, ou une
  * fonction de la scène relue à chaque image : fogFromCamera), lampSpot et lampFace (la place du réverbère, hors du
- * terrain), lampLight et lampReach (la place de sa lumière, en hauteur du côté de la caméra, et la distance au sol de
- * son pied au point du terrain le plus loin d'elle), groundMarks (les matières posées sur le sol : piste, liseré, terre
+ * terrain), lampLight et lampReach (la place de sa lumière, en hauteur du côté de la caméra — un point, ou une fonction
+ * de la scène relue à chaque image, comme la brume : la caméra fait le tour —, et la distance au sol de son pied au
+ * point du terrain le plus loin d'elle), groundMarks (les matières posées sur le sol : piste, liseré, terre
  * battue), weatherBox (où tombent pluie et neige).
  * Le pied du réverbère est noté dans decor.avoid le temps de l'ambiance : les objets du jour ne s'y posent pas.
  */
@@ -378,6 +379,8 @@ export function applyAmbience(stage, decor, amb) {
   // ---------------------------------------------------------------- la lampe (la nuit ; le soir par gros temps)
   let lamp = null;
   let pole = null;
+  // (la place de la lumière relue à chaque image : decor.lampLight, une fonction de la scène)
+  let lampAt = null;
   const avoid0 = decor.avoid;
   if (amb.lamp) {
     const light = new THREE.PointLight(0xffb866, 1, 0, 2);
@@ -402,9 +405,10 @@ export function applyAmbience(stage, decor, amb) {
       decor.avoid = [...(avoid0 ?? []), post.position.clone(), at.clone().setY(0)];
       if (decor.lampLight) {
         // (un terrain où l'animal court partout — le rond, le pré de la balle — : la lumière là où le décor la met,
-        // pour éclairer le côté qu'on voit où qu'il soit ; au rond, au-dessus du milieu, où est la caméra ; au pré,
-        // devant le terrain, de notre côté ; le réverbère reste là, allumé)
-        at = decor.lampLight.clone();
+        // pour éclairer le côté qu'on voit où qu'il soit ; au rond, entre la caméra et le cheval ; au pré, devant le
+        // terrain, de notre côté ; le réverbère reste là, allumé)
+        lampAt = typeof decor.lampLight === 'function' ? decor.lampLight : null;
+        at = (lampAt ? lampAt(stage) : decor.lampLight).clone();
         flood = true;
       }
     } else {
@@ -448,8 +452,9 @@ export function applyAmbience(stage, decor, amb) {
       rain?.userData.step(Math.min(dt, 0.1));
       snow?.userData.step(Math.min(dt, 0.1));
       for (const o of overlays) o.tex.offset.y = (o.tex.offset.y + o.speed * dt) % 1;
-      // (la flamme de la lampe vacille un peu)
+      // (la flamme de la lampe vacille un peu ; sa lumière suit la caméra là où le décor le veut)
       if (lamp) lamp.intensity = lamp.userData.base * (1 + Math.sin(time * 13) * 0.02 + Math.sin(time * 7.3) * 0.015);
+      if (lamp && lampAt) lamp.position.copy(lampAt(st));
       // (la caméra a reculé ou avancé : la brume suit, decor.fogScale)
       if (fogK && fog && st.scene?.fog === fog) {
         const k = fogAt(st);

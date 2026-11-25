@@ -120,6 +120,15 @@ export function careDecor(game, a, action = null) {
 }
 
 /**
+ * Le lieu du voyage où l'animal est emmené (sa famille : AWAY_LOOKS), d'après decor.dress du décor du soin, ou null (à
+ * la ferme, lieu inconnu, pas d'ambiance). Le pré de la balle et le rond de longe le lisent pour laisser leurs
+ * bâtiments de la ferme à la ferme (paddockSet, roundPenSet : travel).
+ */
+export function travelLook(dress) {
+  return dress?.amb && AWAY_LOOKS[dress.travel] ? dress.travel : null;
+}
+
+/**
  * Habille un décor qu'un jeu met lui-même à la place de celui du soin (le pré de la balle, le rond de longe) avec la
  * même heure, la même météo et la même saison, et les objets du jour de ce lieu (place : 'pre'). En voyage
  * (dress.travel), c'est le lieu du voyage : son fond (away.js), ses objets du jour. dress : decor.dress du décor du soin
@@ -129,9 +138,10 @@ export function careDecor(game, a, action = null) {
 export function dressOther(stage, d, dress, place = 'pre', { anywhere = false } = {}) {
   if (!dress?.amb) return d;
   const { amb, day = 1, id = '', species = '', seed = 1 } = dress;
-  const look = AWAY_LOOKS[dress.travel] ? dress.travel : null;
+  const look = travelLook(dress);
   const where = look ? 'ailleurs' : place;
-  const kinds = pickExtras({ day, id, place: extrasPlace(where, look), species, n: 3, amb });
+  // (sans ce que le décor ne peut pas tenir : d.noExtras)
+  const kinds = pickExtras({ day, id, place: extrasPlace(where, look), species, n: 3, amb, without: d.noExtras });
   const life = pickLife({ day, id, place: where, amb, species, taken: kinds });
   d.place = where;
   d.dress = dress;

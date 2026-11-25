@@ -75,6 +75,33 @@ const CLOSE = {
   normandie: ['cagette', 'bidon'],
 };
 
+/**
+ * Au pré de la balle de la chèvre (decor.awayMid : la demi-largeur de sa clôture du fond), de quoi voir le lieu au
+ * téléphone en paysage : la caméra du jeu, basse et près du terrain, n'y voit le sol que jusqu'à 3 ou 4 m derrière la
+ * clôture — ni les arbres du lieu, ni sa construction, et de ce qui est posé à 1 ou 2 m, seulement le bas. Cinq choses
+ * moyennes du pays, massives près du sol, de part et d'autre du pré, à 1 m à 1,7 m derrière la clôture ([sorte, côté
+ * depuis le milieu du pré, profondeur derrière la clôture, taille] en mètres, pour une clôture de 2,6 m de
+ * demi-largeur) : de jeunes arbres de son espèce (MID_TREE : des sapins dans les Alpes, des oliviers en Andalousie, un
+ * pommier en Normandie…), des dunes, des blocs de lave, des termitières, l'herbe de la pampa, les buissons taillés d'un
+ * jardin de Kyoto, les murets des Cotswolds, les clôtures blanches du Kentucky, les haies du bocage. Celles qui tombent
+ * derrière sa tête glissent comme les constructions (clearHead), en restant dans l'image s'il y a la place.
+ */
+const MID = {
+  plage: [['dune', -1.8, 1.6, 1.3], ['brisevent', -3.1, 1.0, 1.4], ['dune', -4.4, 1.7, 1.3], ['oyats', 2.9, 1.1, 1.8], ['dune', 4.4, 1.7, 1.3]],
+  montagne: [['arbre', -1.7, 1.6], ['rocher', -3.0, 1.0, 2.2], ['arbre', -4.3, 1.5], ['arbre', 2.9, 1.2], ['arbre', 4.4, 1.7]],
+  volcan: [['lave', -1.7, 1.5, 2.2], ['arbre', -3.0, 1.1], ['lave', -4.3, 1.5, 2.2], ['cairn', 2.9, 1.1, 1.9], ['lave', 4.4, 1.6, 2.2]],
+  rocheuses: [['arbre', -1.7, 1.6], ['tronc', -3.0, 1.0, 1.6], ['arbre', -4.3, 1.5], ['arbre', 2.9, 1.2], ['tronc', 4.4, 1.6, 1.6]],
+  pampa: [['herbes', -1.7, 1.5, 2.0], ['abreuvoir', -3.0, 1.1, 1.3], ['herbes', -4.3, 1.5, 2.0], ['herbes', 2.9, 1.1, 2.0], ['herbes', 4.4, 1.6, 2.0]],
+  japon: [['buisson', -1.7, 1.5, 1.7], ['lanterne', -3.0, 1.0, 1.5], ['buisson', -4.3, 1.5, 1.7], ['bambous', 2.9, 1.1, 1.3], ['buisson', 4.4, 1.6, 1.7]],
+  mediterranee: [['arbre', -1.7, 1.6], ['lavande', -3.0, 1.0, 2.2], ['arbre', -4.3, 1.5], ['jarre', 2.9, 1.1, 1.7], ['lavande', 4.4, 1.6, 2.2]],
+  bush: [['termitiere', -1.7, 1.6, 1.5], ['spinifex', -3.0, 1.0, 2.6], ['termitiere', -4.3, 1.5, 1.4], ['spinifex', 2.9, 1.1, 2.6], ['termitiere', 4.4, 1.6, 1.4]],
+  cottage: [['muret', -1.9, 1.6, 1.2], ['buisson', -3.1, 1.0, 1.7], ['muret', -4.4, 1.5, 1.2], ['digitales', 2.9, 1.1, 1.7], ['buisson', 4.4, 1.6, 1.7]],
+  haras: [['lisses', -1.9, 1.5, 1.2], ['buisson', -3.1, 1.0, 1.8], ['lisses', -4.4, 1.5, 1.2], ['buisson', 2.9, 1.1, 1.8], ['lisses', 4.4, 1.6, 1.2]],
+  normandie: [['haie', -1.9, 1.6, 1.2], ['cagette', -3.1, 1.0, 1.8], ['arbre', -4.4, 1.5], ['bidon', 2.9, 1.1, 1.8], ['haie', 4.4, 1.6, 1.2]],
+};
+/** Le jeune arbre de chaque lieu (MID) : son espèce et sa taille (sa couronne près du sol). */
+const MID_TREE = { montagne: ['sapin', 0.75], rocheuses: ['sapin', 0.75], volcan: ['bouleau', 0.5], mediterranee: ['olivier', 0.65], normandie: ['pommier', 0.55] };
+
 /** Ce que la lumière n'éclaire pas (l'écume, la fumée) : sa force selon le moment (la nuit, presque éteint). */
 const UNLIT = { matin: 0.92, jour: 1, soir: 0.72, nuit: 0.2 };
 
@@ -246,9 +273,15 @@ export function dressAway(stage, decor, look, amb = null) {
   const ring = decor.kind === 'roundPen' ? Math.max(3, decor.dims?.F ?? 5) + 4 : 0;
   const cx = ring ? 0 : (box.min.x + box.max.x) / 2;
   const zb = Math.min(decor.dims?.back ?? decor.room?.back ?? box.min.z - 0.6, box.min.z - 0.6);
+  // (le pré de la balle : la caméra le regarde d'en haut et ne voit le sol que jusqu'à une douzaine de mètres derrière
+  // la clôture — ses propres arbres sont à 6 m. Entre 6 et 14 m, le fond s'y resserre (decor.awayFold : 0,5, deux fois
+  // moins profond), et tout ce qui est plus loin avance d'autant : les arbres et la construction du lieu viennent dans
+  // l'image, devant ses collines. Pas au bord de la mer : la plage, ses cabanes et ses dunes sont mesurées jusqu'à l'eau)
+  const fold = ring || L.far.includes('mer') ? 1 : THREE.MathUtils.clamp(decor.awayFold ?? 1, 0.3, 1);
+  const deep = (depth) => depth - THREE.MathUtils.clamp(depth - 6, 0, 8) * (1 - fold);
   /** Une place du fond : side (m, sur le côté), depth (m, au-delà du bord) → { x, z, ry } (ry : tourné vers nous). */
   const at = (side, depth) => {
-    if (!ring) return { x: cx + side, z: zb - depth, ry: 0 };
+    if (!ring) return { x: cx + side, z: zb - deep(depth), ry: 0 };
     const R = ring + depth;
     const a = side / R;
     return { x: Math.sin(a) * R, z: -Math.cos(a) * R, ry: -a };
@@ -354,80 +387,80 @@ export function dressAway(stage, decor, look, amb = null) {
   trunkGeo.translate(0, 0.5, 0);
   const appleGeo = keep(new THREE.IcosahedronGeometry(1, 0));
   const snowCap = white ? mat(0xf2f6fa) : null;
-  function tree(kind, x, z, s = 1) {
+  function tree(kind, x, z, s = 1, put = inst.add, cap = snowCap) {
     switch (kind) {
       case 'sapin': {
-        inst.add(trunkGeo, trunk, [x, 0, z], [s, s * 0.8, s]);
+        put(trunkGeo, trunk, [x, 0, z], [s, s * 0.8, s]);
         const m = mat(0x2f5a3a);
-        inst.add(coneGeo, m, [x, 1.6 * s, z], [0.9 * s, s, 0.9 * s]);
-        inst.add(coneGeo, m, [x, 2.6 * s, z], [0.65 * s, 0.8 * s, 0.65 * s]);
-        if (snowCap) inst.add(coneGeo, snowCap, [x, 3.2 * s, z], [0.3 * s, 0.32 * s, 0.3 * s]);
+        put(coneGeo, m, [x, 1.6 * s, z], [0.9 * s, s, 0.9 * s]);
+        put(coneGeo, m, [x, 2.6 * s, z], [0.65 * s, 0.8 * s, 0.65 * s]);
+        if (cap) put(coneGeo, cap, [x, 3.2 * s, z], [0.3 * s, 0.32 * s, 0.3 * s]);
         return;
       }
       case 'pin': {
         // (le pin parasol, le pin des plages : un grand tronc, une couronne plate ; sous la neige, un chapeau blanc)
-        inst.add(trunkGeo, trunk, [x, 0, z], [0.8 * s, 3.2 * s, 0.8 * s], 0, 0, (r() - 0.5) * 0.2);
+        put(trunkGeo, trunk, [x, 0, z], [0.8 * s, 3.2 * s, 0.8 * s], 0, 0, (r() - 0.5) * 0.2);
         const m = mat(0x3f6a34);
-        inst.add(crownGeo, m, [x, 3.3 * s, z], [1.6 * s, 0.55 * s, 1.4 * s]);
-        inst.add(crownGeo, m, [x + 0.7 * s, 3.05 * s, z + 0.2], [0.9 * s, 0.4 * s, 0.8 * s]);
-        if (snowCap) inst.add(crownGeo, snowCap, [x, 3.6 * s, z], [1.35 * s, 0.22 * s, 1.15 * s]);
+        put(crownGeo, m, [x, 3.3 * s, z], [1.6 * s, 0.55 * s, 1.4 * s]);
+        put(crownGeo, m, [x + 0.7 * s, 3.05 * s, z + 0.2], [0.9 * s, 0.4 * s, 0.8 * s]);
+        if (cap) put(crownGeo, cap, [x, 3.6 * s, z], [1.35 * s, 0.22 * s, 1.15 * s]);
         return;
       }
       case 'bouleau': {
-        inst.add(trunkGeo, mat(0xe8e4dc), [x, 0, z], [0.55 * s, 2.6 * s, 0.55 * s]);
-        if (BIRCH[season]) inst.add(crownGeo, mat(BIRCH[season]), [x, 2.6 * s, z], [0.7 * s, 1.1 * s, 0.7 * s]);
+        put(trunkGeo, mat(0xe8e4dc), [x, 0, z], [0.55 * s, 2.6 * s, 0.55 * s]);
+        if (BIRCH[season]) put(crownGeo, mat(BIRCH[season]), [x, 2.6 * s, z], [0.7 * s, 1.1 * s, 0.7 * s]);
         return;
       }
       case 'cerisier': {
-        inst.add(trunkGeo, mat(0x4a3428), [x, 0, z], [0.8 * s, 1.5 * s, 0.8 * s], 0, 0, (r() - 0.5) * 0.3);
+        put(trunkGeo, mat(0x4a3428), [x, 0, z], [0.8 * s, 1.5 * s, 0.8 * s], 0, 0, (r() - 0.5) * 0.3);
         const c = CHERRY[season];
-        if (c) for (let j = 0; j < 3; j++) inst.add(crownGeo, mat(c), [x + (j - 1) * 0.7 * s, (1.9 + r() * 0.4) * s, z + (r() - 0.5) * 0.6], 0.85 * s);
+        if (c) for (let j = 0; j < 3; j++) put(crownGeo, mat(c), [x + (j - 1) * 0.7 * s, (1.9 + r() * 0.4) * s, z + (r() - 0.5) * 0.6], 0.85 * s);
         return;
       }
       case 'pommier': {
         // (le pommier du bocage : un tronc court et penché, une couronne large ; fleuri au printemps, des pommes rouges
         // l'été et l'automne, nu l'hiver)
-        inst.add(trunkGeo, mat(0x5a4632), [x, 0, z], [0.9 * s, 1.3 * s, 0.9 * s], 0, 0, (r() - 0.5) * 0.35);
+        put(trunkGeo, mat(0x5a4632), [x, 0, z], [0.9 * s, 1.3 * s, 0.9 * s], 0, 0, (r() - 0.5) * 0.35);
         const c = APPLE[season];
         if (!c) return;
         const m = mat(c);
-        inst.add(crownGeo, m, [x - 0.45 * s, 1.75 * s, z], [1.0 * s, 0.75 * s, 0.95 * s]);
-        inst.add(crownGeo, m, [x + 0.5 * s, 1.85 * s, z + 0.2 * s], [0.9 * s, 0.7 * s, 0.85 * s]);
+        put(crownGeo, m, [x - 0.45 * s, 1.75 * s, z], [1.0 * s, 0.75 * s, 0.95 * s]);
+        put(crownGeo, m, [x + 0.5 * s, 1.85 * s, z + 0.2 * s], [0.9 * s, 0.7 * s, 0.85 * s]);
         if (season === 'summer' || season === 'autumn') {
           for (let j = 0; j < 4; j++) {
             const a = r() * Math.PI * 2;
-            inst.add(appleGeo, mat(0xc8322a), [x + Math.cos(a) * 0.95 * s, (1.55 + r() * 0.5) * s, z + Math.sin(a) * 0.9 * s], 0.1 * s);
+            put(appleGeo, mat(0xc8322a), [x + Math.cos(a) * 0.95 * s, (1.55 + r() * 0.5) * s, z + Math.sin(a) * 0.9 * s], 0.1 * s);
           }
         }
         return;
       }
       case 'olivier': {
-        inst.add(trunkGeo, mat(0x6a5a48), [x, 0, z], [1.1 * s, 1.1 * s, 1.1 * s], 0, 0, (r() - 0.5) * 0.4);
+        put(trunkGeo, mat(0x6a5a48), [x, 0, z], [1.1 * s, 1.1 * s, 1.1 * s], 0, 0, (r() - 0.5) * 0.4);
         const m = mat(0x8a9a6a);
-        inst.add(crownGeo, m, [x - 0.4 * s, 1.5 * s, z], [0.9 * s, 0.6 * s, 0.9 * s]);
-        inst.add(crownGeo, m, [x + 0.4 * s, 1.6 * s, z + 0.2], [0.8 * s, 0.55 * s, 0.8 * s]);
+        put(crownGeo, m, [x - 0.4 * s, 1.5 * s, z], [0.9 * s, 0.6 * s, 0.9 * s]);
+        put(crownGeo, m, [x + 0.4 * s, 1.6 * s, z + 0.2], [0.8 * s, 0.55 * s, 0.8 * s]);
         return;
       }
       case 'cypres': {
-        inst.add(coneGeo, mat(0x2a4a2a), [x, 2.2 * s, z], [0.45 * s, 1.9 * s, 0.45 * s]);
+        put(coneGeo, mat(0x2a4a2a), [x, 2.2 * s, z], [0.45 * s, 1.9 * s, 0.45 * s]);
         return;
       }
       case 'eucalyptus': {
-        inst.add(trunkGeo, mat(0xd8d0c0), [x, 0, z], [0.7 * s, 3.4 * s, 0.7 * s], 0, 0, (r() - 0.5) * 0.25);
+        put(trunkGeo, mat(0xd8d0c0), [x, 0, z], [0.7 * s, 3.4 * s, 0.7 * s], 0, 0, (r() - 0.5) * 0.25);
         const m = mat(0x7a9a80);
-        for (let j = 0; j < 3; j++) inst.add(crownGeo, m, [x + (r() - 0.5) * 1.4 * s, (3 + r() * 0.9) * s, z + (r() - 0.5) * 0.8], [0.8 * s, 0.5 * s, 0.8 * s]);
+        for (let j = 0; j < 3; j++) put(crownGeo, m, [x + (r() - 0.5) * 1.4 * s, (3 + r() * 0.9) * s, z + (r() - 0.5) * 0.8], [0.8 * s, 0.5 * s, 0.8 * s]);
         return;
       }
       case 'ombu': {
-        inst.add(trunkGeo, trunk, [x, 0, z], [2.4 * s, 1.8 * s, 2.4 * s]);
+        put(trunkGeo, trunk, [x, 0, z], [2.4 * s, 1.8 * s, 2.4 * s]);
         const m = mat(LEAVES[season] ?? 0x4f7a34);
-        for (let j = 0; j < 5; j++) inst.add(crownGeo, m, [x + (j - 2) * 1.2 * s, (2.4 + r() * 0.6) * s, z + (r() - 0.5) * 1.2], [1.4 * s, 1 * s, 1.3 * s]);
+        for (let j = 0; j < 5; j++) put(crownGeo, m, [x + (j - 2) * 1.2 * s, (2.4 + r() * 0.6) * s, z + (r() - 0.5) * 1.2], [1.4 * s, 1 * s, 1.3 * s]);
         return;
       }
       default: {
-        inst.add(trunkGeo, trunk, [x, 0, z], [s, 1.8 * s, s]);
+        put(trunkGeo, trunk, [x, 0, z], [s, 1.8 * s, s]);
         const c = LEAVES[season];
-        if (c) for (let j = 0; j < 3; j++) inst.add(crownGeo, mat(c), [x + (r() - 0.5) * 1.1 * s, (2.2 + r() * 0.8) * s, z + (r() - 0.5) * 0.8], (0.9 + r() * 0.4) * s);
+        if (c) for (let j = 0; j < 3; j++) put(crownGeo, mat(c), [x + (r() - 0.5) * 1.1 * s, (2.2 + r() * 0.8) * s, z + (r() - 0.5) * 0.8], (0.9 + r() * 0.4) * s);
       }
     }
   }
@@ -609,11 +642,11 @@ export function dressAway(stage, decor, look, amb = null) {
   };
   /**
    * Pose o au fond (side, depth), tourné de rot (et vers nous), et la garde hors de sa tête (glisse de step m). Son
-   * devant reste toujours derrière le bord du fond : jamais à cheval sur la clôture.
+   * devant reste toujours derrière le bord du fond (de front m au moins) : jamais à cheval sur la clôture.
    */
-  const place = (o, side, depth, rot = 0, guard = true, step = 1.5) => {
+  const place = (o, side, depth, rot = 0, guard = true, step = 1.5, front = 0.05) => {
     const b = ownBox(o, rot);
-    const d = Math.max(depth, b.max.z + 0.05);
+    const d = Math.max(depth, b.max.z + front);
     const p = at(side, d);
     o.position.set(p.x, o.position.y, p.z);
     o.rotation.y = rot + p.ry;
@@ -908,14 +941,51 @@ export function dressAway(stage, decor, look, amb = null) {
     // (au-delà de la clôture du fond du décor, s'il en a une plus loin que son bord : le pré de la balle)
     const from = Math.max(0, zb - Math.min(zb, decor.dims?.z0 ?? zb)) + 0.2;
     for (const [kind, side, depth] of NEAR[look] ?? []) {
-      // (au pré de la balle, la chèvrerie occupe le fond à gauche : rien dedans)
-      if (decor.dims?.x0 !== undefined && cx + side * kS < decor.dims.x0 + 3.7) continue;
+      // (au pré de la balle de la ferme, la chèvrerie occupe le fond à gauche : rien dedans — en voyage, elle n'y est
+      // pas, dims.houseX1 est nul)
+      if (decor.dims?.houseX1 != null && cx + side * kS < decor.dims.houseX1) continue;
       const o = nearProp(kind);
       if (o) place(o, side * kS, from + depth * kD, (r() - 0.5) * 0.5, true, 0.5);
     }
+    // (au pré de la balle, de quoi voir le lieu au téléphone en paysage : MID, sur les côtés, un peu plus loin — leur
+    // devant à 45 cm au moins derrière la clôture : ni dans ses lisses, ni dans le réverbère de la nuit)
+    const half = decor.awayMid ?? 0;
+    if (half > 0 && decor.dims) {
+      const k = THREE.MathUtils.clamp(half / 2.6, 0.75, 1.25);
+      const xF = (decor.dims.x0 + decor.dims.x1) / 2 - cx;
+      const dz = Math.max(0, zb - decor.dims.z0);
+      for (const [kind, side, depth, size = 1] of MID[look] ?? []) {
+        const o = kind === 'arbre' ? youngTree() : nearProp(kind);
+        if (!o) continue;
+        o.scale.multiplyScalar(size * k);
+        o.userData.mid = kind;
+        place(o, xF + side * k, dz + depth * k, (r() - 0.5) * 0.6, true, 0.5, dz + 0.45);
+      }
+    }
+  }
+  /**
+   * Un jeune arbre du lieu (MID_TREE : sa couronne près du sol), en quelques pièces à lui (on le garde hors de sa tête
+   * comme les constructions) ; posé près de lui, au sol : blanc seulement s'il neige.
+   */
+  function youngTree() {
+    const [kind, s] = MID_TREE[look] ?? [treeKind, 0.45];
+    const o = new THREE.Group();
+    const put = (geo, m, p, sc = [1, 1, 1], ry = 0, rx = 0, rz = 0) => {
+      const x = new THREE.Mesh(geo, m);
+      x.position.set(...p);
+      x.scale.set(...(Array.isArray(sc) ? sc : [sc, sc, sc]));
+      x.rotation.set(rx, ry, rz, 'YXZ');
+      o.add(x);
+    };
+    tree(kind, 0, 0, s, put, amb?.snowy ? snowCap : null);
+    return o;
   }
   /** Une petite chose du pays, posée tout près (quelques pièces ; les brins, les cailloux en instances). */
   function nearProp(kind) {
+    // (tout près de lui, au sol : blanc seulement s'il neige. L'hiver dans les Alpes, en Islande, dans les Rocheuses, la
+    // neige reste sur les hauteurs — white —, pas sur le rocher ni le petit sapin posés sur l'herbe à côté de lui)
+    const snowy = !!amb?.snowy;
+    const cap = snowy ? snowCap : null;
     const o = new THREE.Group();
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -951,7 +1021,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'chateau': {
         // (un château de sable : la butte, trois tours, un petit drapeau)
-        const sand = mat(white ? 0xe8edf2 : 0xe2c896);
+        const sand = mat(snowy ? 0xe8edf2 : 0xe2c896);
         add(keep(new THREE.CylinderGeometry(0.32, 0.38, 0.14, 10)), sand, [0, 0.07, 0]);
         lots(keep(new THREE.CylinderGeometry(1, 1.1, 1, 8)), sand, [[-0.18, 0.24, 0, 0.08, 0.22, 0.08], [0.18, 0.24, 0.02, 0.08, 0.22, 0.08], [0, 0.3, -0.12, 0.1, 0.34, 0.1]]);
         add(keep(new THREE.PlaneGeometry(0.1, 0.06)), mat(0xd84a3a, { side: THREE.DoubleSide }), [0.05, 0.56, -0.12]);
@@ -960,10 +1030,24 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'oyats':
         // (les oyats des dunes : des touffes d'herbe raide)
-        tufts(white ? 0xc8ccc0 : 0xb4b878, 9, 0.5);
+        tufts(snowy ? 0xc8ccc0 : 0xb4b878, 9, 0.5);
         return o;
+      case 'dune': {
+        // (une petite dune de sable, des oyats plantés dessus)
+        add(keep(new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2)), mat(snowy ? 0xe8edf2 : 0xe8d6b0), [0, -0.04, 0], [1.1, 0.5, 0.7]);
+        const list = [];
+        for (let i = 0; i < 8; i++) {
+          const x = (r() - 0.5) * 1.2;
+          const z = (r() - 0.5) * 0.6;
+          const top = 0.5 * Math.sqrt(Math.max(0, 1 - (x / 1.1) ** 2 - (z / 0.7) ** 2)) - 0.04;
+          const h = 0.35 + r() * 0.2;
+          list.push([x, top + h * 0.4, z, 0.05, h, 0.05, 0, (r() - 0.5) * 0.5]);
+        }
+        lots(keep(new THREE.ConeGeometry(1, 1, 5)), mat(snowy ? 0xc8ccc0 : 0xb4b878), list);
+        return o;
+      }
       case 'rocher':
-        add(rockGeo(), mat(white ? 0xdfe4e8 : 0x8a8a86), [0, 0.22, 0], [0.55, 0.4, 0.42]);
+        add(rockGeo(), mat(snowy ? 0xdfe4e8 : 0x8a8a86), [0, 0.22, 0], [0.55, 0.4, 0.42]);
         return o;
       case 'panneau': {
         // (le panneau jaune des chemins de randonnée, sur son poteau)
@@ -974,7 +1058,7 @@ export function dressAway(stage, decor, look, amb = null) {
       case 'sapineau': {
         // (un jeune sapin)
         lots(coneGeo, mat(0x2f5a3a), [[0, 0.45, 0, 0.32, 0.3, 0.32], [0, 0.75, 0, 0.22, 0.22, 0.22]]);
-        if (snowCap) add(coneGeo, snowCap, [0, 0.95, 0], [0.1, 0.08, 0.1]);
+        if (cap) add(coneGeo, cap, [0, 0.95, 0], [0.1, 0.08, 0.1]);
         return o;
       }
       case 'lave':
@@ -1002,7 +1086,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'herbes': {
         // (l'herbe de la pampa : de grands plumets clairs sur une touffe verte)
-        tufts(white ? 0xb8c0b0 : 0x8a9a5a, 8, 0.45);
+        tufts(snowy ? 0xb8c0b0 : 0x8a9a5a, 10, 0.45, 0.085);
         lots(keep(new THREE.ConeGeometry(1, 1, 6)), mat(0xeee2c4), [[-0.15, 0.85, 0, 0.06, 0.4, 0.06, 0, 0.15], [0.05, 0.95, 0.05, 0.06, 0.45, 0.06, 0, -0.05], [0.2, 0.8, -0.05, 0.05, 0.38, 0.05, 0, -0.2]]);
         return o;
       }
@@ -1010,14 +1094,46 @@ export function dressAway(stage, decor, look, amb = null) {
         // (une touffe de bambous)
         const list = [];
         for (let i = 0; i < 6; i++) list.push([(i - 2.5) * 0.12 + (r() - 0.5) * 0.05, 0.9, (r() - 0.5) * 0.2, 0.025, 1.8 + r() * 0.4, 0.025, 0, (r() - 0.5) * 0.08]);
-        lots(cyl(), mat(white ? 0x8aa070 : 0x6a9a3e), list);
+        lots(cyl(), mat(snowy ? 0x8aa070 : 0x6a9a3e), list);
         return o;
       }
       case 'pas': {
         // (les pierres plates d'un petit chemin de jardin)
         const list = [];
         for (let i = 0; i < 4; i++) list.push([(i - 1.5) * 0.3, 0.015, Math.sin(i * 1.3) * 0.12, 0.13, 0.03, 0.11, r() * 3]);
-        lots(cyl(), mat(white ? 0xe0e4e8 : 0x8a8a84), list);
+        lots(cyl(), mat(snowy ? 0xe0e4e8 : 0x8a8a84), list);
+        return o;
+      }
+      case 'buisson':
+      case 'haie': {
+        // (un buisson taillé en boules serrées : l'azalée d'un jardin de Kyoto, rose au printemps, le buis d'un cottage ;
+        // la haie, plus longue : celle du bocage normand)
+        const n = kind === 'haie' ? 5 : 3;
+        const c = snowy ? 0xdfe4e8 : look === 'japon' && season === 'spring' ? 0xd87aa8 : winter ? 0x4f6040 : 0x3f6a34;
+        const list = [];
+        for (let i = 0; i < n; i++) list.push([(i - (n - 1) / 2) * 0.42, 0.22 + r() * 0.06, (r() - 0.5) * 0.12, 0.32 + r() * 0.06, 0.3 + r() * 0.06, 0.3, r() * 3]);
+        lots(crownGeo, mat(c), list);
+        return o;
+      }
+      case 'muret':
+        // (un bout de muret de pierres sèches, blondes comme le cottage)
+        add(keep(lumpy(new THREE.BoxGeometry(2, 0.7, 0.45, 8, 3, 2), 0.035, 13, 3)), mat(0xc0a878), [0, 0.35, 0]);
+        return o;
+      case 'lisses':
+        // (un bout des clôtures blanches du Kentucky : deux poteaux, quatre planches)
+        lots(keep(new THREE.BoxGeometry(1, 1, 1)), mat(0xf6f4ee), [[-1, 0.55, 0, 0.11, 1.1, 0.11], [1, 0.55, 0, 0.11, 1.1, 0.11], [0, 0.2, 0.07, 2.1, 0.16, 0.04], [0, 0.48, 0.07, 2.1, 0.16, 0.04], [0, 0.76, 0.07, 2.1, 0.16, 0.04], [0, 1.02, 0.07, 2.1, 0.16, 0.04]]);
+        return o;
+      case 'abreuvoir':
+        // (l'abreuvoir rond en tôle de l'estancia, l'eau dedans)
+        add(keep(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 16, 1, true)), mat(0xb8bec4, { metalness: 0.4, roughness: 0.5, side: THREE.DoubleSide }), [0, 0.25, 0]);
+        add(keep(new THREE.CircleGeometry(0.54, 16)), mat(snowy ? 0xe8edf2 : 0x5a7a8a, { roughness: 0.2 }), [0, 0.42, 0], [1, 1, 1], [-Math.PI / 2, 0, 0]);
+        return o;
+      case 'lanterne': {
+        // (une lanterne de pierre : son pied, sa lampe, son toit)
+        const stone = mat(0x9a9a92);
+        add(keep(new THREE.CylinderGeometry(0.09, 0.12, 0.5, 8)), stone, [0, 0.25, 0]);
+        add(keep(new THREE.BoxGeometry(0.3, 0.22, 0.3)), stone, [0, 0.61, 0]);
+        add(keep(new THREE.ConeGeometry(0.3, 0.2, 4)), stone, [0, 0.82, 0], [1, 1, 1], [0, Math.PI / 4, 0]);
         return o;
       }
       case 'jarre': {
@@ -1028,7 +1144,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'lavande': {
         // (des touffes de lavande : violettes l'été, grises le reste de l'année)
-        const c = white ? 0xdfe4e8 : season === 'summer' ? 0x8a6ab8 : 0x8a9a88;
+        const c = snowy ? 0xdfe4e8 : season === 'summer' ? 0x8a6ab8 : 0x8a9a88;
         lots(keep(new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)), mat(c), [[-0.25, 0, 0, 0.22, 0.3, 0.2], [0.15, 0, 0.08, 0.2, 0.26, 0.18], [0.35, 0, -0.1, 0.16, 0.22, 0.15]]);
         return o;
       }
@@ -1049,7 +1165,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'digitales': {
         // (des digitales roses le long du muret ; l'hiver, rien)
-        if (winter || white) return null;
+        if (winter || snowy) return null;
         tufts(0x4f7a34, 5, 0.25);
         const list = [];
         for (let i = 0; i < 4; i++) list.push([(i - 1.5) * 0.18, 0.55, (r() - 0.5) * 0.15, 0.06, 0.5 + r() * 0.2, 0.06]);
@@ -1170,6 +1286,8 @@ export function dressAway(stage, decor, look, amb = null) {
     }
     return seen ? { x0, x1, y0, y1 } : null;
   }
+  /** Le rectangle q est-il dans l'image v (au moins la moitié de sa largeur) ? */
+  const inView = (q, v) => !!q && q.y1 > v.y0 && q.y0 < v.y1 && Math.min(q.x1, v.x1) - Math.max(q.x0, v.x0) > 0.5 * (q.x1 - q.x0);
   /** Le rectangle q touche-t-il un des cercles de sa tête ? */
   const hits = (q, zone) => !!q && zone.some((c) => Math.hypot(Math.max(q.x0, Math.min(c.x, q.x1)) - c.x, Math.max(q.y0, Math.min(c.y, q.y1)) - c.y) < c.r);
   /** Glissée de d m, la construction reste-t-elle hors des dunes (moins de 10 cm de sable sous chaque coin) ? */
@@ -1217,21 +1335,37 @@ export function dressAway(stage, decor, look, amb = null) {
     const hc = zone[0];
     // (là où elle glisse, avec de la marge : sa tête bouge un peu en mangeant, elle n'y retombe pas)
     const wide = zone.map((c) => ({ ...c, r: c.r * 1.4 + 10 }));
-    for (const it of guards) {
-      const now = rectOf(st, it, it.shift);
+    // (où sont les autres dans l'image : ce qui glisse ne vient pas se cacher derrière une chose posée à côté)
+    const rects = guards.map((it) => rectOf(st, it, it.shift));
+    for (const [i, it] of guards.entries()) {
+      const now = rects[i];
       if (!hits(now, zone)) continue;
-      // (d'abord du côté où elle est déjà, par rapport à sa tête ; jamais dans une dune)
+      // (d'abord du côté où elle est déjà, par rapport à sa tête ; jamais dans une dune ; là où on la voit encore, s'il
+      // y a une place libre dans l'image — au téléphone en paysage, la balle n'a qu'une bande de sol derrière la
+      // clôture : ce qui y montre le lieu n'en sort pas —, de préférence à côté des autres plutôt que devant ou
+      // derrière elles ; sinon la plus proche)
       const first = now.x0 + now.x1 < 2 * hc.x ? -1 : 1;
+      const z = it.o.position.z;
+      const crowded = (q) => guards.some((o, j) => j !== i && rects[j] && Math.abs(o.o.position.z - z) < 1.5 && overlap(q, rects[j], -4));
       let best = null;
+      let crowd = null;
+      let away = null;
       for (let k = 1; k <= 16 && best === null; k++) {
         for (const s of [first, -first]) {
           const d = it.shift + s * k * it.step;
-          if (best === null && offDunes(it, d) && !hits(rectOf(st, it, d), wide)) best = d;
+          if (best !== null || !offDunes(it, d)) continue;
+          const q = rectOf(st, it, d);
+          if (hits(q, wide)) continue;
+          if (!inView(q, v)) away ??= d;
+          else if (crowded(q)) crowd ??= d;
+          else best = d;
         }
       }
+      best ??= crowd ?? away;
       if (best === null) continue;
       it.shift = best;
       it.o.position.x = it.x0 + best;
+      rects[i] = rectOf(st, it, best);
     }
   }
 

@@ -4,7 +4,8 @@
 // passe devant), une barrière, une botte de paille et un seau au pied de la clôture ; autour, l'herbe et ses touffes,
 // des arbres, des collines, le ciel ; le soleil de l'après-midi.
 //
-// pen = { R (rayon de la piste, m), F (rayon de la clôture, m), u (taille du cheval : 1 pour un selle français) }.
+// pen = { R (rayon de la piste, m), F (rayon de la clôture, m), u (taille du cheval : 1 pour un selle français), travel
+// (en voyage : sans l'écurie de la ferme au loin) }.
 // Le centre du rond est l'origine. Même forme que les autres décors (stallSet, paddockSet) :
 // { group, dims, props, layout, update, dispose } ; sky(stage) pose le ciel et la brume (à rendre au départ). Il suit
 // l'heure, la météo et la saison du jeu (pen.season : l'herbe, les arbres nus et les sapins l'hiver, des feuilles
@@ -364,38 +365,44 @@ export function roundPenSet(stage, pen) {
   } }));
 
   // ---------------------------------------------------------------- au loin : l'écurie, des arbres, des collines
-  const barnWall = keep(barnWood(31, true, 'warm'));
-  barnWall.repeat.set(4, 1);
-  const wallMat = keep(new THREE.MeshStandardMaterial({ map: barnWall, roughness: 0.9 }));
-  const roofMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c4434, roughness: 0.8 }));
-  const stable = new THREE.Group();
-  const sw = 8;
-  const sh = 2.6;
-  const sd = 4;
-  const body = new THREE.Mesh(keep(new THREE.BoxGeometry(sw, sh, sd)), wallMat);
-  body.position.y = sh / 2;
-  body.castShadow = true;
-  stable.add(body);
-  const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(sw + 0.5, 0.14, sd * 0.62)), roofMat);
-  for (const sd2 of [-1, 1]) {
-    const rf = roof.clone();
-    rf.position.set(0, sh + 0.62, sd2 * sd * 0.26);
-    rf.rotation.x = sd2 * 0.52;
-    rf.castShadow = true;
-    stable.add(rf);
+  // (l'écurie de la ferme, au fond à gauche ; en voyage, elle est restée à la ferme : pen.travel — le lieu du voyage
+  // fait le tour du rond, away.js)
+  const stableAt = V(-F - 7.5, 0, -F - 9);
+  if (!pen.travel) {
+    const barnWall = keep(barnWood(31, true, 'warm'));
+    barnWall.repeat.set(4, 1);
+    const wallMat = keep(new THREE.MeshStandardMaterial({ map: barnWall, roughness: 0.9 }));
+    const roofMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c4434, roughness: 0.8 }));
+    const stable = new THREE.Group();
+    stable.userData.house = true;
+    const sw = 8;
+    const sh = 2.6;
+    const sd = 4;
+    const body = new THREE.Mesh(keep(new THREE.BoxGeometry(sw, sh, sd)), wallMat);
+    body.position.y = sh / 2;
+    body.castShadow = true;
+    stable.add(body);
+    const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(sw + 0.5, 0.14, sd * 0.62)), roofMat);
+    for (const sd2 of [-1, 1]) {
+      const rf = roof.clone();
+      rf.position.set(0, sh + 0.62, sd2 * sd * 0.26);
+      rf.rotation.x = sd2 * 0.52;
+      rf.castShadow = true;
+      stable.add(rf);
+    }
+    const doorMat = keep(new THREE.MeshStandardMaterial({ color: 0x3a2616, roughness: 0.9 }));
+    for (let i = 0; i < 3; i++) {
+      const d = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.0, 1.9)), doorMat);
+      d.position.set(-2.4 + i * 2.4, 0.95, sd / 2 + 0.01);
+      stable.add(d);
+      const top = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.06, 0.12)), keep(new THREE.MeshStandardMaterial({ color: 0xefe6d6, roughness: 0.8 })));
+      top.position.set(d.position.x, 1.96, sd / 2 + 0.012);
+      stable.add(top);
+    }
+    stable.position.copy(stableAt);
+    stable.rotation.y = 0.45;
+    g.add(stable);
   }
-  const doorMat = keep(new THREE.MeshStandardMaterial({ color: 0x3a2616, roughness: 0.9 }));
-  for (let i = 0; i < 3; i++) {
-    const d = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.0, 1.9)), doorMat);
-    d.position.set(-2.4 + i * 2.4, 0.95, sd / 2 + 0.01);
-    stable.add(d);
-    const top = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.06, 0.12)), keep(new THREE.MeshStandardMaterial({ color: 0xefe6d6, roughness: 0.8 })));
-    top.position.set(d.position.x, 1.96, sd / 2 + 0.012);
-    stable.add(top);
-  }
-  stable.position.set(-F - 7.5, 0, -F - 9);
-  stable.rotation.y = 0.45;
-  g.add(stable);
   const trunkMat = keep(new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 }));
   const trunkGeo = keep(new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8));
   // (tout autour du rond : la caméra suit le cheval et fait le tour, il y a des arbres de tous les côtés ; en instances,
@@ -407,7 +414,7 @@ export function roundPenSet(stage, pen) {
     const d = F + 22 + r() * 8;
     const x = Math.cos(a) * d;
     const z = Math.sin(a) * d;
-    if (Math.hypot(x - stable.position.x, z - stable.position.z) < 6) continue;
+    if (Math.hypot(x - stableAt.x, z - stableAt.z) < 6) continue;
     spots.push({ x, z, sc: 1.1 + r() * 0.9 });
   }
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);
@@ -522,10 +529,23 @@ export function roundPenSet(stage, pen) {
     // (accroché au poteau, côté rond, entre la lisse du bas et celle du milieu)
     places.push({ kind: 'hang', p: [Math.cos(a) * (F - 0.13), 0.3 * fH + 0.06, Math.sin(a) * (F - 0.13)], face: faceIn(a) });
   }
-  // (le réverbère de la nuit : dehors, à côté de la paille ; sa lumière au-dessus du milieu, comme un projecteur : le
-  // cheval tourne tout autour, et l'on voit toujours le côté qui regarde le milieu)
+  // (le réverbère de la nuit : dehors, à côté de la paille. Sa lumière, comme un projecteur, toujours à la même hauteur
+  // et de la même force : au-dessus de la piste, entre la caméra et le cheval, jamais à plus d'un rayon de piste de lui.
+  // Pendant la longe, la caméra est vers le milieu : la lumière aussi, on voit le côté du cheval qui regarde le milieu ;
+  // au gros plan de la fin, la caméra sort du rond pour le voir de côté, avec l'enfant : la lumière la suit, le côté
+  // qu'on voit reste éclairé. Sans scène, au-dessus du milieu)
   const lampSpot = V(Math.cos(ba - 0.3) * (F + 0.8), 0, Math.sin(ba - 0.3) * (F + 0.8));
-  const lampLight = V(0, Math.max(3.2, 2.2 * u + 1.6), 0);
+  const lampH = Math.max(3.2, 2.2 * u + 1.6);
+  const lampAt = V(0, lampH, 0);
+  const lampLight = (st) => {
+    const h = st?.holder?.position;
+    const c = st?.camera?.position;
+    if (!h || !c) return lampAt.set(0, lampH, 0);
+    const dx = c.x - h.x;
+    const dz = c.z - h.z;
+    const k = Math.min(1, R / Math.max(1e-6, Math.hypot(dx, dz)));
+    return lampAt.set(h.x + dx * k, lampH, h.z + dz * k);
+  };
 
   return {
     group: g,

@@ -20,7 +20,7 @@
 
 import * as THREE from 'three';
 import { lungeGame, libertyGame, drawGaitGauge, GAIT_GAUGE, ARENA_PLAN, GAITS } from './horse.js';
-import { withLogic, bubble, dressOther } from './care3d.js';
+import { withLogic, bubble, dressOther, travelLook } from './care3d.js';
 import { label, emoji, clamp, rrect } from './draw.js';
 import { roundPenSet, penSize } from '../../game/care/roundPen.js';
 import { ease } from '../../game/care/stage.js';
@@ -136,7 +136,8 @@ function penRig(ctx, kind) {
   if (stall?.group) sc.scene.remove(stall.group);
   // (l'heure, la météo, la saison et les objets du jour du soin : decor.dress, care3d.js ; la caméra fait le tour)
   const dress = stall?.dress ?? null;
-  const pen = roundPenSet(sc, { R, F, u, L: Lb, season: dress?.amb?.season });
+  // (en voyage, l'écurie de la ferme reste à la ferme : roundPenSet, travel)
+  const pen = roundPenSet(sc, { R, F, u, L: Lb, season: dress?.amb?.season, travel: !!travelLook(dress) });
   pen.sky(sc);
   dressOther(sc, pen, dress, 'pre', { anywhere: true });
   sc.decor = pen;

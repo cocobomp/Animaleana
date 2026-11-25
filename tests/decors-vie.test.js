@@ -412,16 +412,20 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
       return { x0: Math.min(...q.map((p) => p.x)), x1: Math.max(...q.map((p) => p.x)), y0: Math.min(...q.map((p) => p.y)), y1: Math.max(...q.map((p) => p.y)) };
     };
     const steps = which ? stepsOf(which === 'feed' ? 'feed-horse' : which, ctx, game, sc) : [[30, 'repos', null]];
-    // (le téléphone tourné en pleine partie : la scène se recadre dans l'autre sens)
+    // (le téléphone tourné en pleine partie, juste après le premier geste — verser le foin — : la scène se recadre dans
+    // l'autre sens, la partie continue comme un enfant la joue)
     if (turn) {
       const [tw, th] = turn;
+      const f0 = steps[0][2];
       steps[0] = [steps[0][0], steps[0][1], () => {
+        f0?.();
         const v2 = H.frame.fitView(tw, th, 400, 360);
         ctx.view = v2;
         sc.resize(tw, th, v2);
       }];
     }
     const rep = measure ? cost(sc, ctx, game, steps) : playAll(sc, ctx, game, steps, { head, offered, headRect });
+    if (!measure) rep.finished = ctx.finished ?? null;
     if (process.env.DBG && !measure) console.log(which, place, w, ambKey, day, JSON.stringify(rep.phases), [...rep.kinds], rep.bad.slice(0, 5));
     game?.destroy();
     sc.dispose();
@@ -447,7 +451,7 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
     ['feed', 'box', 390, 600, 'neige', 3, null, 0.5, null],
     ['water', 'pre', 844, 390, 'pluie', 5, null, 0.5, null],
     ['treat', 'box', 390, 600, 'jour', 2, null, 0.6, null, [844, 390]],
-    ['feed', 'box', 844, 390, 'jour', 4, null, 0.6, null, [390, 600]],
+    ['feed', 'box', 844, 390, 'jour', 4, null, 0.6, 'mange', [390, 600]],
     // (le rouge-gorge se posait dans la botte de paille, ou sur l'oiseau du jour posé par terre ; le chat perché sur la
     // cloison, au-dessus du licol pendu ou de la fourche dressée — tous comptés comme des choses à voir)
     ['treat', 'box', 390, 600, 'jour', 5, null, 0.5, null],
@@ -462,6 +466,8 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
       expect(r.first, 'rien de posé de toute la partie').not.toBeNull();
       expect(share(r), JSON.stringify(r.phases)).toBeGreaterThanOrEqual(min);
       if (phase) expect(share(r, phase), `${phase} : ${JSON.stringify(r.phases)}`).toBeGreaterThanOrEqual(min);
+      // (tourné en pleine partie, le cheval est nourri comme sans tourner : la bonne ration, il mange)
+      if (turn && game === 'feed') expect(r.finished?.why, JSON.stringify(r.finished)).toBe('just');
       if (amb === 'neige') for (const k of ['hirondelle', 'papillons', 'papillon', 'vol']) expect([...r.kinds]).not.toContain(k);
       if (amb === 'nuit') for (const k of ['hirondelle', 'papillons', 'vol', 'rougegorge', 'poulailler']) expect([...r.kinds]).not.toContain(k);
     }, 120000);

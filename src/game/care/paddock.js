@@ -10,6 +10,10 @@
 // ciel recolorable, le sol que la pluie mouille et que la neige blanchit, l'herbe cachée sous la neige, la nuit le
 // réverbère et sa lumière sur le terrain, la brume qui recule avec la caméra) et reçoit les objets du jour (spots : le
 // long de la clôture du fond, derrière le terrain).
+//
+// En voyage (yard.travel : la chèvre emmenée dans les Alpes, à la plage…), le pré n'est plus derrière la chèvrerie de
+// la ferme : ni son mur, ni son toit, ni sa porte, ni la terre battue devant elle. La clôture fait tout le tour du
+// fond, et le fond du lieu (away.js) se voit derrière, au-dessus des lisses.
 
 import * as THREE from 'three';
 import { canvasTex, rng } from './textures.js';
@@ -151,7 +155,8 @@ export function skyDome(keep, r = 40) {
 }
 
 /**
- * Le pré. stage : la scène (pour la taille de l'animal) ; yard : le terrain de jeu. Renvoie le décor (voir plus haut).
+ * Le pré. stage : la scène (pour la taille de l'animal) ; yard : le terrain de jeu (yard.travel : en voyage, sans la
+ * chèvrerie). Renvoie le décor (voir plus haut).
  */
 export function paddockSet(stage, yard) {
   const g = new THREE.Group();
@@ -160,6 +165,7 @@ export function paddockSet(stage, yard) {
   const u = stage.marks?.u ?? 0.7;
   const { xC, half, zFar, depth } = yard;
   const season = yard.season ?? 'summer';
+  const travel = !!yard.travel;
   const zNear = zFar + depth;
   // (la clôture autour du terrain, un peu plus loin que lui ; on se tient devant, côté +z, sans clôture)
   const F = { x0: xC - half - 0.9, x1: xC + half + 0.9, z0: zFar - 0.9, z1: zNear + 1.6 };
@@ -180,9 +186,12 @@ export function paddockSet(stage, yard) {
   groundMat.userData.main = true;
   mesh(new THREE.PlaneGeometry(60, 60), groundMat, [xC, 0, zFar], [-Math.PI / 2, 0, 0], false);
   const door = V(F.x0 + 1.6, 0, F.z0 - 0.35);
-  const dirtMat = keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 }));
-  const dirt = mesh(new THREE.PlaneGeometry(2.6, 2.2), dirtMat, [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
-  dirt.userData.grass = true; // (sous la neige, elle disparaît comme l'herbe : ambience.js)
+  // (en voyage, pas de porte : pas de terre battue)
+  const dirtMat = travel ? null : keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 }));
+  if (dirtMat) {
+    const dirt = mesh(new THREE.PlaneGeometry(2.6, 2.2), dirtMat, [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
+    dirt.userData.grass = true; // (sous la neige, elle disparaît comme l'herbe : ambience.js)
+  }
 
   // touffes d'herbe (cartes en croix) et pâquerettes, semées partout sauf au milieu du terrain
   const tuftTex = keep(tuftTexture());
@@ -250,62 +259,72 @@ export function paddockSet(stage, yard) {
       m.position.add(V(-Math.sin(ang), 0, Math.cos(ang)).multiplyScalar(0.07));
     }
   };
-  side(V(F.x0 + 3.4, 0, F.z0), V(F.x1, 0, F.z0));
+  // (à la ferme, la chèvrerie ferme le fond à gauche ; en voyage, la clôture fait tout le tour du fond)
+  side(V(travel ? F.x0 : F.x0 + 3.4, 0, F.z0), V(F.x1, 0, F.z0));
   side(V(F.x1, 0, F.z0), V(F.x1, 0, F.z1));
-  side(V(F.x0, 0, F.z1), V(F.x0, 0, F.z0 + 0.6));
+  side(V(F.x0, 0, F.z1), V(F.x0, 0, travel ? F.z0 : F.z0 + 0.6));
 
   // ---------------------------------------------------------------- la chèvrerie : le mur chaulé, la porte, le toit
-  const lime = keep(limeWallTexture(6));
-  lime.repeat.set(2.2, 1.1);
-  const limeMat = keep(new THREE.MeshStandardMaterial({ map: lime, roughness: 0.95 }));
+  // (à la ferme seulement : en voyage, elle est restée à la ferme)
   const wallH = Math.max(2.4, 1.5 * u + 1.4);
   const bx = F.x0 - 0.4;
   const bw = 4.6;
-  const house = new THREE.Group();
-  g.add(house);
-  const wall = new THREE.Mesh(keep(new THREE.BoxGeometry(bw, wallH, 3)), limeMat);
-  wall.position.set(bx + bw / 2 - 0.6, wallH / 2, F.z0 - 1.9);
-  wall.castShadow = true;
-  wall.receiveShadow = true;
-  house.add(wall);
-  // le toit de tuiles brunes, débordant
-  const tileTex = keep(canvasTex(128, 128, (c) => {
-    const rr = rng(4);
-    c.fillStyle = '#8a4b32';
-    c.fillRect(0, 0, 128, 128);
-    for (let y = 0; y < 128; y += 16) {
-      for (let x = (y / 16) % 2 ? -8 : 0; x < 128; x += 16) {
-        c.fillStyle = `rgb(${120 + rr() * 40},${60 + rr() * 25},${40 + rr() * 15})`;
-        c.beginPath();
-        c.ellipse(x + 8, y + 10, 8, 9, 0, 0, Math.PI);
-        c.fill();
-      }
-      c.fillStyle = 'rgba(40,20,10,0.35)';
-      c.fillRect(0, y + 14, 128, 2);
-    }
-  }, { key: 'pre-tiles' }));
-  tileTex.repeat.set(3, 2);
-  const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(bw + 0.5, 0.12, 2.1)), keep(new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.85 })));
-  roof.position.set(wall.position.x, wallH + 0.35, F.z0 - 0.85);
-  roof.rotation.x = 0.42;
-  roof.castShadow = true;
-  house.add(roof);
-  // la porte à deux battants : le bas fermé, le haut ouvert (le noir de l'intérieur)
-  const doorWood = keep(barnWood(9, true, 'warm'));
-  const doorMat = keep(new THREE.MeshStandardMaterial({ map: doorWood, roughness: 0.85 }));
   const dW = 1.05;
-  const dH = Math.max(1.85, 0.9 * u + 1.3);
-  const dark = keep(new THREE.MeshStandardMaterial({ color: 0x1d1610, roughness: 1 }));
-  mesh(new THREE.PlaneGeometry(dW, dH), dark, [door.x, dH / 2, F.z0 - 0.39], null, false);
-  mesh(new THREE.BoxGeometry(dW, dH * 0.5, 0.05), doorMat, [door.x, dH * 0.25, F.z0 - 0.37]);
-  const top = mesh(new THREE.BoxGeometry(dW, dH * 0.48, 0.05), doorMat, [door.x - dW / 2, dH * 0.75, F.z0 - 0.37 + dW / 2]);
-  top.geometry.translate(dW / 2, 0, 0);
-  top.position.x = door.x - dW / 2;
-  top.position.z = F.z0 - 0.37;
-  top.rotation.y = -1.9; // (le battant du haut ouvert contre le mur)
-  // l'encadrement de la porte
-  for (const sx of [-1, 1]) mesh(new THREE.BoxGeometry(0.1, dH + 0.08, 0.1), postMat, [door.x + sx * (dW / 2 + 0.05), (dH + 0.08) / 2, F.z0 - 0.36]);
-  mesh(new THREE.BoxGeometry(dW + 0.3, 0.1, 0.12), postMat, [door.x, dH + 0.05, F.z0 - 0.36]);
+  if (!travel) {
+    const lime = keep(limeWallTexture(6));
+    lime.repeat.set(2.2, 1.1);
+    const limeMat = keep(new THREE.MeshStandardMaterial({ map: lime, roughness: 0.95 }));
+    // (tout le bâtiment dans un groupe : userData.house, la chèvrerie de la ferme)
+    const house = new THREE.Group();
+    house.userData.house = true;
+    g.add(house);
+    const inHouse = (m) => {
+      house.add(m);
+      return m;
+    };
+    const wall = new THREE.Mesh(keep(new THREE.BoxGeometry(bw, wallH, 3)), limeMat);
+    wall.position.set(bx + bw / 2 - 0.6, wallH / 2, F.z0 - 1.9);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    house.add(wall);
+    // le toit de tuiles brunes, débordant
+    const tileTex = keep(canvasTex(128, 128, (c) => {
+      const rr = rng(4);
+      c.fillStyle = '#8a4b32';
+      c.fillRect(0, 0, 128, 128);
+      for (let y = 0; y < 128; y += 16) {
+        for (let x = (y / 16) % 2 ? -8 : 0; x < 128; x += 16) {
+          c.fillStyle = `rgb(${120 + rr() * 40},${60 + rr() * 25},${40 + rr() * 15})`;
+          c.beginPath();
+          c.ellipse(x + 8, y + 10, 8, 9, 0, 0, Math.PI);
+          c.fill();
+        }
+        c.fillStyle = 'rgba(40,20,10,0.35)';
+        c.fillRect(0, y + 14, 128, 2);
+      }
+    }, { key: 'pre-tiles' }));
+    tileTex.repeat.set(3, 2);
+    const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(bw + 0.5, 0.12, 2.1)), keep(new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.85 })));
+    roof.position.set(wall.position.x, wallH + 0.35, F.z0 - 0.85);
+    roof.rotation.x = 0.42;
+    roof.castShadow = true;
+    house.add(roof);
+    // la porte à deux battants : le bas fermé, le haut ouvert (le noir de l'intérieur)
+    const doorWood = keep(barnWood(9, true, 'warm'));
+    const doorMat = keep(new THREE.MeshStandardMaterial({ map: doorWood, roughness: 0.85 }));
+    const dH = Math.max(1.85, 0.9 * u + 1.3);
+    const dark = keep(new THREE.MeshStandardMaterial({ color: 0x1d1610, roughness: 1 }));
+    inHouse(mesh(new THREE.PlaneGeometry(dW, dH), dark, [door.x, dH / 2, F.z0 - 0.39], null, false));
+    inHouse(mesh(new THREE.BoxGeometry(dW, dH * 0.5, 0.05), doorMat, [door.x, dH * 0.25, F.z0 - 0.37]));
+    const top = inHouse(mesh(new THREE.BoxGeometry(dW, dH * 0.48, 0.05), doorMat, [door.x - dW / 2, dH * 0.75, F.z0 - 0.37 + dW / 2]));
+    top.geometry.translate(dW / 2, 0, 0);
+    top.position.x = door.x - dW / 2;
+    top.position.z = F.z0 - 0.37;
+    top.rotation.y = -1.9; // (le battant du haut ouvert contre le mur)
+    // l'encadrement de la porte
+    for (const sx of [-1, 1]) inHouse(mesh(new THREE.BoxGeometry(0.1, dH + 0.08, 0.1), postMat, [door.x + sx * (dW / 2 + 0.05), (dH + 0.08) / 2, F.z0 - 0.36]));
+    inHouse(mesh(new THREE.BoxGeometry(dW + 0.3, 0.1, 0.12), postMat, [door.x, dH + 0.05, F.z0 - 0.36]));
+  }
 
   // ---------------------------------------------------------------- le touret où grimper, la botte de paille
   const spoolWood = keep(barnWood(26, false, 'pale'));
@@ -357,30 +376,38 @@ export function paddockSet(stage, yard) {
   g.add(fill);
 
   // Les places des objets du jour : au sol devant la clôture du fond et sur sa lisse du haut (derrière le terrain : la
-  // balle ne roule pas jusque-là), accrochés à ses poteaux ; ni devant la porte ni sur le touret.
+  // balle ne roule pas jusque-là), accrochés à ses poteaux ; ni devant la porte ni sur le touret. (En voyage, la
+  // clôture du fond va jusqu'au coin de gauche : les places aussi.) Au sol, toutes serrées contre le décor (tight :
+  // extras.js) — ce qui y est posé ne passe ni dans les lisses, ni dans un poteau, la paille, le touret ou le mur ; une
+  // botte tient devant la clôture du fond ; la poule qui se promène se tourne le long du mur ou de la clôture (along)
+  // si elle n'y tient pas autrement ; la brouette ne tient nulle part (noExtras, plus bas).
   const spots = [];
   const topY = 0.92 * fH + 0.05;
-  for (let x = F.x0 + 3.7; x <= F.x1 - 2 * sR - 0.6; x += 0.35) {
-    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.32] });
+  const back0 = travel ? F.x0 + 0.45 : F.x0 + 3.7;
+  for (let x = back0; x <= F.x1 - 2 * sR - 0.6; x += 0.35) {
+    spots.push({ kind: 'floor', p: [x, 0, F.z0 + 0.48], tight: true, along: 0 });
     spots.push({ kind: 'perch', p: [x, topY, F.z0 + 0.07], face: 0 });
   }
-  for (const p of backPosts) if (p.x > F.x0 + 3.6 && p.x < F.x1 - 0.2) spots.push({ kind: 'hang', p: [p.x, 0.32 * fH + 0.06, F.z0 + 0.06], face: 0 });
+  for (const p of backPosts) if (p.x > back0 - 0.1 && p.x < F.x1 - 0.2) spots.push({ kind: 'hang', p: [p.x, 0.32 * fH + 0.06, F.z0 + 0.06], face: 0 });
   for (let z = F.z0 + 2 * sR + 1; z <= zNear; z += 0.35) spots.push({ kind: 'perch', p: [F.x1 - 0.07, topY, z], face: -Math.PI / 2 });
-  // (le long du mur chaulé de la chèvrerie, de part et d'autre de la porte : au pied du mur, appuyé, accroché)
+  // (le long du mur chaulé de la chèvrerie, de part et d'autre de la porte : au pied du mur, appuyé, accroché ; au sol,
+  // entre le mur, l'encadrement de la porte, le poteau du coin et la clôture de gauche)
   const wallZ = F.z0 - 0.4;
-  for (let x = bx - 0.3; x <= F.x0 + 3.2; x += 0.3) {
+  for (let x = bx - 0.3; !travel && x <= F.x0 + 3.2; x += 0.3) {
     if (Math.abs(x - door.x) < dW / 2 + 0.3) continue;
-    spots.push({ kind: 'floor', p: [x, 0, wallZ + 0.3] });
+    // (au sol, tous les 15 cm : entre la porte et le poteau du coin, la place est juste pour la poule qui se promène)
+    for (const dx of [0, 0.15]) if (Math.abs(x + dx - door.x) >= dW / 2 + 0.3) spots.push({ kind: 'floor', p: [x + dx, 0, wallZ + 0.42], tight: true, along: 0 });
     spots.push({ kind: 'lean', p: [x, 0, wallZ + 0.04] });
     spots.push({ kind: 'hang', p: [x, Math.min(1.25, wallH - 0.6), wallZ + 0.005], face: 0 });
   }
   // (le long de la clôture de gauche et de droite, hors du terrain : au sol, sur la lisse du haut ; pas sur la paille)
   for (let z = F.z0 + 0.8; z <= zNear + 0.2; z += 0.35) {
-    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z] }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
-    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z] });
+    if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z], tight: true, along: Math.PI / 2 }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
+    if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z], tight: true, along: Math.PI / 2 });
   }
   // (le réverbère de la nuit : contre le mur, juste à droite de la porte, son bras au-dessus d'elle — là où rien ne se
-  // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait)
+  // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait ; en voyage, à la même
+  // place, juste derrière la clôture du fond)
   // (sa lumière : en hauteur, devant le terrain, du côté de la caméra. On voit la chèvre de devant et d'en haut, et
   // elle attend la balle au premier rang : une lumière au-dessus du terrain l'éclairait par le dos, le côté qu'on voit
   // restait noir. D'ici, ce côté reçoit la lumière partout où elle court, jusqu'au fond)
@@ -390,14 +417,26 @@ export function paddockSet(stage, yard) {
   return {
     group: g,
     props: {},
-    dims: { ...F, halfW: half, back: zFar, front: zNear },
+    // (houseX1 : le bout droit de la chèvrerie, au fond à gauche — rien du lieu du voyage n'y est posé, away.js ; null
+    // en voyage, sans chèvrerie)
+    dims: { ...F, halfW: half, back: zFar, front: zNear, houseX1: travel ? null : F.x0 + 3.7 },
     kind: 'pre',
     outdoor: true,
     skyMesh: sky,
     ground: [groundMat, tuftMat, ...far.mats],
     // (la terre battue : mouillée et assombrie comme l'herbe, ambience.js)
-    groundMarks: [dirtMat],
+    groundMarks: dirtMat ? [dirtMat] : [],
+    // (en voyage, le fond du lieu deux fois moins loin au-delà de 6 m : la caméra du jeu, d'en haut, ne voit pas
+    // l'horizon ; ses arbres et sa construction viennent derrière la clôture, là où sont ceux de la ferme — away.js)
+    awayFold: 0.5,
+    // (en paysage, la caméra du jeu, plus basse, ne voit que 3 ou 4 m derrière la clôture : des choses moyennes du lieu
+    // s'y posent, sur les côtés — la demi-largeur de la clôture du fond, away.js : MID)
+    awayMid: (F.x1 - F.x0) / 2,
     spots,
+    // (la brouette, 1,6 m de long, ne tient nulle part dans ce petit pré : entre la porte et le poteau du coin, ni le
+    // long des clôtures ; à gauche de la porte, hors de l'image en portrait, et en paysage, elle dépasse du haut de
+    // l'image. Un autre objet du jour est tiré à sa place : pickExtras)
+    noExtras: ['brouette'],
     lampSpot,
     lampFace: Math.PI,
     lampLight,

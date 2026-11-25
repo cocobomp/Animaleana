@@ -1449,6 +1449,11 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
       if (q.y < v.y0 + 20 || q.y > v.y1) return false;
       if (onHead(S, { x0: v.x0 - 1e4, x1: v.x1 + 1e4, y0: q.y - sw, y1: q.y + sw }, 1.5)) return false;
     }
+    // (ni devant ce qu'on lui tend, rangé au fond : le filet, la mangeoire — l'hirondelle vole devant le mur du fond)
+    const d = mid.distanceTo(st.camera.position);
+    const ym = st.project(mid).y;
+    const band = { x0: v.x0, x1: v.x1, y0: ym - sw, y1: ym + sw };
+    if (S.obs.some((ob) => ob.rect && ob.far > d - 0.3 && overlap(band, ob.rect, 6))) return false;
     return true;
   }
 

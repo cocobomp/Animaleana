@@ -14,6 +14,12 @@ import { loadFarm, farmStage, run } from './fixtures/farmStage.js';
 import { fakeCtx as fakeCtxOf } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
 
+/**
+ * Rendre la main un instant entre deux scènes d'un long test : sans cela, un test de plus d'une minute sur une machine
+ * lente (la mise en ligne, sur GitHub) bloque Vitest, qui finit en « Timeout calling onTaskUpdate » même quand tout passe.
+ */
+const yieldTurn = () => new Promise((resolve) => setImmediate(resolve));
+
 const LOOKS = Object.keys(AWAY_LOOKS);
 
 describe('les lieux de voyage (pur)', () => {
@@ -555,9 +561,10 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     return { sc, ctx, game: H.farmFeed(ctx) };
   }
 
-  it('cheval et vache, nourrir : le fond du lieu se voit (au moins 5 % de l\'image)', () => {
+  it('cheval et vache, nourrir : le fond du lieu se voit (au moins 5 % de l\'image)', async () => {
     for (const species of ['horse', 'cow']) {
       for (const look of ['plage', 'montagne', 'pampa', 'normandie']) {
+        await yieldTurn();
         const { sc, ctx, game } = feedScene(species, look);
         run(ctx, game, sc, 2);
         expect(awayShare(sc), `${species} ${look}`).toBeGreaterThan(0.05);
@@ -567,9 +574,10 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     }
   }, 120000);
 
-  it('chien, chat, lapin en voyage : ni la façade de la maison ni le clapier de la ferme ; le lieu se voit derrière la clôture basse', () => {
+  it('chien, chat, lapin en voyage : ni la façade de la maison ni le clapier de la ferme ; le lieu se voit derrière la clôture basse', async () => {
     for (const species of ['dog', 'cat', 'rabbit']) {
       for (const look of ['plage', 'montagne']) {
+        await yieldTurn();
         const set = C.decorFor(species, 'ailleurs', { amb, look, kinds: [], seed: 2 });
         const { a, sc } = P.makePetStage({ species, breed: species === 'dog' ? 'labrador' : null, set });
         const D = sc.decor;
@@ -726,11 +734,12 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
     }
   }, 180000);
 
-  it('le lapin en voyage : sa caisse de transport ne rentre jamais dans son pelage, et rien du jour n\'est posé dedans', () => {
+  it('le lapin en voyage : sa caisse de transport ne rentre jamais dans son pelage, et rien du jour n\'est posé dedans', async () => {
     // (la caisse, plus grande que la maisonnette, rentrait dans l'arrière-train du nain, du bélier et du rex ; un
     // coquillage du jour était posé dedans)
     for (const [breed, ageDays] of [['nain', 900], ['belier', 900], ['rex', 900], ['geant_flandres', 900], ['belier', 2]]) {
       for (const act of ['feed', 'brush']) {
+        await yieldTurn();
         const set = C.decorFor('rabbit', 'ailleurs', { amb, look: 'plage', kinds: ['coquillage', 'crabe', 'seau'], seed: 2 });
         const { a, sc } = P.makePetStage({ species: 'rabbit', breed, ageDays, set });
         const D = sc.decor;

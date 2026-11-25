@@ -47,19 +47,39 @@ describe('animation du cheval réaliste', () => {
   });
 
   it('les oreilles et l\'encolure ne dérivent pas à l\'arrêt (10 min)', () => {
-    const md = horse('pur_sang');
-    const st = { v: 0, moving: false, graze: 0, feeder: 0, turn: 0, fat: 1 };
-    const neck0 = md.neck.quaternion.clone();
-    let maxEar = 0;
-    let maxNeck = 0;
-    for (let f = 0; f < 6000; f++) {
-      md.anim.update(0.1, st, {});
-      maxEar = Math.max(maxEar, angle(md.ears[0].quaternion, md.ears[0].userData.restQ));
-      maxNeck = Math.max(maxNeck, angle(md.neck.quaternion, neck0));
+    // (l'animation tire au sort son départ et ses repos : un tirage fixe, sinon le plus grand pli d'oreille varie de 36
+    // à 45° d'une fois à l'autre et le test tombait parfois à 45,1°, sans aucune dérive)
+    const random = Math.random;
+    let seed = 4242;
+    Math.random = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+    try {
+      const md = horse('pur_sang');
+      const st = { v: 0, moving: false, graze: 0, feeder: 0, turn: 0, fat: 1 };
+      const neck0 = md.neck.quaternion.clone();
+      let maxEar = 0;
+      let maxNeck = 0;
+      let sum1 = 0; // (pli moyen des 5 premières minutes)
+      let sum2 = 0; // (et des 5 dernières)
+      for (let f = 0; f < 6000; f++) {
+        md.anim.update(0.1, st, {});
+        const e = angle(md.ears[0].quaternion, md.ears[0].userData.restQ);
+        maxEar = Math.max(maxEar, e);
+        if (f < 3000) sum1 += e;
+        else sum2 += e;
+        maxNeck = Math.max(maxNeck, angle(md.neck.quaternion, neck0));
+      }
+      expect(maxEar).toBeLessThan(45);
+      // rien ne s'accumule : le pli moyen des 5 dernières minutes est celui des 5 premières (mesuré sur 30 tirages :
+      // 7,6 à 7,9° des deux côtés ; une dérive le ferait monter)
+      expect(Math.abs(sum2 / 3000 - sum1 / 3000)).toBeLessThan(1);
+      expect(maxNeck).toBeLessThan(40);
+      md.dispose();
+    } finally {
+      Math.random = random;
     }
-    expect(maxEar).toBeLessThan(45);
-    expect(maxNeck).toBeLessThan(40);
-    md.dispose();
   });
 });
 

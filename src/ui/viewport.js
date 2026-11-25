@@ -30,7 +30,8 @@ export function visibleArea(vv, innerHeight) {
   return { top, bottom, height, keyboard: innerHeight - height > 120 };
 }
 
-const isField = (el) => el?.tagName === 'INPUT' && /^(text|search|email|number|tel|url|password)$/.test(el.type || 'text');
+// (la zone de texte de 💌 Ton avis aussi : le clavier ne la cache pas)
+const isField = (el) => el?.tagName === 'TEXTAREA' || (el?.tagName === 'INPUT' && /^(text|search|email|number|tel|url|password)$/.test(el.type || 'text'));
 
 /** Plus proche parent qui défile (fenêtre, panneau, écran), ou null. */
 function scroller(el) {

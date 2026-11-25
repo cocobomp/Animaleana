@@ -151,6 +151,12 @@ const TOPICS = [
     title: { fr: 'Dormir', en: 'Sleep' },
     keys: 'dormir nuit lit maison sleep night bed house',
     steps: { fr: ['Va à la maison le soir (à partir de 19 h).', 'Touche « Dormir jusqu\'au matin ».'], en: ['Go to the house in the evening (from 7 pm).', 'Tap "Sleep until morning".'] } },
+  // 💌 Ton avis (src/ui/feedbackWindow.js)
+  { id: 'feedback', icon: '💌', where: null,
+    title: { fr: 'Donner mon avis sur le jeu', en: 'Give my feedback on the game' },
+    keys: 'avis idée idées bug bogue suggestion proposer développeur créateur feedback opinion idea ideas suggest developer creator',
+    steps: { fr: ['Touche ⚙️ Réglages (ou ⋯ Plus) → 💌 Ton avis.', 'Choisis un smiley, ce que c\'est (une idée, un bug…) et écris un petit mot.', 'Touche « Envoyer ». Sans Internet, il partira tout seul plus tard.'],
+      en: ['Tap ⚙️ Settings (or ⋯ More) → 💌 Your feedback.', 'Pick a smiley, what it is (an idea, a bug…) and write a few words.', 'Tap "Send". Without internet, it will be sent by itself later.'] } },
   // Concours de beauté (src/ui/beauty.js)
   { id: 'beauty', icon: '🎀', where: 'showground',
     title: { fr: 'Concours de beauté : préparer et présenter', en: 'Beauty contest: prepare and show' },

@@ -13,6 +13,7 @@ import { disposeModel } from '../game/models/animalModel.js';
 import { openExport, pickRestoreFile } from './saveGame.js'; // 💾 sauvegarder / 📂 restaurer une partie (fichier)
 import { cloudCard, syncMessage } from './cloudAccount.js'; // ☁️ compte Google (facultatif)
 import { onCloudChange, cloudState, partyLink, linkToAccount, linkNewParty, deleteKind, deleteParty } from '../cloud/account.js';
+import { openFeedback } from './feedbackWindow.js'; // 💌 ton avis
 
 const SKINS = [0xf5d3b8, 0xe8b796, 0xd09a72, 0xa9714b, 0x7a4b2e, 0x4e2f1e];
 const HAIRS = [0x1b1411, 0x4a2f1d, 0x8a5a2b, 0xd2a557, 0xe8d39a, 0xa63a1f, 0x9a9a9a, 0x5b4bb5, 0xe26fa6];
@@ -86,6 +87,8 @@ export function showProfiles(ui) {
         }, `💾 ${t(profiles.length > 1 ? 'sv_saveMany' : 'sv_save')}`) : null,
         h('button', { onClick: () => pickRestoreFile(ui) }, `📂 ${t('sv_restore')}`)),
       h('p', { class: 'note save-why' }, t('sv_why')),
+      // 💌 Ton avis : un petit message pour le développeur (src/ui/feedbackWindow.js).
+      h('button', { class: 'fb-open', onClick: () => openFeedback(ui) }, `💌 ${t('fb_btn')}`),
       // État du cache hors ligne (src/main.js) : prêt, en préparation, ou impossible en http.
       h('p', { class: 'offline' }, window.offlineState
         ? `${{ ready: '✅', preparing: '⏳', unavailable: 'ℹ️', file: '📁' }[window.offlineState]} ${t({ ready: 'offlineReady', preparing: 'offlinePreparing', unavailable: 'offlineUnavailable', file: 'offlineFile' }[window.offlineState])}`

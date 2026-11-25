@@ -48,6 +48,7 @@ import { controlsHelp } from './keys.js';
 import { memoriesOf } from '../sim/memories.js'; // 📸 ses souvenirs
 import { quirksOf, knows, FEAR_CALM } from '../sim/horseQuirks.js'; // 🔍 ce que tu sais de lui
 import { starsView, starHowKey, starPerk } from '../sim/horseStars.js'; // ⭐ ses étoiles
+import { openFeedback } from './feedbackWindow.js'; // 💌 ton avis
 
 const MOOD_EMOJI = { happy: '😄', ok: '🙂', sad: '😢', sick: '🤒' };
 const CARE_ICONS = {
@@ -756,6 +757,7 @@ export function openSettings(ui) {
   const VOLUMES = [[0.4, 'volLow'], [0.7, 'volMid'], [1, 'volHigh']];
   ui.openPanel({
     title: () => `⚙️ ${t('settings')}`, // (une fonction : le titre suit la langue choisie dans le panneau)
+    kind: 'settings', // (💌 ton avis : « panel:settings »)
     render: () => {
       const quality = (() => {
         try { return localStorage.getItem('animaleana.quality') ?? g.quality; } catch { return g.quality; }
@@ -839,6 +841,8 @@ export function openSettings(ui) {
         isDesk() ? null : h('p', { class: 'note' }, controlsHelp()), // (au doigt : la ligne des touches, comme avant)
         // Revoir le tutoriel guidé (src/ui/tutorial.js).
         ui.tutorial ? h('button', { class: 'big', onClick: () => ui.tutorial.replay() }, `🎓 ${t('tuto_replay')}`) : null,
+        // 💌 Ton avis : un petit message pour le développeur (src/ui/feedbackWindow.js).
+        h('button', { class: 'big', onClick: () => openFeedback(ui) }, `💌 ${t('fb_btn')}`),
         // Mise à jour du jeu installé (src/ui/updates.js) : cherche, puis bandeau « Recharger » si une version est prête.
         h('button', {
           class: 'big',

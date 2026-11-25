@@ -222,7 +222,8 @@ export function roundPenSet(stage, pen) {
     ecol.set([0.72, 0.62, 0.42, d < F + 0.4 ? 0.85 : 0], i * 4);
   }
   edge.setAttribute('color', new THREE.BufferAttribute(ecol, 4));
-  mesh(edge, keep(new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, depthWrite: false, roughness: 1 })), [0, 0.006, 0], [-Math.PI / 2, 0, 0], false);
+  const edgeMat = keep(new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, depthWrite: false, roughness: 1 }));
+  mesh(edge, edgeMat, [0, 0.006, 0], [-Math.PI / 2, 0, 0], false).userData.grass = true; // (sous la neige, il disparaît : ambience.js)
   // la piste : un anneau (en travers : x de la texture ; le long : y, répété), plus foncé, traces de sabots
   const w = Math.max(0.55, 0.42 * (pen.L ?? 2.4) + 0.25);
   const track = new THREE.RingGeometry(R - w / 2, R + w / 2, 128, 1);
@@ -509,6 +510,8 @@ export function roundPenSet(stage, pen) {
     outdoor: true,
     skyMesh: sky,
     ground: [grassMat, sandMat, tuftMat, hillMat],
+    // (la piste et le liseré : mouillés et assombris comme le sable, ambience.js)
+    groundMarks: [trackMat, edgeMat],
     spots: places,
     lampSpot,
     lampFace: faceIn(ba - 0.3),

@@ -115,6 +115,12 @@ function lampPost(keep, h) {
 /**
  * Habille la scène selon l'ambiance amb (careAmbience). decor : { group, outdoor, sky, ground, spots, dims, room } ;
  * stage : la scène (marks, box, camera, scene). Renvoie { update(dt, stage), dispose(), lamp, lampPost, rain, snow }.
+ *
+ * Ce qu'un grand décor de jeu peut ajouter (le pré de la balle, le rond de longe) : fogScale (un nombre, ou une
+ * fonction de la scène relue à chaque image : fogFromCamera), lampSpot et lampFace (la place du réverbère, hors du
+ * terrain), lampLight et lampReach (la place de sa lumière, au-dessus du terrain, et la distance où l'animal passe),
+ * groundMarks (les matières posées sur le sol : piste, liseré, terre battue), weatherBox (où tombent pluie et neige).
+ * Le pied du réverbère est noté dans decor.avoid le temps de l'ambiance : les objets du jour ne s'y posent pas.
  */
 export function applyAmbience(stage, decor, amb) {
   const keep = bag();
@@ -250,6 +256,18 @@ export function applyAmbience(stage, decor, amb) {
     });
   }
   if (night) for (const m of grounds) m.color.multiplyScalar(0.6);
+  // (ce qui est posé sur le sol — la piste du rond, son liseré, la terre battue devant la porte — : mouillé et assombri
+  // comme lui, sinon il luit la nuit sur le sol sombre ; son dessin reste. Sous la neige, la couche blanche recouvre la
+  // piste ; le liseré et la terre battue disparaissent avec l'herbe, userData.grass)
+  for (const m of (decor.groundMarks ?? []).filter(Boolean)) {
+    if (grounds.includes(m)) continue;
+    saved.push({ m, color: m.color.clone(), rough: m.roughness, map: m.map });
+    if (amb.wet) {
+      m.color.multiplyScalar(0.72);
+      m.roughness = Math.min(m.roughness, 0.55);
+    }
+    if (night) m.color.multiplyScalar(0.6);
+  }
   if (out && amb.snowy) {
     const st = keep(snowTexture());
     st.repeat.set(6, 6);

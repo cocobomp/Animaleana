@@ -131,7 +131,9 @@ export function paddockSet(stage, yard) {
   groundMat.userData.main = true;
   mesh(new THREE.PlaneGeometry(60, 60), groundMat, [xC, 0, zFar], [-Math.PI / 2, 0, 0], false);
   const door = V(F.x0 + 1.6, 0, F.z0 - 0.35);
-  mesh(new THREE.PlaneGeometry(2.6, 2.2), keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 })), [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
+  const dirtMat = keep(new THREE.MeshStandardMaterial({ map: keep(dirtTexture()), transparent: true, depthWrite: false, roughness: 1 }));
+  const dirt = mesh(new THREE.PlaneGeometry(2.6, 2.2), dirtMat, [door.x, 0.003, door.z + 0.9], [-Math.PI / 2, 0, 0], false);
+  dirt.userData.grass = true; // (sous la neige, elle disparaît comme l'herbe : ambience.js)
 
   // touffes d'herbe (cartes en croix) et pâquerettes, semées partout sauf au milieu du terrain
   const tuftTex = keep(tuftTexture());
@@ -363,6 +365,8 @@ export function paddockSet(stage, yard) {
     outdoor: true,
     skyMesh: sky,
     ground: [groundMat, tuftMat, ...far.mats],
+    // (la terre battue : mouillée et assombrie comme l'herbe, ambience.js)
+    groundMarks: [dirtMat],
     spots,
     lampSpot,
     lampFace: Math.PI,

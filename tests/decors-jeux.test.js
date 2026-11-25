@@ -63,6 +63,16 @@ function lampAt(L, p) {
   if (L.distance > 0) k *= Math.max(0, 1 - (d / L.distance) ** 4) ** 2;
   return L.userData.base * k;
 }
+/**
+ * La lumière d'une lampe reçue en p par une face verticale tournée vers la caméra cam (le flanc, le poitrail ou la
+ * croupe qu'on voit) : lampAt, fois le cosinus entre cette face et la direction de la lampe. Une lampe au-dessus de
+ * l'animal et derrière lui ne l'éclaire que par le dos : lampAt est fort, le côté qu'on voit reste noir.
+ */
+function lampFacing(L, p, cam) {
+  const toLamp = L.getWorldPosition(V()).sub(p).normalize();
+  const n = cam.clone().sub(p).setY(0).normalize();
+  return lampAt(L, p) * Math.max(0, n.dot(toLamp));
+}
 /** Tout ce que le groupe a créé (géométries, matières, textures) ; la fonction rendue dit ce qui n'est pas libéré. */
 function watchFreed(group) {
   const all = new Set();
@@ -183,10 +193,15 @@ describe('la balle de la chèvre, dans le pré', () => {
       if (amb.lamp) {
         // le réverbère : contre la clôture du fond, hors du terrain où la balle roule
         expect(A.lampPost.position.z).toBeLessThan(d.z0 + 0.2);
-        // sa lumière, partout où la chèvre court : bien plus que le ciel de nuit
+        // sa lumière, partout où la chèvre court : bien plus que le ciel de nuit ; et sur le côté d'elle qu'on voit (la
+        // caméra est devant le terrain, en haut : une lumière au-dessus du terrain la laissait noire au premier rang)
         const y = mid(sc).y;
         for (const x of [d.x0 + 0.9, (d.x0 + d.x1) / 2, d.x1 - 0.9]) {
-          for (const z of [d.back, (d.back + d.front) / 2, d.front]) expect(lampAt(A.lamp, V(x, y, z)), `lampe en ${x.toFixed(1)}, ${z.toFixed(1)}`).toBeGreaterThan(1.2);
+          for (const z of [d.back, (d.back + d.front) / 2, d.front]) {
+            const p = V(x, y, z);
+            expect(lampAt(A.lamp, p), `lampe en ${x.toFixed(1)}, ${z.toFixed(1)}`).toBeGreaterThan(1.2);
+            expect(lampFacing(A.lamp, p, sc.camera.position), `côté vu en ${x.toFixed(1)}, ${z.toFixed(1)}`).toBeGreaterThan(0.6);
+          }
         }
       }
       const X = pre.extras;
@@ -230,6 +245,35 @@ describe('la balle de la chèvre, dans le pré', () => {
     }
     expect(n).toBeGreaterThan(8);
   }, 120000);
+
+  it("la nuit, pendant la partie : le côté de la chèvre qu'on voit reçoit la lumière, lancer après lancer", () => {
+    const amb = careAmbience({ hour: 23, weather: 'clear', season: 'summer' });
+    for (const o of [{ w: 390, h: 600 }, { w: 360, h: 740, young: true }]) {
+      const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, 'g1'), young: !!o.young, w: o.w, h: o.h });
+      const game = goatPlay.goatPlay3dGame(ctx);
+      run(ctx, game, sc, 0.5);
+      const L = sc.decor.ambienceParts.lamp;
+      const d = sc.decor.dims;
+      let low = Infinity;
+      let frames = 0;
+      const look = () => {
+        run(ctx, game, sc, 1 / 15);
+        low = Math.min(low, lampFacing(L, mid(sc), sc.camera.position));
+        frames++;
+      };
+      // (au fond à gauche, au fond à droite, au milieu : elle traverse le terrain, la ramène et attend au premier rang)
+      for (const [x, z] of [[d.x0 + 1.1, d.back + 0.2], [d.x1 - 1.1, d.back + 0.2], [(d.x0 + d.x1) / 2, (d.back + d.front) / 2]]) {
+        game.down(sc.project(V(x, 0, z)));
+        expect(game.peek().fly).toBe(true);
+        for (let k = 0; k < 400 && game.peek().ball !== 'hand'; k++) look();
+        for (let k = 0; k < 8; k++) look();
+      }
+      expect(frames).toBeGreaterThan(60);
+      expect(low, `côté vu, ${o.w}×${o.h}`).toBeGreaterThan(0.6);
+      game.destroy();
+      sc.dispose();
+    }
+  }, 60000);
 
   it('sans ambiance (jeu ouvert sans le jeu complet) : le pré d\'avant, rien d\'ajouté', () => {
     const { sc, ctx } = farmStage({ species: 'goat' });

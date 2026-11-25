@@ -14,6 +14,7 @@ import { canvasTex, rng } from './textures.js';
 import { bag, barnWood, strawBale, lumpy } from './barnProps.js';
 import { limeWallTexture } from './farmBarn.js';
 import { farAway, skySphere, GRASS_TINT } from './outdoor.js';
+import { fogFromCamera } from './ambience.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -363,6 +364,8 @@ export function paddockSet(stage, yard) {
     lampSpot,
     // (la pluie, la neige : sur tout le terrain, pas seulement autour de la chèvre)
     weatherBox: { x0: F.x0 - 1.5, x1: F.x1 + 1.5, z0: F.z0 - 2, z1: F.z1 + 2.5, top: Math.max(3, 3 * u + 1) },
+    // (la caméra voit tout le terrain de loin, plus loin encore en portrait : la brume recule d'autant)
+    fogScale: fogFromCamera(),
     layout() {},
     /** Le ciel, la brume, les reflets du pré (à rendre au départ : voir goatPlay3d.js). */
     sky(st) {

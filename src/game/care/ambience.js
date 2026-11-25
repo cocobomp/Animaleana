@@ -14,6 +14,21 @@ import { animalBox } from './extras.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
+/** La distance de la caméra à l'animal pour laquelle la brume est réglée (un soin ordinaire : 4,4 m). */
+export const FOG_CAM = 4.4;
+
+/**
+ * La brume d'un décor que la caméra voit de loin (le pré de la balle, le rond de longe) : plus loin d'autant, pour que
+ * l'animal n'y soit pas plus noyé que dans un soin ordinaire. Au téléphone en portrait, la caméra recule pour tout
+ * faire tenir en largeur : la brume est relue à chaque image (decor.fogScale, applyAmbience). min : jamais moins.
+ */
+export function fogFromCamera(min = 1) {
+  return (st) => {
+    const d = st?.camPos && st?.camTarget ? st.camPos.distanceTo(st.camTarget) : 0;
+    return Math.max(min, d / FOG_CAM);
+  };
+}
+
 /** Le rôle d'une lumière du décor : 'sun', 'sky', 'fill' (ou celui qu'on lui a donné). */
 function roleOf(l) {
   if (l.userData.role) return l.userData.role;
@@ -162,17 +177,22 @@ export function applyAmbience(stage, decor, amb) {
 
   // ---------------------------------------------------------------- le ciel, la brume
   const sc = stage.scene;
+  // (un grand décor — le rond de longe, ses arbres tout autour ; le pré de la balle, vu de loin — : la brume plus loin,
+  // decor.fogScale ; une fonction : relue à chaque image, la caméra recule ou avance)
+  const fogK = typeof decor.fogScale === 'function' ? decor.fogScale : null;
+  const fogAt = (st) => Math.max(1, (fogK ? fogK(st) : decor.fogScale) || 1);
+  const near0 = amb.foggy ? 3 : amb.snowy ? 8 : amb.wet ? 9 : 14;
+  const far0 = amb.foggy ? 16 : amb.snowy || amb.wet ? 26 : 36;
+  let fog = null;
   if (out) {
     // (le ciel : decor.skyMesh, ou decor.sky quand c'est lui — le pré de la balle et le rond de longe ont une méthode sky)
     const skyM = decor.skyMesh ?? (decor.sky?.isMesh ? decor.sky : null);
     skyM?.setColors?.(skyTop, skyLow);
     sc.background = skyLow.clone();
     const fogCol = skyLow.clone().lerp(skyTop, 0.3);
-    // (un grand décor — le rond de longe, ses arbres tout autour — : la brume plus loin, decor.fogScale)
-    const k = Math.max(1, decor.fogScale ?? 1);
-    const near = (amb.foggy ? 3 : amb.snowy ? 8 : amb.wet ? 9 : 14) * k;
-    const far = (amb.foggy ? 16 : amb.snowy || amb.wet ? 26 : 36) * k;
-    sc.fog = new THREE.Fog(fogCol, near, far);
+    const k = fogAt(stage);
+    fog = new THREE.Fog(fogCol, near0 * k, far0 * k);
+    sc.fog = fog;
     // (le brouillard, la nuit : le ciel se voit à peine)
     if (skyM && (amb.foggy || night)) skyM.material.fog = false;
   }
@@ -380,13 +400,19 @@ export function applyAmbience(stage, decor, amb) {
     rain,
     snow,
     group: g,
-    update(dt) {
+    update(dt, st = stage) {
       time += dt;
       rain?.userData.step(Math.min(dt, 0.1));
       snow?.userData.step(Math.min(dt, 0.1));
       for (const o of overlays) o.tex.offset.y = (o.tex.offset.y + o.speed * dt) % 1;
       // (la flamme de la lampe vacille un peu)
       if (lamp) lamp.intensity = lamp.userData.base * (1 + Math.sin(time * 13) * 0.02 + Math.sin(time * 7.3) * 0.015);
+      // (la caméra a reculé ou avancé : la brume suit, decor.fogScale)
+      if (fogK && fog && st.scene?.fog === fog) {
+        const k = fogAt(st);
+        fog.near = near0 * k;
+        fog.far = far0 * k;
+      }
     },
     dispose() {
       for (const s of saved) {

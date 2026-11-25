@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { canvasTex, rng } from './textures.js';
 import { bag, barnWood, strawBale, lumpy } from './barnProps.js';
 import { skySphere, GRASS_TINT, LEAVES } from './outdoor.js';
+import { fogFromCamera } from './ambience.js';
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
@@ -509,9 +510,10 @@ export function roundPenSet(stage, pen) {
     spots: places,
     lampSpot,
     lampFace: faceIn(ba - 0.3),
-    // (la pluie, la neige : sur tout le rond, la caméra en fait le tour ; la brume plus loin, ses arbres tout autour)
+    // (la pluie, la neige : sur tout le rond, la caméra en fait le tour ; la brume plus loin, ses arbres tout autour, et
+    // plus loin encore quand la caméra recule — au téléphone en portrait —, le cheval n'y est jamais noyé)
     weatherBox: { x0: -F - 2.5, x1: F + 2.5, z0: -F - 2.5, z1: F + 2.5, top: Math.max(3.5, 2.6 * u + 1.5) },
-    fogScale: (F * 4 + 40) / 36,
+    fogScale: fogFromCamera((F * 4 + 40) / 36),
     layout() {},
     /** Le ciel, la brume, les reflets du pré (à rendre au départ : voir lunge3d.js). */
     sky(st) {

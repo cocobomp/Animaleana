@@ -320,4 +320,22 @@ describe('🗣️ textes en français et en anglais', () => {
     }
     i18n.setLang('fr');
   });
+  it('en français, un verbe pour dire quoi faire (« faits » veut déjà dire les cartes 🃏 : pas de « Les 2 faits : », ni « Fait : »)', async () => {
+    i18n.setLang('fr');
+    const help = await import('../src/ui/help.js');
+    const money = help.searchHelp('coffre surprise')[0];
+    const texts = [
+      ...[...keys(), ['news_money_d', {}]].map(([k, params]) => [k, i18n.t(k, params)]),
+      ...money.steps.fr.map((s, i) => [`aide money ${i}`, s]),
+    ];
+    for (const [k, s] of texts) {
+      expect(s, k).not.toMatch(/faits\s*[:,]/);
+      expect(s, k).not.toMatch(/(^|[.!?]\s*)Fait\s*:/);
+    }
+    expect(i18n.t('dc_new', { list: 'x · y' })).toContain('Fais les 2 : un coffre surprise 🎁 !');
+    expect(i18n.t('dc_newOne', { list: 'x' })).toContain('Réussis-le : un coffre surprise 🎁 !');
+    expect(i18n.t('news_money_d')).toContain('2 défis : fais-les et un coffre surprise 🎁 s\'ouvre !');
+    expect(money.steps.fr.join(' ')).toContain('Fais les 2 : un coffre surprise 🎁 !');
+    expect(i18n.t('dc_done', { what: 'fais 2 petits boulots' })).toBe('🎯 Défi réussi (fais 2 petits boulots) !');
+  });
 });

@@ -44,6 +44,33 @@ describe('☀️ returnBonus (logique pure)', () => {
     expect(PB.returnBonus(p, '2026-11-25', '2026-11-20')).toEqual({ coins: 0, word: false });
     expect(PB.returnBonus(p, '2026-11-26', '2026-11-20')).toEqual({ coins: 10, word: true });
   });
+  it('la date du téléphone remise en arrière : rien, et la date notée ne recule pas (pas de +10 sans fin)', () => {
+    const p = started();
+    p.lastVisit = '2026-11-25';
+    expect(PB.returnBonus(p, '2026-11-26', '2026-11-20')).toEqual({ coins: 10, word: true });
+    expect(PB.returnBonus(p, '2026-11-25', '2026-11-20')).toEqual({ coins: 0, word: false });
+    expect(p.lastVisit).toBe('2026-11-26');
+    expect(PB.returnBonus(p, '2026-11-26', '2026-11-20')).toEqual({ coins: 0, word: false });
+    expect(PB.returnBonus(p, '2025-01-01', '2024-06-01')).toEqual({ coins: 0, word: false });
+    expect(p.lastVisit).toBe('2026-11-26');
+    expect(PB.returnBonus(p, '2026-11-27', '2026-11-20')).toEqual({ coins: 10, word: true });
+    // en tout, 2 vrais jours : +20, pas plus
+    const q = started();
+    q.lastVisit = '2026-11-25';
+    let coins = 0;
+    for (const d of ['2026-11-26', '2026-11-25', '2026-11-26', '2026-11-25', '2026-11-26', '2026-11-27']) coins += PB.returnBonus(q, d, '2026-11-20').coins;
+    expect(coins).toBe(20);
+  });
+  it('Game.welcomeBack : la partie rouverte avec la date remise en arrière ne donne rien', () => {
+    const p = started();
+    const { log, welcomeBack } = fakeGame(p);
+    welcomeBack(new Date(2026, 10, 26, 10).getTime());
+    welcomeBack(new Date(2026, 10, 25, 10).getTime());
+    welcomeBack(new Date(2026, 10, 26, 11).getTime());
+    expect(p.money).toBe(110);
+    expect(p.lastVisit).toBe('2026-11-26');
+    expect(log).toHaveLength(2);
+  });
   it('pas de série : 5 jours sautés, toujours +10 (rien ne se perd, rien ne grossit)', () => {
     const p = started();
     p.lastVisit = '2026-11-01';
@@ -68,7 +95,7 @@ describe('☀️ returnBonus (logique pure)', () => {
     expect(PB.returnBonus(p, '2026-11-25', '2026-11-20')).toEqual({ coins: 0, word: true });
   });
   it('lecture tolérante : lastVisit absent ou abîmé (ancienne partie) → c\'est un retour ; date bizarre → rien', () => {
-    for (const bad of [undefined, null, 3, {}, []]) {
+    for (const bad of [undefined, null, 3, {}, [], 'hier', '9999-99-99x', '']) {
       const p = started();
       p.lastVisit = bad;
       expect(PB.returnBonus(p, '2026-11-25', '2026-11-20').coins).toBe(10);

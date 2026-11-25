@@ -141,7 +141,7 @@ const TOPICS = [
     title: { fr: 'Gagner de l\'argent', en: 'Earn money' },
     keys: 'argent pièces gagner travail boulot laine lait tirelire objectif prime bravo étoiles défi défis coffre retour money coins earn job wool milk piggy bank goal bonus stars challenge chest',
     steps: { fr: ['Fais des petits boulots (panneau près de la maison).', 'Termine des quêtes (📖 Journal) : l\'histoire de la ferme ⭐ et celles que tu rejoins.',
-      'Touche tes pièces 🪙 en haut : ta tirelire, ton objectif 🎯, et tes 2 défis du jour. Les 2 faits : un coffre surprise 🎁 !',
+      'Touche tes pièces 🪙 en haut : ta tirelire, ton objectif 🎯, et tes 2 défis du jour. Fais les 2 : un coffre surprise 🎁 !',
       'Un soin ou une corvée en mini-jeu : ★★★ +5 🪙, ★★ +2 🪙 (20 🪙 au plus par jour). Et quand tu reviens jouer un autre jour : +10 🪙.'],
     en: ['Do odd jobs (board near the house).', 'Complete quests (📖 Journal): the farm\'s story ⭐ and the ones you join.',
       'Tap your coins 🪙 at the top: your piggy bank, your goal 🎯 and your 2 daily challenges. Do both: a surprise chest 🎁!',

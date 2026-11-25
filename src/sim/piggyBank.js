@@ -94,13 +94,17 @@ export const RETURN_BONUS = 10;
  * src/sim/saveFile.js localDay). Renvoie { coins (0 en bac à sable), word (on fête : « Bon retour ! ») }. La date est
  * notée à chaque fois (profile.lastVisit, créé au premier usage) : rien juste après la fin de l'histoire du début le
  * même jour. Rien pendant l'histoire du début, ni le jour où la partie a été créée (createdDay : ce n'est pas un
- * retour). Une ancienne partie (sans lastVisit) qui revient : le cadeau. Pas de série : sauter des jours ne change rien.
+ * retour). Une ancienne partie (sans lastVisit, ou abîmé) qui revient : le cadeau. Pas de série : sauter des jours ne
+ * change rien. La date notée ne recule jamais : un jour plus ancien (la date du téléphone remise en arrière) ne donne
+ * rien et ne change rien, sinon avancer puis reculer la date redonnerait +10 à chaque fois (les 'AAAA-MM-JJ' se
+ * comparent comme du texte). Le prix de cette protection : un téléphone réglé une fois loin dans le futur, et plus
+ * de cadeau jusqu'à cette date-là. On n'y perd rien.
  */
 export function returnBonus(profile, today, createdDay = '') {
   const none = { coins: 0, word: false };
   if (!profile || typeof today !== 'string' || !today) return none;
-  const last = typeof profile.lastVisit === 'string' ? profile.lastVisit : '';
-  if (last === today) return none;
+  const last = typeof profile.lastVisit === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(profile.lastVisit) ? profile.lastVisit : '';
+  if (last && today <= last) return none; // (le même jour, ou un jour plus ancien : rien)
   profile.lastVisit = today;
   if (profile.tutorial?.done === false) return none;
   if (!last && createdDay === today) return none; // (une partie toute neuve : pas encore un retour)

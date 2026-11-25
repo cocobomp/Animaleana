@@ -246,9 +246,15 @@ export function dressAway(stage, decor, look, amb = null) {
   const ring = decor.kind === 'roundPen' ? Math.max(3, decor.dims?.F ?? 5) + 4 : 0;
   const cx = ring ? 0 : (box.min.x + box.max.x) / 2;
   const zb = Math.min(decor.dims?.back ?? decor.room?.back ?? box.min.z - 0.6, box.min.z - 0.6);
+  // (le pré de la balle : la caméra le regarde d'en haut et ne voit le sol que jusqu'à une douzaine de mètres derrière
+  // la clôture — ses propres arbres sont à 6 m. Entre 6 et 14 m, le fond s'y resserre (decor.awayFold : 0,5, deux fois
+  // moins profond), et tout ce qui est plus loin avance d'autant : les arbres et la construction du lieu viennent dans
+  // l'image, devant ses collines. Pas au bord de la mer : la plage, ses cabanes et ses dunes sont mesurées jusqu'à l'eau)
+  const fold = ring || L.far.includes('mer') ? 1 : THREE.MathUtils.clamp(decor.awayFold ?? 1, 0.3, 1);
+  const deep = (depth) => depth - THREE.MathUtils.clamp(depth - 6, 0, 8) * (1 - fold);
   /** Une place du fond : side (m, sur le côté), depth (m, au-delà du bord) → { x, z, ry } (ry : tourné vers nous). */
   const at = (side, depth) => {
-    if (!ring) return { x: cx + side, z: zb - depth, ry: 0 };
+    if (!ring) return { x: cx + side, z: zb - deep(depth), ry: 0 };
     const R = ring + depth;
     const a = side / R;
     return { x: Math.sin(a) * R, z: -Math.cos(a) * R, ry: -a };
@@ -908,8 +914,9 @@ export function dressAway(stage, decor, look, amb = null) {
     // (au-delà de la clôture du fond du décor, s'il en a une plus loin que son bord : le pré de la balle)
     const from = Math.max(0, zb - Math.min(zb, decor.dims?.z0 ?? zb)) + 0.2;
     for (const [kind, side, depth] of NEAR[look] ?? []) {
-      // (au pré de la balle, la chèvrerie occupe le fond à gauche : rien dedans)
-      if (decor.dims?.x0 !== undefined && cx + side * kS < decor.dims.x0 + 3.7) continue;
+      // (au pré de la balle de la ferme, la chèvrerie occupe le fond à gauche : rien dedans — en voyage, elle n'y est
+      // pas, dims.houseX1 est nul)
+      if (decor.dims?.houseX1 != null && cx + side * kS < decor.dims.houseX1) continue;
       const o = nearProp(kind);
       if (o) place(o, side * kS, from + depth * kD, (r() - 0.5) * 0.5, true, 0.5);
     }

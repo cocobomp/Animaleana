@@ -818,6 +818,38 @@ describe('la balle de la chèvre et la longe, en voyage', () => {
     sc.dispose();
   }, 60000);
 
+  it('la balle en voyage : pas la chèvrerie de la ferme, une clôture tout le long du fond ; le lieu se voit derrière, en portrait comme en paysage', () => {
+    const amb = careAmbience({ hour: 15, weather: 'clear', season: 'summer' });
+    // (au téléphone en portrait, la caméra d'en haut voit une douzaine de mètres derrière la clôture : le chalet, les
+    // sapins, les collines du lieu ; en paysage, plus près du terrain, les trois choses des Alpes juste derrière)
+    for (const [w, h, least] of [[390, 600, 0.05], [360, 740, 0.08], [844, 390, 0.01]]) {
+      const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', amb, 'g1', 'montagne'), w, h });
+      const game = goatPlay.goatPlay3dGame(ctx);
+      const pre = sc.decor;
+      pre.group.traverse((o) => {
+        expect(o.userData?.house, 'la chèvrerie de la ferme').toBeFalsy();
+      });
+      // (le rocher, le panneau et le petit sapin juste derrière la clôture, et le chalet : rien n'est retiré à gauche,
+      // là où la chèvrerie se tenait)
+      expect(pre.away.landmarks.length).toBe(4);
+      run(ctx, game, sc, 1.5);
+      expect(awayShare(sc), `le lieu dans l'image, ${w}×${h}`).toBeGreaterThan(least);
+      game.destroy();
+      sc.dispose();
+    }
+    // (la nuit, le réverbère juste derrière la clôture du fond : dans aucune des choses du lieu)
+    const night = careAmbience({ hour: 23, weather: 'clear', season: 'summer' });
+    const { sc, ctx } = farmStage({ species: 'goat', set: setOf('goat', 'etable', night, 'g1', 'montagne') });
+    const game = goatPlay.goatPlay3dGame(ctx);
+    run(ctx, game, sc, 0.5);
+    const pre = sc.decor;
+    const post = new THREE.Box3().setFromObject(pre.ambienceParts.lampPost).expandByScalar(0.1);
+    for (const it of pre.away.landmarks) expect(new THREE.Box3().setFromObject(it.o).intersectsBox(post), 'une chose du lieu dans le réverbère').toBe(false);
+    expect(post.max.z).toBeLessThan(pre.dims.z0 + 0.1);
+    game.destroy();
+    sc.dispose();
+  }, 90000);
+
   for (const [look, amb] of [
     ['plage', careAmbience({ hour: 16, weather: 'clear', season: 'summer' })],
     ['montagne', careAmbience({ hour: 23, weather: 'snow', season: 'winter' })],
@@ -838,6 +870,10 @@ describe('la balle de la chèvre et la longe, en voyage', () => {
       const pen = sc.decor;
       expect(pen.kind).toBe('roundPen');
       expect(pen.away?.look).toBe(look);
+      // (l'écurie de la ferme est restée à la ferme : pas même cachée)
+      pen.group.traverse((o) => {
+        expect(o.userData?.house, "l'écurie de la ferme").toBeFalsy();
+      });
       const F = pen.dims.F;
       // (ce qui reste du rond : rien de visible loin de la clôture, sauf le fond du lieu et le ciel)
       for (const o of pen.group.children) {

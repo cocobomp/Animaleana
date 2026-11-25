@@ -463,4 +463,47 @@ describe('les objets du jour au rond et au pré : à leur place (sans caméra fi
     }
     pen.dispose();
   });
+
+  it('en voyage, ni la chèvrerie au fond du pré, ni l\'écurie au loin du rond : une clôture tout le long du fond', async () => {
+    const { roundPenSet } = await import('../src/game/care/roundPen.js');
+    const { paddockSet } = await import('../src/game/care/paddock.js');
+    const st = { high: false, marks: { u: 0.7 } };
+    /** Les bâtiments de la ferme (userData.house) : la chèvrerie du pré, l'écurie du rond. */
+    const houses = (d) => {
+      let n = 0;
+      d.group.traverse((o) => {
+        if (o.userData?.house) n++;
+      });
+      return n;
+    };
+    const yard = { xC: 0, half: 1.6, zFar: -1, depth: 2 };
+    for (const travel of [false, true]) {
+      const pen = roundPenSet(st, { R: 3.4, F: 4.6, u: 1, L: 2.4, travel });
+      expect(houses(pen), `rond, voyage ${travel}`).toBe(travel ? 0 : 1);
+      pen.dispose();
+      const pre = paddockSet(st, { ...yard, travel });
+      const d = pre.dims;
+      expect(houses(pre), `pré, voyage ${travel}`).toBe(travel ? 0 : 1);
+      // (la terre battue devant la porte : à la ferme seulement)
+      expect(pre.groundMarks.length).toBe(travel ? 0 : 1);
+      // (le mur prend le fond à gauche, à la ferme ; en voyage, la clôture du fond va jusqu'au coin, ses places aussi —
+      // aucune derrière elle, là où était le mur)
+      const backLeft = pre.spots.filter((s) => s.p[0] < d.x0 + 3 && Math.abs(s.p[2] - (d.z0 + 0.07)) < 0.02 && s.kind === 'perch');
+      expect(backLeft.length > 0, `places sur la clôture du fond, à gauche, voyage ${travel}`).toBe(travel);
+      expect(pre.spots.some((s) => s.p[2] < d.z0 - 0.1)).toBe(!travel);
+      expect(d.houseX1 != null).toBe(!travel);
+      // (les lisses du fond : à la ferme, à droite de la chèvrerie ; en voyage, d'un coin à l'autre)
+      const rails = [];
+      pre.group.traverse((o) => {
+        if (o.isMesh && o.geometry.type === 'BoxGeometry' && o.geometry.parameters.depth === 0.04 && Math.abs(o.position.z - (d.z0 + 0.07)) < 0.01) rails.push(new THREE.Box3().setFromObject(o));
+      });
+      expect(rails.length).toBe(3);
+      for (const b of rails) {
+        expect(b.max.x).toBeGreaterThan(d.x1 - 0.1);
+        if (travel) expect(b.min.x).toBeLessThan(d.x0 + 0.1);
+        else expect(b.min.x).toBeGreaterThan(d.x0 + 3);
+      }
+      pre.dispose();
+    }
+  });
 });

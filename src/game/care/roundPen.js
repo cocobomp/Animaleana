@@ -4,7 +4,8 @@
 // passe devant), une barrière, une botte de paille et un seau au pied de la clôture ; autour, l'herbe et ses touffes,
 // des arbres, des collines, le ciel ; le soleil de l'après-midi.
 //
-// pen = { R (rayon de la piste, m), F (rayon de la clôture, m), u (taille du cheval : 1 pour un selle français) }.
+// pen = { R (rayon de la piste, m), F (rayon de la clôture, m), u (taille du cheval : 1 pour un selle français), travel
+// (en voyage : sans l'écurie de la ferme au loin) }.
 // Le centre du rond est l'origine. Même forme que les autres décors (stallSet, paddockSet) :
 // { group, dims, props, layout, update, dispose } ; sky(stage) pose le ciel et la brume (à rendre au départ). Il suit
 // l'heure, la météo et la saison du jeu (pen.season : l'herbe, les arbres nus et les sapins l'hiver, des feuilles
@@ -364,38 +365,44 @@ export function roundPenSet(stage, pen) {
   } }));
 
   // ---------------------------------------------------------------- au loin : l'écurie, des arbres, des collines
-  const barnWall = keep(barnWood(31, true, 'warm'));
-  barnWall.repeat.set(4, 1);
-  const wallMat = keep(new THREE.MeshStandardMaterial({ map: barnWall, roughness: 0.9 }));
-  const roofMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c4434, roughness: 0.8 }));
-  const stable = new THREE.Group();
-  const sw = 8;
-  const sh = 2.6;
-  const sd = 4;
-  const body = new THREE.Mesh(keep(new THREE.BoxGeometry(sw, sh, sd)), wallMat);
-  body.position.y = sh / 2;
-  body.castShadow = true;
-  stable.add(body);
-  const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(sw + 0.5, 0.14, sd * 0.62)), roofMat);
-  for (const sd2 of [-1, 1]) {
-    const rf = roof.clone();
-    rf.position.set(0, sh + 0.62, sd2 * sd * 0.26);
-    rf.rotation.x = sd2 * 0.52;
-    rf.castShadow = true;
-    stable.add(rf);
+  // (l'écurie de la ferme, au fond à gauche ; en voyage, elle est restée à la ferme : pen.travel — le lieu du voyage
+  // fait le tour du rond, away.js)
+  const stableAt = V(-F - 7.5, 0, -F - 9);
+  if (!pen.travel) {
+    const barnWall = keep(barnWood(31, true, 'warm'));
+    barnWall.repeat.set(4, 1);
+    const wallMat = keep(new THREE.MeshStandardMaterial({ map: barnWall, roughness: 0.9 }));
+    const roofMat = keep(new THREE.MeshStandardMaterial({ color: 0x7c4434, roughness: 0.8 }));
+    const stable = new THREE.Group();
+    stable.userData.house = true;
+    const sw = 8;
+    const sh = 2.6;
+    const sd = 4;
+    const body = new THREE.Mesh(keep(new THREE.BoxGeometry(sw, sh, sd)), wallMat);
+    body.position.y = sh / 2;
+    body.castShadow = true;
+    stable.add(body);
+    const roof = new THREE.Mesh(keep(new THREE.BoxGeometry(sw + 0.5, 0.14, sd * 0.62)), roofMat);
+    for (const sd2 of [-1, 1]) {
+      const rf = roof.clone();
+      rf.position.set(0, sh + 0.62, sd2 * sd * 0.26);
+      rf.rotation.x = sd2 * 0.52;
+      rf.castShadow = true;
+      stable.add(rf);
+    }
+    const doorMat = keep(new THREE.MeshStandardMaterial({ color: 0x3a2616, roughness: 0.9 }));
+    for (let i = 0; i < 3; i++) {
+      const d = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.0, 1.9)), doorMat);
+      d.position.set(-2.4 + i * 2.4, 0.95, sd / 2 + 0.01);
+      stable.add(d);
+      const top = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.06, 0.12)), keep(new THREE.MeshStandardMaterial({ color: 0xefe6d6, roughness: 0.8 })));
+      top.position.set(d.position.x, 1.96, sd / 2 + 0.012);
+      stable.add(top);
+    }
+    stable.position.copy(stableAt);
+    stable.rotation.y = 0.45;
+    g.add(stable);
   }
-  const doorMat = keep(new THREE.MeshStandardMaterial({ color: 0x3a2616, roughness: 0.9 }));
-  for (let i = 0; i < 3; i++) {
-    const d = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.0, 1.9)), doorMat);
-    d.position.set(-2.4 + i * 2.4, 0.95, sd / 2 + 0.01);
-    stable.add(d);
-    const top = new THREE.Mesh(keep(new THREE.PlaneGeometry(1.06, 0.12)), keep(new THREE.MeshStandardMaterial({ color: 0xefe6d6, roughness: 0.8 })));
-    top.position.set(d.position.x, 1.96, sd / 2 + 0.012);
-    stable.add(top);
-  }
-  stable.position.set(-F - 7.5, 0, -F - 9);
-  stable.rotation.y = 0.45;
-  g.add(stable);
   const trunkMat = keep(new THREE.MeshStandardMaterial({ color: 0x5b4330, roughness: 1 }));
   const trunkGeo = keep(new THREE.CylinderGeometry(0.12, 0.18, 1.8, 8));
   // (tout autour du rond : la caméra suit le cheval et fait le tour, il y a des arbres de tous les côtés ; en instances,
@@ -407,7 +414,7 @@ export function roundPenSet(stage, pen) {
     const d = F + 22 + r() * 8;
     const x = Math.cos(a) * d;
     const z = Math.sin(a) * d;
-    if (Math.hypot(x - stable.position.x, z - stable.position.z) < 6) continue;
+    if (Math.hypot(x - stableAt.x, z - stableAt.z) < 6) continue;
     spots.push({ x, z, sc: 1.1 + r() * 0.9 });
   }
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, spots.length);

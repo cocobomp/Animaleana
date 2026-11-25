@@ -198,8 +198,11 @@ function overCoat(sc, it) {
 function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
   const X = sc.decor.extras;
   const rep = { bad: [], phases: {}, kinds: new Set(), first: null, frames: 0, fixed: 0 };
-  const v = sc.view;
-  const inImage = (q) => !q.behind && q.x > v.x0 && q.x < v.x1 && q.y > v.y0 && q.y < v.y1;
+  // (la vue du moment : le téléphone peut tourner en pleine partie)
+  const inImage = (q) => {
+    const v = sc.view;
+    return !q.behind && q.x > v.x0 && q.x < v.x1 && q.y > v.y0 && q.y < v.y1;
+  };
   let k = 0;
   const check = (phase) => {
     k++;
@@ -293,7 +296,7 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
   }, 180000);
   afterEach(() => new Promise((resolve) => setImmediate(resolve)));
 
-  function horsePlay({ game: which, place, w, h, amb: ambKey, day, look = null }) {
+  function horsePlay({ game: which, place, w, h, amb: ambKey, day, look = null, turn = null }) {
     sameLuck(4242 + day);
     const amb = careAmbience(AMB[ambKey]);
     const a = H.animal.createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, ageDays: 900, seed: 77 });
@@ -323,7 +326,17 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
       const q = shape.points(0).map((p) => sc.project(p));
       return { x0: Math.min(...q.map((p) => p.x)), x1: Math.max(...q.map((p) => p.x)), y0: Math.min(...q.map((p) => p.y)), y1: Math.max(...q.map((p) => p.y)) };
     };
-    const rep = playAll(sc, ctx, game, stepsOf(which === 'feed' ? 'feed-horse' : which, ctx, game, sc), { head, offered, headRect });
+    const steps = stepsOf(which === 'feed' ? 'feed-horse' : which, ctx, game, sc);
+    // (le téléphone tourné en pleine partie : la scène se recadre dans l'autre sens)
+    if (turn) {
+      const [tw, th] = turn;
+      steps[0] = [steps[0][0], steps[0][1], () => {
+        const v2 = H.frame.fitView(tw, th, 400, 360);
+        ctx.view = v2;
+        sc.resize(tw, th, v2);
+      }];
+    }
+    const rep = playAll(sc, ctx, game, steps, { head, offered, headRect });
     if (process.env.DBG) console.log(which, place, w, ambKey, day, JSON.stringify(rep.phases), [...rep.kinds], rep.bad.slice(0, 5));
     game.destroy();
     sc.dispose();
@@ -332,7 +345,8 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
 
   const share = (r, phase = null) => (phase ? r.phases[phase].fixed / r.phases[phase].n : r.fixed / Math.max(1, r.frames));
 
-  // [jeu, lieu, largeur, hauteur, ambiance, jour, famille du voyage, part du temps avec une chose posée à voir, étape]
+  // [jeu, lieu, largeur, hauteur, ambiance, jour, famille du voyage, part du temps avec une chose posée à voir, étape,
+  // le téléphone tourné après la première étape]
   const CASES = [
     // (nourrir au box en portrait : le fer sortait de l'image dès que la caméra se rapprochait de la mangeoire)
     ['feed', 'box', 390, 600, 'jour', 6, null, 0.6, 'mange'],
@@ -347,10 +361,12 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
     ['treat', 'ailleurs', 390, 600, 'jour', 2, 'plage', 0.5, null],
     ['feed', 'box', 390, 600, 'neige', 3, null, 0.5, null],
     ['water', 'pre', 844, 390, 'pluie', 5, null, 0.5, null],
+    ['treat', 'box', 390, 600, 'jour', 2, null, 0.6, null, [844, 390]],
+    ['feed', 'box', 844, 390, 'jour', 4, null, 0.6, null, [390, 600]],
   ];
-  for (const [game, place, w, h, amb, day, look, min, phase] of CASES) {
-    it(`${game} ${place}${look ? ` (${look})` : ''} ${w} × ${h}, ${amb}, jour ${day} : une chose posée à voir, jamais devant lui`, () => {
-      const r = horsePlay({ game, place, w, h, amb, day, look });
+  for (const [game, place, w, h, amb, day, look, min, phase, turn] of CASES) {
+    it(`${game} ${place}${look ? ` (${look})` : ''} ${w} × ${h}${turn ? ` puis ${turn[0]} × ${turn[1]}` : ''}, ${amb}, jour ${day} : une chose posée à voir, jamais devant lui`, () => {
+      const r = horsePlay({ game, place, w, h, amb, day, look, turn });
       expect(r.bad, r.bad.slice(0, 6).join(' ; ')).toEqual([]);
       expect(r.first, 'rien de posé de toute la partie').not.toBeNull();
       expect(share(r), JSON.stringify(r.phases)).toBeGreaterThanOrEqual(min);

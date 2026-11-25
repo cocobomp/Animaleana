@@ -11,10 +11,12 @@ y accéder. À tenir à jour à chaque changement d'hébergement.
 | Jeu en ligne (adresse principale) | Firebase Hosting (Google) | Réseau mondial de Google (CDN), pas de choix de pays possible | Les fichiers du jeu seulement, aucune donnée de joueur | https://lafermeamadichelle.web.app |
 | Jeu en ligne (ancienne adresse, gardée tant que le dépôt est public) | GitHub Pages | Réseau mondial de serveurs (CDN) | Les fichiers du jeu seulement, aucune donnée de joueur | https://cocobomp.github.io/Animaleana/ |
 | Sauvegardes en ligne | Cloud Firestore (Google, projet `lafermeamadichelle`) | **Suisse : région `europe-west6` (Zurich)**, créée le 17 octobre 2026, impossible à changer ensuite | Les parties (profils, animaux, progression) de chaque compte, rien d'autre | Console : https://console.firebase.google.com/project/lafermeamadichelle/firestore |
+| Avis des joueurs (« 💌 Ton avis ») | Cloud Firestore (même base, collection `feedback`) | **Suisse : `europe-west6` (Zurich)** | Les petits messages des joueurs : un smiley, une sorte, un texte court et un contexte sans donnée personnelle (voir « Les avis des joueurs ») | Console : https://console.firebase.google.com/project/lafermeamadichelle/firestore/databases/-default-/data/~2Ffeedback |
 | Connexion avec Google | Firebase Authentication (Google) | Infrastructure mondiale de Google, pas de choix de pays possible | L'identifiant du compte Google et son adresse e-mail (fournis par Google) ; aucun mot de passe n'est gardé par le jeu | Console : https://console.firebase.google.com/project/lafermeamadichelle/authentication/users |
 | Parties sur l'appareil | Mémoire du navigateur (localStorage) | Sur le téléphone ou l'ordinateur lui-même | La partie, même sans Internet | — |
 
-Ce qui peut être en Suisse l'est : les sauvegardes (la seule donnée de joueur gardée en ligne).
+Ce qui peut être en Suisse l'est : les sauvegardes et les avis des joueurs (les seules données gardées en ligne ; les
+avis sont anonymes).
 Les fichiers du jeu sont publics et identiques pour tout le monde : ils passent par un réseau
 mondial pour aller vite, sans donnée personnelle. La connexion Google est gérée par Google
 lui-même, dans ses centres de données ; Firebase ne permet pas de choisir un pays pour elle.
@@ -34,6 +36,7 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Domaines autorisés pour la connexion | https://console.firebase.google.com/project/lafermeamadichelle/authentication/settings |
 | Base de données Firestore | https://console.firebase.google.com/project/lafermeamadichelle/firestore |
 | Règles de sécurité Firestore | https://console.firebase.google.com/project/lafermeamadichelle/firestore/rules |
+| 💌 Avis des joueurs (collection `feedback`) | https://console.firebase.google.com/project/lafermeamadichelle/firestore/databases/-default-/data/~2Ffeedback |
 | Hébergement (Hosting) | https://console.firebase.google.com/project/lafermeamadichelle/hosting |
 | Paramètres du projet | https://console.firebase.google.com/project/lafermeamadichelle/settings/general |
 | Comptes de service (Google Cloud) | https://console.cloud.google.com/iam-admin/serviceaccounts?project=lafermeamadichelle |
@@ -49,6 +52,7 @@ connexion. C'est pour cela que l'hébergement Firebase est prévu.
 | Règles de sécurité de la synchro v2 (`rev`, `gen`) | ✅ mises en ligne le 17 octobre 2026, avant la v2 | Voir « Mettre les règles en ligne » plus bas (à refaire à chaque changement de `firestore.rules`) |
 | Base des sauvegardes | ✅ créée à **Zurich** (`europe-west6`) | Une partie = un document `users/<compte>/saves/<partie>` |
 | Règles de sécurité | ✅ en ligne (fichier `firestore.rules` du dépôt) | Chaque compte ne lit et n'écrit que ses propres parties ; sans compte, rien ; taille limitée |
+| Règles des avis des joueurs (`feedback`) | ⚠️ à publier à la main | Tant qu'elles ne sont pas en ligne, les avis restent sur les appareils et repartent plus tard (voir « Les avis des joueurs ») |
 | Hébergement | ✅ en ligne | https://lafermeamadichelle.web.app |
 | Mise en ligne automatique depuis GitHub | ✅ à chaque mise à jour de `main` | Sans clé : GitHub prouve à Google que c'est ce dépôt (Workload Identity Federation) |
 
@@ -143,6 +147,54 @@ Les anciennes versions du jeu (encore en cache sur un appareil) ne peuvent alors
 3. Dans le jeu (`npx vite`, mode développement seulement) : dans la console du navigateur,
    `localStorage.setItem('animaleana.cloud.emulator', '127.0.0.1:9099:8080')` (« hôte » seul = ports 9099 et 8089),
    puis recharger : la connexion et la synchro passent par les émulateurs.
+
+## 💌 Les avis des joueurs
+
+Dans le jeu, « 💌 Ton avis » (menu ⋯ Plus, ⚙️ Réglages et écran des profils) : un smiley (😍 🙂 😐 😕), une sorte
+(idée, bug, j'aime, autre) et un petit texte. Code : `src/cloud/feedback.js` (le message, l'envoi, la file d'attente),
+`src/ui/feedbackWindow.js` (la fenêtre), `firestore.rules` (ce que la base accepte), tests `tests/feedback.test.js` et
+`tests/firestoreRules.test.js`.
+
+**Les lire** : console Firestore, collection `feedback` :
+https://console.firebase.google.com/project/lafermeamadichelle/firestore/databases/-default-/data/~2Ffeedback
+(ou https://console.firebase.google.com/project/lafermeamadichelle/firestore → `feedback`). Un avis = un document,
+`createdAt` dit quand il est arrivé. Le jeu ne peut ni les relire ni les effacer : une fois lus, on les efface dans la
+console (sélectionner le document → **Supprimer le document**).
+
+**Publier les règles (une fois, à la main)** : l'action GitHub ne publie que les fichiers du jeu, pas les règles.
+Tant que les règles avec `feedback` ne sont pas en ligne, la base refuse les avis : le jeu les garde sur l'appareil
+(20 au plus) et les renvoie au démarrage suivant ou quand le réseau revient. Rien ne se perd, et l'enfant voit
+« Merci ! Il partira dès que possible 💌 ». Pour les publier (un compte qui a le droit de modifier les règles) :
+
+    npx firebase-tools deploy --only firestore:rules --project lafermeamadichelle
+
+(ou coller le fichier `firestore.rules` dans https://console.firebase.google.com/project/lafermeamadichelle/firestore/rules
+puis **Publier**). Les règles des sauvegardes ne changent pas.
+
+**Ce qui est stocké** (exactement ces champs, les règles refusent tout le reste) :
+
+| Champ | Contenu |
+|---|---|
+| `text` | Le message, 500 caractères au plus. Les adresses e-mail, les numéros de téléphone et les prénoms des profils de l'appareil y sont remplacés par `[e-mail]`, `[téléphone]` et `[prénom]` avant de partir |
+| `mood` | `love` 😍, `happy` 🙂, `meh` 😐, `sad` 😕, ou `none` (pas de smiley : il y a alors un texte) |
+| `kind` | `idea` (idée), `bug`, `like` (j'aime) ou `other` (autre, ou rien de choisi) |
+| `lang`, `version` | Langue du jeu (`fr`, `en`) ; version et commit (par exemple `0.5.0+cb4307f`) |
+| `device`, `orientation` | `phone`, `tablet` ou `computer` ; `portrait` ou `landscape` |
+| `mode`, `level`, `day` | `sandbox` (bac à sable), `manage` (gestion) ou `none` (écran des profils) ; niveau ; jour du jeu |
+| `place`, `screen` | Le lieu du jeu (`maison`, `japon`…, et le bâtiment : `maison/stable`) ; ce qui était ouvert (`panel:animal`, `panel:settings`, `ride`, `activity:trail`, `map`, `build`, `profiles`…) |
+| `createdAt` | L'heure d'arrivée (celle du serveur, jamais celle de l'appareil) |
+
+**Pourquoi rien de personnel** : ni prénom, ni identifiant de partie, ni compte Google (pour un avis, Firebase est
+chargé SANS la connexion : la base ne sait pas qui écrit, même si l'enfant est connecté), ni e-mail. Le jeu ne
+garde pas l'adresse IP (Google la voit pour répondre, comme pour toute page web, mais elle n'est pas dans le
+document). La fenêtre rappelle « N'écris pas ton nom, ton adresse ni ton téléphone 🙂 », et le texte est nettoyé.
+
+**Limites** : sur l'appareil, 30 s entre deux avis et 5 par jour. Les règles bornent chaque document (champs, listes,
+tailles) mais pas leur nombre : comme tout formulaire sans compte, quelqu'un pourrait en écrire beaucoup en dehors
+du jeu. En cas d'abus : fermer la collection (`allow create: if false;` dans `firestore.rules`, puis publier), ou
+ajouter App Check.
+
+**Version « à emporter » (fichier)** : elle ne se connecte jamais à Internet ; ses avis restent sur l'ordinateur.
 
 ## Mise en ligne automatique
 

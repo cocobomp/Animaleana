@@ -359,6 +359,7 @@ export function applyAmbience(stage, decor, amb) {
   // ---------------------------------------------------------------- la lampe (la nuit ; le soir par gros temps)
   let lamp = null;
   let pole = null;
+  const avoid0 = decor.avoid;
   if (amb.lamp) {
     const light = new THREE.PointLight(0xffb866, 1, 0, 2);
     let at;
@@ -378,6 +379,8 @@ export function applyAmbience(stage, decor, amb) {
       g.add(post);
       pole = post;
       at = post.localToWorld(post.userData.light.clone());
+      // (son pied et sa lanterne : les objets du jour se posent à côté, jamais dedans — placeExtras, decor.avoid)
+      decor.avoid = [...(avoid0 ?? []), post.position.clone(), at.clone().setY(0)];
       if (decor.lampLight) {
         // (un terrain où l'animal tourne tout autour — le rond, le pré de la balle — : la lumière au-dessus, pour
         // éclairer le côté qu'on voit où qu'il soit ; le réverbère reste là, allumé)
@@ -435,6 +438,7 @@ export function applyAmbience(stage, decor, amb) {
       }
     },
     dispose() {
+      if (amb.lamp && out) decor.avoid = avoid0;
       for (const s of saved) {
         s.m.color.copy(s.color);
         s.m.roughness = s.rough;

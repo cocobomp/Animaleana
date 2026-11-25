@@ -349,9 +349,10 @@ export function paddockSet(stage, yard) {
     if (Math.abs(z - bale.position.z) > 0.75) spots.push({ kind: 'floor', p: [F.x0 + 0.35, 0, z] }, { kind: 'perch', p: [F.x0 + 0.07, topY, z], face: Math.PI / 2 });
     if (z > F.z0 + 2 * sR + 1) spots.push({ kind: 'floor', p: [F.x1 - 0.35, 0, z] });
   }
-  // (le réverbère de la nuit : contre la clôture du fond, à côté de la porte ; sa lumière, au-dessus du terrain, un peu
-  // vers nous : la chèvre court partout, on voit le côté qui nous regarde)
-  const lampSpot = V(F.x0 + 2.9, 0, F.z0 - 0.3);
+  // (le réverbère de la nuit : contre le mur, juste à droite de la porte, son bras au-dessus d'elle — là où rien ne se
+  // pose : plus loin, il prenait la place des objets du jour qu'on voit au téléphone en portrait ; sa lumière, au-dessus
+  // du terrain, un peu vers nous : la chèvre court partout, on voit le côté qui nous regarde)
+  const lampSpot = V(door.x + dW / 2 + 0.2, 0, F.z0 - 0.25);
   const lampLight = V(xC, Math.max(2.6, 1.8 * u + 1.6), zFar + depth * 0.6);
 
   return {
@@ -364,6 +365,7 @@ export function paddockSet(stage, yard) {
     ground: [groundMat, tuftMat, ...far.mats],
     spots,
     lampSpot,
+    lampFace: Math.PI,
     lampLight,
     lampReach: Math.hypot(half, depth * 0.6),
     // (la pluie, la neige : sur tout le terrain, pas seulement autour de la chèvre)

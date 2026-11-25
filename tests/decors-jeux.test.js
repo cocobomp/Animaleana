@@ -506,6 +506,40 @@ describe('la longe et la liberté, au rond', () => {
     }, 90000);
   }
 
+  it("la nuit, au gros plan de la fin de la longe (« C'est bon ») : le côté du cheval qu'on voit reste éclairé", () => {
+    const amb = careAmbience({ hour: 23, weather: 'clear', season: 'summer' });
+    for (const [w, h] of [[358, 520], [360, 740]]) {
+      const st = horseStage(amb, { w, h });
+      const { sc } = st;
+      const { ctx, game } = open(lunge3d.lunge3dGame, st);
+      const L = sc.decor.ambienceParts.lamp;
+      // (une séance comme un enfant la joue — ✨ pour l'allonger, 🐢 pour le calmer —, puis « C'est bon » : la caméra
+      // sort du rond pour le gros plan sur lui et l'enfant)
+      const tap = (ch) => ctx.buttons.find((b) => b.text.includes(ch))?.opts.onTap();
+      let lunge = Infinity;
+      for (let k = 0; k < 30 * 40 && !ctx.done; k++) {
+        const s = game.peek();
+        const [lo, hi] = s.gaits[s.gait];
+        if (k % 9 === 0) {
+          if (s.v < (lo + hi) / 2 - 5) tap('✨');
+          else if (s.v > (lo + hi) / 2 + 5) tap('🐢');
+        }
+        step(st, ctx, game, 1);
+        if (k > 30 && k % 10 === 0 && !ctx.done) lunge = Math.min(lunge, lampFacing(L, mid(sc), sc.camera.position));
+        if (s.value >= 12) ctx.pressStop();
+      }
+      expect(ctx.done, `${w}×${h} : la longe finie`).toBe(true);
+      let end = Infinity;
+      step(st, ctx, game, 30 * 5, (k) => {
+        if (k % 10 === 0) end = Math.min(end, lampFacing(L, mid(sc), sc.camera.position));
+      });
+      expect(lunge, `${w}×${h} : pendant la longe`).toBeGreaterThan(0.6);
+      expect(end, `${w}×${h} : au gros plan de la fin`).toBeGreaterThan(0.6);
+      game.destroy();
+      sc.dispose();
+    }
+  }, 120000);
+
   it('la nuit, jour après jour : rien ne se pose dans le réverbère du rond', () => {
     const amb = careAmbience({ hour: 23, weather: 'clear', season: 'summer' });
     for (let day = 1; day <= 6; day++) {

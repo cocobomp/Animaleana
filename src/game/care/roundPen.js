@@ -529,10 +529,23 @@ export function roundPenSet(stage, pen) {
     // (accroché au poteau, côté rond, entre la lisse du bas et celle du milieu)
     places.push({ kind: 'hang', p: [Math.cos(a) * (F - 0.13), 0.3 * fH + 0.06, Math.sin(a) * (F - 0.13)], face: faceIn(a) });
   }
-  // (le réverbère de la nuit : dehors, à côté de la paille ; sa lumière au-dessus du milieu, comme un projecteur : le
-  // cheval tourne tout autour, et l'on voit toujours le côté qui regarde le milieu)
+  // (le réverbère de la nuit : dehors, à côté de la paille. Sa lumière, comme un projecteur, toujours à la même hauteur
+  // et de la même force : au-dessus de la piste, entre la caméra et le cheval, jamais à plus d'un rayon de piste de lui.
+  // Pendant la longe, la caméra est vers le milieu : la lumière aussi, on voit le côté du cheval qui regarde le milieu ;
+  // au gros plan de la fin, la caméra sort du rond pour le voir de côté, avec l'enfant : la lumière la suit, le côté
+  // qu'on voit reste éclairé. Sans scène, au-dessus du milieu)
   const lampSpot = V(Math.cos(ba - 0.3) * (F + 0.8), 0, Math.sin(ba - 0.3) * (F + 0.8));
-  const lampLight = V(0, Math.max(3.2, 2.2 * u + 1.6), 0);
+  const lampH = Math.max(3.2, 2.2 * u + 1.6);
+  const lampAt = V(0, lampH, 0);
+  const lampLight = (st) => {
+    const h = st?.holder?.position;
+    const c = st?.camera?.position;
+    if (!h || !c) return lampAt.set(0, lampH, 0);
+    const dx = c.x - h.x;
+    const dz = c.z - h.z;
+    const k = Math.min(1, R / Math.max(1e-6, Math.hypot(dx, dz)));
+    return lampAt.set(h.x + dx * k, lampH, h.z + dz * k);
+  };
 
   return {
     group: g,

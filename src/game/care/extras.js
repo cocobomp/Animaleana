@@ -1562,7 +1562,10 @@ export function placeExtras(stage, decor, kinds, { seed = 1, life = [], min = 3,
 
   let solidWorld = null;
   const _tb = new THREE.Box3();
-  /** Sa boîte au sol en p (rad de côté, les trois quarts vers nous et vers le fond, h de haut) touche-t-elle une pièce pleine du décor qui dépasse du sol ? */
+  /**
+   * Sa boîte au sol en p (rad de côté, les trois quarts de rad vers nous et vers le fond, h de haut) touche-t-elle une
+   * pièce pleine du décor qui dépasse du sol (un mur, un poteau, une lisse, la paille) ? Les boîtes sont prises une fois.
+   */
   function touchesSolid(p, rad, h) {
     solidWorld ??= solidList().map((o) => ({ o, box: shownBox(o, new THREE.Box3()) }));
     _tb.min.set(p.x - rad, p.y + 0.03, p.z - rad * 0.75);

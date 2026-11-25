@@ -923,6 +923,10 @@ export function dressAway(stage, decor, look, amb = null) {
   }
   /** Une petite chose du pays, posée tout près (quelques pièces ; les brins, les cailloux en instances). */
   function nearProp(kind) {
+    // (tout près de lui, au sol : blanc seulement s'il neige. L'hiver dans les Alpes, en Islande, dans les Rocheuses, la
+    // neige reste sur les hauteurs — white —, pas sur le rocher ni le petit sapin posés sur l'herbe à côté de lui)
+    const snowy = !!amb?.snowy;
+    const cap = snowy ? snowCap : null;
     const o = new THREE.Group();
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -958,7 +962,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'chateau': {
         // (un château de sable : la butte, trois tours, un petit drapeau)
-        const sand = mat(white ? 0xe8edf2 : 0xe2c896);
+        const sand = mat(snowy ? 0xe8edf2 : 0xe2c896);
         add(keep(new THREE.CylinderGeometry(0.32, 0.38, 0.14, 10)), sand, [0, 0.07, 0]);
         lots(keep(new THREE.CylinderGeometry(1, 1.1, 1, 8)), sand, [[-0.18, 0.24, 0, 0.08, 0.22, 0.08], [0.18, 0.24, 0.02, 0.08, 0.22, 0.08], [0, 0.3, -0.12, 0.1, 0.34, 0.1]]);
         add(keep(new THREE.PlaneGeometry(0.1, 0.06)), mat(0xd84a3a, { side: THREE.DoubleSide }), [0.05, 0.56, -0.12]);
@@ -967,10 +971,10 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'oyats':
         // (les oyats des dunes : des touffes d'herbe raide)
-        tufts(white ? 0xc8ccc0 : 0xb4b878, 9, 0.5);
+        tufts(snowy ? 0xc8ccc0 : 0xb4b878, 9, 0.5);
         return o;
       case 'rocher':
-        add(rockGeo(), mat(white ? 0xdfe4e8 : 0x8a8a86), [0, 0.22, 0], [0.55, 0.4, 0.42]);
+        add(rockGeo(), mat(snowy ? 0xdfe4e8 : 0x8a8a86), [0, 0.22, 0], [0.55, 0.4, 0.42]);
         return o;
       case 'panneau': {
         // (le panneau jaune des chemins de randonnée, sur son poteau)
@@ -981,7 +985,7 @@ export function dressAway(stage, decor, look, amb = null) {
       case 'sapineau': {
         // (un jeune sapin)
         lots(coneGeo, mat(0x2f5a3a), [[0, 0.45, 0, 0.32, 0.3, 0.32], [0, 0.75, 0, 0.22, 0.22, 0.22]]);
-        if (snowCap) add(coneGeo, snowCap, [0, 0.95, 0], [0.1, 0.08, 0.1]);
+        if (cap) add(coneGeo, cap, [0, 0.95, 0], [0.1, 0.08, 0.1]);
         return o;
       }
       case 'lave':
@@ -1009,7 +1013,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'herbes': {
         // (l'herbe de la pampa : de grands plumets clairs sur une touffe verte)
-        tufts(white ? 0xb8c0b0 : 0x8a9a5a, 8, 0.45);
+        tufts(snowy ? 0xb8c0b0 : 0x8a9a5a, 8, 0.45);
         lots(keep(new THREE.ConeGeometry(1, 1, 6)), mat(0xeee2c4), [[-0.15, 0.85, 0, 0.06, 0.4, 0.06, 0, 0.15], [0.05, 0.95, 0.05, 0.06, 0.45, 0.06, 0, -0.05], [0.2, 0.8, -0.05, 0.05, 0.38, 0.05, 0, -0.2]]);
         return o;
       }
@@ -1017,14 +1021,14 @@ export function dressAway(stage, decor, look, amb = null) {
         // (une touffe de bambous)
         const list = [];
         for (let i = 0; i < 6; i++) list.push([(i - 2.5) * 0.12 + (r() - 0.5) * 0.05, 0.9, (r() - 0.5) * 0.2, 0.025, 1.8 + r() * 0.4, 0.025, 0, (r() - 0.5) * 0.08]);
-        lots(cyl(), mat(white ? 0x8aa070 : 0x6a9a3e), list);
+        lots(cyl(), mat(snowy ? 0x8aa070 : 0x6a9a3e), list);
         return o;
       }
       case 'pas': {
         // (les pierres plates d'un petit chemin de jardin)
         const list = [];
         for (let i = 0; i < 4; i++) list.push([(i - 1.5) * 0.3, 0.015, Math.sin(i * 1.3) * 0.12, 0.13, 0.03, 0.11, r() * 3]);
-        lots(cyl(), mat(white ? 0xe0e4e8 : 0x8a8a84), list);
+        lots(cyl(), mat(snowy ? 0xe0e4e8 : 0x8a8a84), list);
         return o;
       }
       case 'jarre': {
@@ -1035,7 +1039,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'lavande': {
         // (des touffes de lavande : violettes l'été, grises le reste de l'année)
-        const c = white ? 0xdfe4e8 : season === 'summer' ? 0x8a6ab8 : 0x8a9a88;
+        const c = snowy ? 0xdfe4e8 : season === 'summer' ? 0x8a6ab8 : 0x8a9a88;
         lots(keep(new THREE.SphereGeometry(1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)), mat(c), [[-0.25, 0, 0, 0.22, 0.3, 0.2], [0.15, 0, 0.08, 0.2, 0.26, 0.18], [0.35, 0, -0.1, 0.16, 0.22, 0.15]]);
         return o;
       }
@@ -1056,7 +1060,7 @@ export function dressAway(stage, decor, look, amb = null) {
       }
       case 'digitales': {
         // (des digitales roses le long du muret ; l'hiver, rien)
-        if (winter || white) return null;
+        if (winter || snowy) return null;
         tufts(0x4f7a34, 5, 0.25);
         const list = [];
         for (let i = 0; i < 4; i++) list.push([(i - 1.5) * 0.18, 0.55, (r() - 0.5) * 0.15, 0.06, 0.5 + r() * 0.2, 0.06]);

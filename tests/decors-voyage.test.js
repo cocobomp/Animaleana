@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { awayLook, AWAY_LOOKS, EXTRAS, EXTRAS_OF, extrasPlace, pickExtras, careAmbience, careSetting, hashSeed } from '../src/game/care/setting.js';
 import { PLACES, PLACE_IDS } from '../src/sim/places.js';
 import { gfx } from '../src/game/gfx.js';
+import { GRASS_TINT } from '../src/game/care/outdoor.js';
 import { loadFarm, farmStage, run } from './fixtures/farmStage.js';
 import { fakeCtx as fakeCtxOf } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
@@ -132,6 +133,23 @@ function awayShare(sc) {
   return k / n;
 }
 
+/** La couleur du sol en voyage (away.js, GROUND) : le sable de la plage, la terre rouge du bush. */
+const SOIL = { plage: 0xf4e6c8, bush: 0xd8875a };
+/**
+ * Le sol principal du décor (main) est-il bien le sable ou la terre rouge du lieu, et non l'herbe ? Renvoie de quoi
+ * vérifier, après la fermeture, que l'herbe (sa texture, gardée avant l'habillage, et sa couleur de la saison) revient.
+ */
+function soilOf(main, look, season, what) {
+  expect(main.color.getHex(), `${what} : la couleur du sol`).toBe(SOIL[look]);
+  const soil = main.map;
+  expect(soil, `${what} : la texture du sol`).toBeTruthy();
+  return () => {
+    expect(main.map, `${what} : l'herbe revient`).toBeTruthy();
+    expect(main.map, `${what} : l'herbe revient`).not.toBe(soil);
+    expect(main.map.image, `${what} : l'herbe revient`).not.toBe(soil.image);
+    expect(main.color.getHex(), `${what} : sa couleur revient`).toBe(new THREE.Color(GRASS_TINT[season]).getHex());
+  };
+}
 /** La couleur la plus sombre de ses trois canaux (une couleur « blanche » : tous ses canaux hauts). */
 const low = (c) => Math.min(c.r, c.g, c.b);
 const high = (c) => Math.max(c.r, c.g, c.b);
@@ -234,8 +252,9 @@ describe('le fond du lieu de voyage dans la scène', () => {
       expect(D.away.landmarks.length).toBeGreaterThan(0);
       // le sol de la plage, du bush : du sable, de la terre rouge (sans herbe)
       const main = D.ground.find((m) => m.userData?.main);
+      let back = null;
       if (look === 'plage' || look === 'bush') {
-        expect(main.map).not.toBe(null);
+        back = soilOf(main, look, amb.season, `vache ${look}`);
         const grass = [];
         D.group.traverse((o) => o.userData?.grass && grass.push(o));
         for (const o of grass) expect(o.visible).toBe(false);
@@ -258,6 +277,7 @@ describe('le fond du lieu de voyage dans la scène', () => {
       expect(W.parent).toBeNull();
       expect(freed).toBe(geos.size + mats.length + texs.size + insts.length);
       for (const o of far) expect(o.visible).toBe(true);
+      back?.();
     });
   }
 
@@ -364,6 +384,34 @@ describe('le fond du lieu de voyage dans la scène', () => {
     const caps = instances(rock.decor.away).filter(({ o }) => o.material.color?.getHex() === snowCapHex && o.geometry.type === 'IcosahedronGeometry');
     expect(caps.length).toBeGreaterThan(3);
     rock.dispose();
+  });
+
+  it('les Alpes en hiver sans neige : le rocher et le petit sapin juste derrière lui ne sont pas blancs ; sous la neige, si', () => {
+    const SNOWY = [0xdfe4e8, 0xf2f6fa];
+    const scene = (weather) => farmStage({ species: 'cow', set: decorFor('cow', 'ailleurs', { amb: careAmbience({ hour: 11, weather, season: 'winter' }), look: 'montagne', kinds: [], seed: 2 }) }).sc;
+    /** Les choses posées tout près, juste derrière la clôture (pas le chalet, au loin) : les couleurs de leurs matières. */
+    const nearColors = (sc) => {
+      const out = [];
+      for (const it of sc.decor.away.landmarks) {
+        const size = new THREE.Box3().setFromObject(it.o).getSize(new THREE.Vector3());
+        if (Math.max(size.x, size.y, size.z) > 2) continue;
+        it.o.traverse((o) => o.material?.color && out.push(o.material.color.getHex()));
+      }
+      return out;
+    };
+    // (par temps clair : la neige reste sur les sommets, les collines et le toit du chalet ; à côté de lui, l'herbe d'hiver)
+    const clear = scene('clear');
+    expect(clear.decor.ambience.weather).toBe('clear');
+    const c = nearColors(clear);
+    expect(c.length).toBeGreaterThan(2);
+    for (const hex of c) expect(SNOWY, `une couleur de neige tout près : ${hex.toString(16)}`).not.toContain(hex);
+    clear.dispose();
+    // (sous la neige : le rocher blanc, le petit sapin et son chapeau de neige)
+    const snow = scene('snow');
+    const n = nearColors(snow);
+    expect(n).toContain(0xdfe4e8);
+    expect(n).toContain(0xf2f6fa);
+    snow.dispose();
   });
 
   it('en qualité basse (téléphone) : moitié moins d\'arbres, moins de fumée, rien d\'animé au loin', () => {
@@ -521,9 +569,11 @@ describe('ce qu\'on voit depuis la caméra du soin, en voyage', () => {
         const game = H.pets[species].pet(ctx);
         P.run(ctx, game, sc, 2);
         expect(awayShare(sc), `${species} ${look}`).toBeGreaterThan(look === 'plage' ? 0.01 : 0.05);
-        if (look === 'plage') expect(D.ground.find((m) => m.userData?.main).map).toBeTruthy();
+        // (à la plage, le sable sous lui aussi — pas l'herbe du jardin ou de l'enclos —, et l'herbe revient ensuite)
+        const back = look === 'plage' ? soilOf(D.ground.find((m) => m.userData?.main), look, amb.season, species) : null;
         game.destroy?.();
         sc.dispose();
+        back?.();
       }
     }
     // (un lieu inconnu : le jardin habituel, avec sa façade)

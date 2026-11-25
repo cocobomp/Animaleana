@@ -296,6 +296,10 @@ export const EXTRAS = {
   nichoir: 'hang',
   cadre: 'hang',
   cloche: 'hang',
+  carottes: 'hang',
+  // (toutes petites, par terre : on les voit même en gros plan sur un lapin ou un sabot, et la nuit)
+  souris: 'floor',
+  escargot: 'floor',
   // (au loin, derrière l'animal : un vol d'oiseaux dans le ciel, une poule dans le pré, une hirondelle sous le toit)
   vol: 'far',
   papillons: 'far',
@@ -323,23 +327,36 @@ for (const [look, L] of Object.entries(AWAY_LOOKS)) EXTRAS_OF[`ailleurs-${look}`
  * place est pris) ; le jour choisit lequel commence (pickLife).
  */
 export const LIFE_OF = {
-  box: ['fer', 'licol', 'hirondelle'],
-  etable: ['cloche', 'fer', 'hirondelle'],
+  // (dedans aussi, un rouge-gorge qui sautille dans la paille derrière lui : en gros plan sur un sabot, il n'y a que le
+  // sol à voir ; l'hiver, quand l'hirondelle est partie, il est encore là ; la nuit, le chat de l'écurie, assis dans
+  // la paille, et une souris qui trottine)
+  box: ['fer', 'licol', 'hirondelle', 'rougegorge', 'chat', 'souris'],
+  etable: ['cloche', 'fer', 'hirondelle', 'rougegorge', 'chat', 'souris'],
   pre: ['vol', 'poulailler', 'fer', 'nichoir', 'papillons', 'rougegorge'],
   ailleurs: ['vol', 'nichoir', 'fer', 'papillons', 'rougegorge'],
+  // (deux tableaux, de part et d'autre de la porte-fenêtre : les deux restent, pickLife ne les fond pas en un)
   maison: ['cadre', 'cadre'],
-  jardin: ['nichoir', 'vol', 'papillons', 'rougegorge', 'poulailler'],
-  clapier: ['papillons', 'rougegorge', 'vol', 'poulailler'],
-  enclos: ['papillons', 'rougegorge', 'vol', 'poulailler'],
+  jardin: ['nichoir', 'vol', 'papillons', 'rougegorge', 'escargot', 'poulailler'],
+  // (au clapier, une botte de carottes pendue aux planches, un escargot, un nichoir : la nuit ou sous la pluie, quand
+  // rien ne vole ni ne sautille, il reste toujours quelque chose à voir à hauteur de lapin)
+  clapier: ['carottes', 'escargot', 'papillons', 'rougegorge', 'nichoir', 'vol', 'poulailler'],
+  enclos: ['papillons', 'escargot', 'carottes', 'rougegorge', 'vol', 'nichoir', 'poulailler'],
 };
 
-/** Ce qui ne bouge pas la nuit (ni vol d'oiseaux, ni papillons, ni poule dehors, ni hirondelle) ; sous la pluie, la neige, le brouillard : ni vol ni papillons (pas l'hiver non plus). */
+/**
+ * Ce qui ne bouge pas la nuit (ni vol d'oiseaux, ni papillons, ni poule dehors, ni hirondelle) ; sous la pluie, la
+ * neige, le brouillard : ni vol ni papillons (pas l'hiver non plus). Les hirondelles partent en Afrique à l'automne et
+ * ne reviennent qu'au printemps : ni à l'automne ni l'hiver. La souris et l'escargot sortent la nuit.
+ */
 export function lifeOff(amb) {
   const off = new Set();
   if (!amb) return off;
   if (amb.time === 'nuit') off.add('vol').add('poulailler').add('hirondelle').add('papillons').add('rougegorge');
   if (amb.wet || amb.foggy || amb.snowy) off.add('vol').add('papillons');
-  if (amb.season === 'winter') off.add('papillons');
+  if (amb.season === 'winter') off.add('papillons').add('hirondelle');
+  if (amb.season === 'autumn') off.add('hirondelle');
+  // (l'escargot dort l'hiver, sous la neige aussi)
+  if (amb.season === 'winter' || amb.snowy) off.add('escargot');
   if (amb.wet || amb.snowy) off.add('poulailler');
   return off;
 }
@@ -351,8 +368,9 @@ export function lifeOff(amb) {
 export function pickLife({ day = 1, id = '', place = 'pre', amb = null, species = '', taken = [] } = {}) {
   const base = place.startsWith('ailleurs') ? LIFE_OF.ailleurs : LIFE_OF[place] ?? LIFE_OF.pre;
   const off = lifeOff(amb);
-  // (le licol, le fer à cheval : l'écurie d'un cheval ; ailleurs, au bétail, la cloche)
-  const list = [...new Set(base)].filter((k) => !off.has(k) && !taken.includes(k) && !(k === 'licol' && species !== 'horse'));
+  // (le licol, le fer à cheval : l'écurie d'un cheval ; ailleurs, au bétail, la cloche) ; un doublon voulu reste (les
+  // deux tableaux de la maison)
+  const list = base.filter((k) => !off.has(k) && !taken.includes(k) && !(k === 'licol' && species !== 'horse'));
   if (!list.length) return [];
   const k = (hashSeed(`${id}|${place}|vie`) + Math.max(1, Math.floor(day))) % list.length;
   return [...list.slice(k), ...list.slice(0, k)];

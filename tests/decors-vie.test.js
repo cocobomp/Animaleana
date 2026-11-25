@@ -3,21 +3,26 @@
 // le mur (un fer, un licol, une cloche, deux tableaux, une botte de carottes), un rouge-gorge, une souris, un
 // escargot, un vol d'oiseaux loin derrière, une hirondelle sous le toit (setting.js : pickLife ; extras.js :
 // placeExtras). Quand le jeu recadre, ce qui n'a plus sa place s'en va et revient ailleurs. Jamais devant l'animal, sa
-// tête, sa bouche, ni ce qu'on lui tend, à aucun moment, en portrait comme en paysage.
+// tête, sa bouche, ni ce qu'on lui tend, à aucun moment, en portrait comme en paysage ; jamais deux objets l'un dans
+// l'autre.
 //
 // Les parties sont jouées en entier, avec ce que le jeu a posé lui-même (rien n'est reposé après coup), et chaque
 // image est vérifiée par des rayons, la copie figée de l'animal refaite à chaque fois.
 import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 import * as THREE from 'three';
 import { pickLife, lifeOff, LIFE_OF, EXTRAS, careAmbience, pickExtras, extrasPlace } from '../src/game/care/setting.js';
-import { extraModel, extraSize, extraRange } from '../src/game/care/extras.js';
+import { extraModel, extraSize, extraRange, extrasClock, proxyGrid } from '../src/game/care/extras.js';
 import { bag } from '../src/game/care/barnProps.js';
 import { fakeCtx as fakeCtxOf, fakeDocument } from './fixtures/careCtx.js';
 import { loadRealHorseGltf } from './fixtures/realHorseGltf.js';
 
 const random = Math.random;
+// (l'horloge du travail de chaque image arrêtée : tout se fait d'un coup, les parties sont les mêmes d'une machine à
+// l'autre ; la vraie horloge, seulement pour mesurer ce que coûte une partie)
+beforeAll(() => extrasClock(() => 0));
 afterAll(() => {
   Math.random = random;
+  extrasClock(null);
 });
 
 /** Le même hasard à chaque fois : la vie de l'animal, donc la caméra, ne dépend pas des tests d'avant. */
@@ -94,10 +99,11 @@ describe('le petit plus de chaque lieu (pur)', () => {
 });
 
 describe('ce qui bouge tient toute sa course dans la place vérifiée', () => {
-  it('la poule, le papillon, la souris, l\'escargot, le crabe : jamais plus loin de leur place que leur taille', () => {
+  it('la poule, le papillon, la souris, l\'escargot, le crabe, le rouge-gorge, les poules au loin : jamais plus loin de leur place que leur taille', () => {
     const keep = bag();
     const b = new THREE.Box3();
-    for (const kind of ['poule', 'papillon', 'souris', 'escargot', 'crabe']) {
+    // (le rouge-gorge et les poules au loin : les autres objets les comptent à leur vraie taille, sauts et promenade compris)
+    for (const kind of ['poule', 'papillon', 'souris', 'escargot', 'crabe', 'rougegorge', 'poulailler']) {
       const m = extraModel(kind, keep, 3);
       // (la course que le jeu lui donne)
       if (extraRange(kind)) m.userData.range = extraRange(kind);
@@ -192,12 +198,40 @@ function overCoat(sc, it) {
 }
 
 /**
+ * Les objets posés (pas ce qui vole) qui entrent l'un dans l'autre : deux de leurs pièces (chacune sa boîte monde,
+ * rentrée d'un centimètre) se chevauchent — le rouge-gorge dans la botte de paille, la fourche dans le chat.
+ */
+function inEachOther(live) {
+  const parts = [];
+  for (const it of live) {
+    if (it.path) continue;
+    it.m.updateWorldMatrix(true, true);
+    it.m.traverseVisible((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld).expandByScalar(-0.01);
+      if (!b.isEmpty()) parts.push([it, b]);
+    });
+  }
+  const out = new Set();
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i + 1; j < parts.length; j++) {
+      const [a, A] = parts[i];
+      const [b, B] = parts[j];
+      if (a !== b && A.intersectsBox(B)) out.add(`${a.kind} dans ${b.kind}`);
+    }
+  }
+  return [...out];
+}
+
+/**
  * Joue la partie en entier (steps : [secondes, étape, ce qu'on fait à la fin]) puis la carte de fin, et vérifie chaque
  * image. head() : les points de sa tête et de sa bouche ; offered() : ce qu'on lui tend. Renvoie le bilan.
  */
 function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
   const X = sc.decor.extras;
-  const rep = { bad: [], phases: {}, kinds: new Set(), first: null, frames: 0, fixed: 0 };
+  const rep = { bad: [], phases: {}, kinds: new Set(), first: null, frames: 0, fixed: 0, busyRun: 0 };
+  let busy = 0;
   // (la vue du moment : le téléphone peut tourner en pleine partie)
   const inImage = (q) => {
     const v = sc.view;
@@ -207,6 +241,9 @@ function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
   const check = (phase) => {
     k++;
     if (!X) return;
+    // (un essai de pose sur plusieurs images : la plus longue suite)
+    busy = X.busy ? busy + 1 : 0;
+    rep.busyRun = Math.max(rep.busyRun, busy);
     const live = liveItems(X);
     for (const it of live) rep.kinds.add(it.kind);
     if (rep.first === null && live.length) rep.first = phase;
@@ -226,6 +263,7 @@ function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
     sc.proxy.bake();
     sc.proxy.at = sc.time;
     for (const p of head()) for (const b of blockers(sc, X, p)) rep.bad.push(`${b} devant sa tête (${phase})`);
+    for (const pair of inEachOther(live)) rep.bad.push(`${pair} (${phase})`);
     for (const [name, o] of offered()) for (const p of boxPoints(o)) for (const b of blockers(sc, X, p)) rep.bad.push(`${b} devant ${name} (${phase})`);
     for (const it of live) {
       if (it.path) {
@@ -256,6 +294,52 @@ function playAll(sc, ctx, game, steps, { head, offered, headRect = null }) {
     fn?.();
   }
   return rep;
+}
+
+/**
+ * Joue la partie (steps) à 60 images par seconde, sans rien vérifier (aucune copie figée en plus de celles du jeu) :
+ * ce que la vie des gros plans a coûté — copies figées, rayons sur tous les triangles de l'animal, essais de pose —
+ * et le temps de chacune de ses images.
+ */
+function cost(sc, ctx, game, steps) {
+  const X = sc.decor.extras;
+  const r = { bake: 0, hit: 0, ms: [], t: 0 };
+  let mine = false;
+  const bake = sc.proxy.bake.bind(sc.proxy);
+  sc.proxy.bake = () => {
+    if (mine) r.bake++;
+    return bake();
+  };
+  const hit = sc.proxy.hit.bind(sc.proxy);
+  sc.proxy.hit = (...a) => {
+    if (mine) r.hit++;
+    return hit(...a);
+  };
+  const update = X.update.bind(X);
+  X.update = (dt, st) => {
+    mine = true;
+    const t0 = performance.now();
+    try {
+      update(dt, st);
+    } finally {
+      r.ms.push(performance.now() - t0);
+      mine = false;
+    }
+  };
+  const dt = 1 / 60;
+  for (const [s, , fn] of steps) {
+    for (let i = 0; i < s / dt; i++) {
+      ctx.time += dt;
+      r.t += dt;
+      game?.update(dt);
+      sc.update(dt);
+      // (comme le rendu : les os et les objets à jour à chaque image)
+      sc.scene.updateMatrixWorld();
+    }
+    fn?.();
+  }
+  r.place = X.stats.place;
+  return r;
 }
 
 /** Les étapes d'une partie, comme un enfant la joue. */
@@ -296,7 +380,7 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
   }, 180000);
   afterEach(() => new Promise((resolve) => setImmediate(resolve)));
 
-  function horsePlay({ game: which, place, w, h, amb: ambKey, day, look = null, turn = null }) {
+  function horsePlay({ game: which, place, w, h, amb: ambKey, day, look = null, turn = null, measure = false }) {
     sameLuck(4242 + day);
     const amb = careAmbience(AMB[ambKey]);
     const a = H.animal.createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, ageDays: 900, seed: 77 });
@@ -313,7 +397,8 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
     for (const act of Object.values(model.anim?.actions ?? {})) act.time = 0;
     const ctx = fakeCtxOf(a, H.t, { scene: sc, view });
     const before = new Set(sc.scene.children);
-    const game = H.care3d.CARE3D_GAMES.horse[which](ctx);
+    // (sans jeu : le cheval au repos, la caméra posée — rien ne change dans l'image)
+    const game = which ? H.care3d.CARE3D_GAMES.horse[which](ctx) : null;
     const own = sc.scene.children.filter((c) => !before.has(c) && !c.isLight);
     const shape = H.headFrame.headShape(sc);
     const head = () => [...shape.points(0.12), sc.live('muzzle'), sc.live('nose')].filter(Boolean);
@@ -326,7 +411,7 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
       const q = shape.points(0).map((p) => sc.project(p));
       return { x0: Math.min(...q.map((p) => p.x)), x1: Math.max(...q.map((p) => p.x)), y0: Math.min(...q.map((p) => p.y)), y1: Math.max(...q.map((p) => p.y)) };
     };
-    const steps = stepsOf(which === 'feed' ? 'feed-horse' : which, ctx, game, sc);
+    const steps = which ? stepsOf(which === 'feed' ? 'feed-horse' : which, ctx, game, sc) : [[30, 'repos', null]];
     // (le téléphone tourné en pleine partie : la scène se recadre dans l'autre sens)
     if (turn) {
       const [tw, th] = turn;
@@ -336,9 +421,9 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
         sc.resize(tw, th, v2);
       }];
     }
-    const rep = playAll(sc, ctx, game, steps, { head, offered, headRect });
-    if (process.env.DBG) console.log(which, place, w, ambKey, day, JSON.stringify(rep.phases), [...rep.kinds], rep.bad.slice(0, 5));
-    game.destroy();
+    const rep = measure ? cost(sc, ctx, game, steps) : playAll(sc, ctx, game, steps, { head, offered, headRect });
+    if (process.env.DBG && !measure) console.log(which, place, w, ambKey, day, JSON.stringify(rep.phases), [...rep.kinds], rep.bad.slice(0, 5));
+    game?.destroy();
     sc.dispose();
     return rep;
   }
@@ -363,6 +448,12 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
     ['water', 'pre', 844, 390, 'pluie', 5, null, 0.5, null],
     ['treat', 'box', 390, 600, 'jour', 2, null, 0.6, null, [844, 390]],
     ['feed', 'box', 844, 390, 'jour', 4, null, 0.6, null, [390, 600]],
+    // (le rouge-gorge se posait dans la botte de paille, ou sur l'oiseau du jour posé par terre ; le chat perché sur la
+    // cloison, au-dessus du licol pendu ou de la fourche dressée — tous comptés comme des choses à voir)
+    ['treat', 'box', 390, 600, 'jour', 5, null, 0.5, null],
+    ['treat', 'box', 390, 600, 'jour', 9, null, 0.5, null],
+    ['bridle', 'box', 390, 600, 'jour', 5, null, 0.3, null],
+    ['shoe', 'box', 844, 390, 'jour', 2, null, 0.5, null],
   ];
   for (const [game, place, w, h, amb, day, look, min, phase, turn] of CASES) {
     it(`${game} ${place}${look ? ` (${look})` : ''} ${w} × ${h}${turn ? ` puis ${turn[0]} × ${turn[1]}` : ''}, ${amb}, jour ${day} : une chose posée à voir, jamais devant lui`, () => {
@@ -375,6 +466,83 @@ describe('les gros plans du cheval : de la vie tout au long du jeu, jamais devan
       if (amb === 'nuit') for (const k of ['hirondelle', 'papillons', 'vol', 'rougegorge', 'poulailler']) expect([...r.kinds]).not.toContain(k);
     }, 120000);
   }
+
+  it('la copie figée rangée en grille : les rayons touchent le même point qu\'en testant tous ses triangles', () => {
+    sameLuck(91);
+    const amb = careAmbience(AMB.jour);
+    const a = H.animal.createAnimal({ species: 'horse', breed: 'selle_francais', colorIndex: 0, ageDays: 900, seed: 77 });
+    const model = H.horseReal.buildRealHorseModel(H.animal.stageLook(a), a.breed, H.gltf);
+    const sc = new H.stage.CareStage({ a, renderer: H.stage.headlessRenderer(), model, set: H.care3d.decorFor('horse', 'box', { amb, kinds: [], life: [], seed: 3 }) });
+    sc.resize(390, 600, H.frame.fitView(390, 600, 400, 360));
+    sc.ready = true;
+    for (let i = 0; i < 30; i++) sc.update(1 / 30);
+    sc.scene.updateMatrixWorld(true);
+    sc.proxy.bake();
+    const G = proxyGrid(sc.proxy);
+    const bb = sc.proxy.geo.boundingBox.clone().expandByScalar(0.3);
+    const size = bb.getSize(new THREE.Vector3());
+    const cam = sc.camera.position.clone();
+    let touched = 0;
+    for (let i = 0; i < 600; i++) {
+      // (de la caméra, ou de n'importe où autour de lui, vers n'importe quel point de sa boîte)
+      const to = new THREE.Vector3(bb.min.x + Math.random() * size.x, bb.min.y + Math.random() * size.y, bb.min.z + Math.random() * size.z);
+      const from = i % 2 ? cam : to.clone().add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(3));
+      const dir = to.clone().sub(from).normalize();
+      const ref = sc.proxy.hit(new THREE.Ray(from.clone(), dir.clone()), -9, 1e9);
+      const got = G.hit(from, dir);
+      if (!ref) expect(got, `rayon ${i}`).toBe(Infinity);
+      else {
+        touched++;
+        expect(got, `rayon ${i}`).toBeCloseTo(ref.distance, 4);
+      }
+    }
+    expect(touched).toBeGreaterThan(150);
+    sc.dispose();
+  }, 120000);
+
+  it('l\'essai de pose avance image après image (peu de temps par image) : jamais devant lui, rien l\'un dans l\'autre', () => {
+    // (une horloge qui avance à chaque coup d'œil : deux ou trois places essayées par image, un gros morceau à la fois)
+    let t = 0;
+    extrasClock(() => (t += 0.4));
+    try {
+      const r = horsePlay({ game: 'treat', place: 'box', w: 390, h: 600, amb: 'jour', day: 4 });
+      expect(r.bad, r.bad.slice(0, 6).join(' ; ')).toEqual([]);
+      expect(r.first, 'rien de posé de toute la partie').not.toBeNull();
+      expect(r.fixed / Math.max(1, r.frames), JSON.stringify(r.phases)).toBeGreaterThanOrEqual(0.4);
+      expect(r.busyRun, 'un essai fait en une seule image').toBeGreaterThan(3);
+    } finally {
+      extrasClock(() => 0);
+    }
+  }, 120000);
+
+  describe('ce que coûte la vie des gros plans, avec la vraie horloge', () => {
+    beforeAll(() => extrasClock(null));
+    afterAll(() => extrasClock(() => 0));
+    // [jeu (aucun : le cheval au repos, rien ne change dans l'image), lieu, largeur, hauteur, ambiance, jour]
+    const COST = [
+      [null, 'box', 390, 600, 'jour', 4],
+      ['treat', 'box', 390, 600, 'jour', 4],
+      ['treat', 'box', 390, 600, 'nuit', 1],
+      ['shoe', 'box', 390, 600, 'jour', 1],
+      ['feed', 'pre', 844, 390, 'jour', 3],
+    ];
+    for (const [game, place, w, h, amb, day] of COST) {
+      it(`${game ?? 'au repos'} ${place} ${w} × ${h}, ${amb}, jour ${day} : peu de copies figées, d'essais de pose, aucun rayon sur tous ses triangles`, () => {
+        const r = horsePlay({ game, place, w, h, amb, day, measure: true });
+        const per = (n) => n / r.t;
+        const ms = [...r.ms].sort((x, y) => x - y);
+        if (process.env.DBG) console.log(game, place, w, amb, day, { bake: per(r.bake).toFixed(2), place: per(r.place).toFixed(2), hit: r.hit, msPerS: (r.ms.reduce((x, y) => x + y, 0) / r.t).toFixed(1), p99: ms[Math.floor(ms.length * 0.99)].toFixed(1), max: ms.at(-1).toFixed(1) });
+        // (avant : 1,6 copie figée par seconde, une relance de toutes les places toutes les 0,6 à 2 s, chaque rayon
+        // testait les 7 000 triangles du cheval, et 2 à 3 % des images duraient plus de 4 ms, jusqu'à 100 ms)
+        expect(r.hit, 'rayons sur tous ses triangles').toBe(0);
+        expect(r.ms.filter((x) => x > 4).length / r.ms.length, 'images de plus de 4 ms').toBeLessThanOrEqual(0.01);
+        // (le cadrage qui bouge — la main qui tend la carotte, le sabot après l'autre — : au plus un essai et une copie
+        // figée par seconde ; rien qui change dans l'image : presque rien)
+        expect(per(r.place), 'essais de pose par seconde').toBeLessThanOrEqual(game ? 1 : 0.35);
+        expect(per(r.bake), 'copies figées par seconde').toBeLessThanOrEqual(game ? 1 : 0.2);
+      }, 120000);
+    }
+  });
 });
 
 describe('les gros plans du chat, du chien, du lapin, du mouton et de la vache', () => {
